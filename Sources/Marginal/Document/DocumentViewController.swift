@@ -4,6 +4,8 @@ final class DocumentViewController: NSViewController {
 
     private(set) var textView: MarkdownTextView!
     private var isApplyingProgrammaticEdit = false
+    private var isShowingSource = false
+    private var fontBeforeShowingSource: NSFont?
 
     weak var document: MarkdownDocument?
 
@@ -51,6 +53,37 @@ final class DocumentViewController: NSViewController {
         let location = textView.selectedRange().location
         guard location != NSNotFound, let range = Range(NSRange(location: location, length: 0), in: text) else { return nil }
         return range.lowerBound
+    }
+
+    func copyCurrentSelectionAsMarkdown() {
+        guard let range = Range(textView.selectedRange(), in: textView.string) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(String(textView.string[range]), forType: .string)
+    }
+
+    func toggleShowSource() {
+        isShowingSource.toggle()
+        let selectedRange = textView.selectedRange()
+        isApplyingProgrammaticEdit = true
+        if isShowingSource {
+            // Capture the real document font before switching to plain source. NSTextView's
+            // `font` getter (in rich-text mode) returns the font at the current selection
+            // start, not a stable document-wide font. Once we overwrite every character
+            // (including the one at the selection start) with the tiny hidden-delimiter
+            // monospaced font, `textView.font` would otherwise return that corrupted font
+            // and poison the subsequent restyle when toggling back off.
+            let baseFont = textView.font ?? NSFont.systemFont(ofSize: 15)
+            fontBeforeShowingSource = baseFont
+            let plain = MarkdownStyler.plainSourceAttributedString(for: textView.string, font: baseFont)
+            textView.textStorage?.setAttributedString(plain)
+        } else if let baseFont = fontBeforeShowingSource {
+            textView.font = baseFont
+        }
+        textView.setSelectedRange(selectedRange)
+        isApplyingProgrammaticEdit = false
+        if !isShowingSource {
+            restyle(cursorLocation: currentCursorIndex())
+        }
     }
 
     private func restyle(cursorLocation: String.Index?) {
@@ -101,6 +134,14 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
 
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) {
         setFontSize(FontSizing.decreased(from: textView.font?.pointSize ?? 15))
+    }
+
+    func markdownTextViewCopyAsMarkdown(_ textView: MarkdownTextView) {
+        copyCurrentSelectionAsMarkdown()
+    }
+
+    func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {
+        toggleShowSource()
     }
 
     private func setFontSize(_ size: CGFloat) {
