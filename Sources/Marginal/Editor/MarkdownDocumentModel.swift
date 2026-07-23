@@ -33,8 +33,16 @@ struct ListItemSpan: Equatable {
     let lineRange: Range<String.Index>
 }
 
+struct LinkSpan: Equatable {
+    let textRange: Range<String.Index>
+    let urlRange: Range<String.Index>
+    let fullRange: Range<String.Index>
+    let url: String
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
     var headers: [HeaderSpan] = []
     var listItems: [ListItemSpan] = []
+    var links: [LinkSpan] = []
 }

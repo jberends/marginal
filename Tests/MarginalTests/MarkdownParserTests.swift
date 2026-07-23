@@ -119,3 +119,23 @@ final class MarkdownParserHeaderAndListTests: XCTestCase {
         XCTAssertTrue(MarkdownParser.parseListItems(in: "Just a normal sentence.").isEmpty)
     }
 }
+
+final class MarkdownParserLinkTests: XCTestCase {
+
+    func testParsesSingleLink() {
+        let text = "Check [this site](https://example.com) out"
+        let links = MarkdownParser.parseLinks(in: text)
+        XCTAssertEqual(links.count, 1)
+        XCTAssertEqual(String(text[links[0].textRange]), "this site")
+        XCTAssertEqual(links[0].url, "https://example.com")
+    }
+
+    func testParsesMultipleLinks() {
+        let text = "[one](https://a.com) and [two](https://b.com)"
+        XCTAssertEqual(MarkdownParser.parseLinks(in: text).count, 2)
+    }
+
+    func testTextWithoutLinksReturnsEmpty() {
+        XCTAssertTrue(MarkdownParser.parseLinks(in: "No links here.").isEmpty)
+    }
+}

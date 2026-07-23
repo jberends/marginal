@@ -114,4 +114,18 @@ struct MarkdownParser {
         }
         return items
     }
+
+    static func parseLinks(in text: String) -> [LinkSpan] {
+        var links: [LinkSpan] = []
+        guard let regex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return links }
+        let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+        regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+            guard let match,
+                  let fullRange = Range(match.range, in: text),
+                  let textRange = Range(match.range(at: 1), in: text),
+                  let urlRange = Range(match.range(at: 2), in: text) else { return }
+            links.append(LinkSpan(textRange: textRange, urlRange: urlRange, fullRange: fullRange, url: String(text[urlRange])))
+        }
+        return links
+    }
 }
