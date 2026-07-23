@@ -1,0 +1,70 @@
+import Foundation
+
+/// Underline has no CommonMark syntax, so Marginal represents it with inline
+/// HTML `<u>...</u>` — valid CommonMark (raw inline HTML is permitted) and
+/// rendered as underlined by other tools (e.g. GitHub).
+///
+/// This is a pragmatic single-pass parser, not a full CommonMark
+/// implementation: it does not apply CommonMark's intraword-emphasis
+/// flanking rules (so `snake_case_like_this` can be misdetected as italic),
+/// and `***bold+italic***` nesting is only partially handled (recognized as
+/// bold, with the extra asterisk left as a literal character).
+struct MarkdownParser {
+
+    static func parseInlineStyles(in text: String) -> [InlineStyleSpan] {
+        var spans: [InlineStyleSpan] = []
+        var claimed = Set<Int>()
+
+        func offset(_ index: String.Index) -> Int {
+            text.distance(from: text.startIndex, to: index)
+        }
+
+        func claim(_ range: Range<String.Index>) {
+            for i in offset(range.lowerBound)..<offset(range.upperBound) {
+                claimed.insert(i)
+            }
+        }
+
+        func isClaimed(_ range: Range<String.Index>) -> Bool {
+            for i in offset(range.lowerBound)..<offset(range.upperBound) where claimed.contains(i) {
+                return true
+            }
+            return false
+        }
+
+        func findMatches(pattern: String, kind: InlineStyleKind, openLength: Int, closeLength: Int) {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+            let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+            regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+                guard let match,
+                      let fullRange = Range(match.range, in: text),
+                      let contentRange = Range(match.range(at: 1), in: text) else { return }
+                if isClaimed(fullRange) { return }
+
+                let openStart = fullRange.lowerBound
+                let openEnd = text.index(openStart, offsetBy: openLength)
+                let closeEnd = fullRange.upperBound
+                let closeStart = text.index(closeEnd, offsetBy: -closeLength)
+
+                spans.append(InlineStyleSpan(
+                    kind: kind,
+                    contentRange: contentRange,
+                    openingDelimiterRange: openStart..<openEnd,
+                    closingDelimiterRange: closeStart..<closeEnd
+                ))
+                claim(fullRange)
+            }
+        }
+
+        // Order matters: higher-priority (longer/more specific) delimiters
+        // claim their ranges first so shorter delimiters don't cut through them.
+        findMatches(pattern: "\\*\\*(.+?)\\*\\*", kind: .bold, openLength: 2, closeLength: 2)
+        findMatches(pattern: "__(.+?)__", kind: .bold, openLength: 2, closeLength: 2)
+        findMatches(pattern: "~~(.+?)~~", kind: .strikethrough, openLength: 2, closeLength: 2)
+        findMatches(pattern: "<u>(.+?)</u>", kind: .underline, openLength: 3, closeLength: 4)
+        findMatches(pattern: "(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)", kind: .italic, openLength: 1, closeLength: 1)
+        findMatches(pattern: "(?<!_)_([^_\\n]+?)_(?!_)", kind: .italic, openLength: 1, closeLength: 1)
+
+        return spans.sorted { $0.contentRange.lowerBound < $1.contentRange.lowerBound }
+    }
+}
