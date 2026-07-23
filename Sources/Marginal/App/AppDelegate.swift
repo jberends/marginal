@@ -6,6 +6,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = Self.buildMainMenu()
     }
 
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
     private static func buildMainMenu() -> NSMenu {
         let mainMenu = NSMenu()
 
