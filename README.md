@@ -4,7 +4,7 @@ A native, lightweight markdown editor and beautiful viewer for macOS.
 
 Open a `.md` file, write, and see it rendered beautifully as you type — bold, italic, headers, links, tables, code blocks, and images all render inline, with markdown syntax revealing itself only where your cursor is. No projects, no folders, no sidebar. Good at one job: being your default markdown editor.
 
-> **Status: 🚧 In design.** Implementation hasn't started yet — see [`specs`](specs) for the current design spec.
+> **Status: 🚧 Phase 1 complete (foundation + core WYSIWYG engine).** Tables, images, code highlighting, AI, visual polish, and export are not yet implemented — see [`specs`](specs) and [`plans`](plans).
 
 ## Why
 
