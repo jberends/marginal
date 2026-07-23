@@ -4,9 +4,8 @@
 .LSOverride
 
 # Xcode
-*.xcodeproj/*
-!*.xcodeproj/project.pbxproj
-!*.xcodeproj/xcshareddata/
+# XcodeGen-generated project (regenerate with `xcodegen generate`)
+*.xcodeproj/
 xcuserdata/
 DerivedData/
 *.moved-aside
