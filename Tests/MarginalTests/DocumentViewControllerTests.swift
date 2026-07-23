@@ -34,7 +34,13 @@ final class DocumentViewControllerTests: XCTestCase {
         viewController.toggleShowSource()
         viewController.toggleShowSource()
 
-        let font = viewController.textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertFalse(font?.isFixedPitch ?? true)
+        let delimiterFont = viewController.textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertFalse(delimiterFont?.isFixedPitch ?? true)
+
+        // Regression guard: the bold *content* (not a hidden delimiter) must be restored at
+        // the real editor font size, not left at the near-invisible hidden-delimiter size a
+        // prior bug could leak into the restored render.
+        let contentFont = viewController.textView.textStorage?.attribute(.font, at: 2, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(contentFont?.pointSize, 15)
     }
 }

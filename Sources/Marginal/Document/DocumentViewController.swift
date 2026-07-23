@@ -5,7 +5,14 @@ final class DocumentViewController: NSViewController {
     private(set) var textView: MarkdownTextView!
     private var isApplyingProgrammaticEdit = false
     private var isShowingSource = false
-    private var fontBeforeShowingSource: NSFont?
+
+    // Single source of truth for the editor's base font size. NSTextView's `font` getter
+    // (in rich-text mode) returns whatever attribute sits at the current selection/cursor —
+    // which restyle() may have set to the near-invisible hidden-delimiter size (see
+    // MarkdownStyler.hiddenDelimiterFontSize) — so it must never be read back as "the base
+    // font"; this property is the only thing restyle()/toggleShowSource()/font-size
+    // adjustment consult or mutate.
+    private var editorFontSize: CGFloat = 15
 
     weak var document: MarkdownDocument?
 
@@ -27,7 +34,8 @@ final class DocumentViewController: NSViewController {
         textView.delegate = self
         textView.shortcutDelegate = self
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
-        textView.font = NSFont.systemFont(ofSize: savedSize > 0 ? savedSize : 15)
+        editorFontSize = savedSize > 0 ? savedSize : 15
+        textView.font = NSFont.systemFont(ofSize: editorFontSize)
 
         scrollView.documentView = textView
         containerView.addSubview(scrollView)
@@ -66,19 +74,12 @@ final class DocumentViewController: NSViewController {
         let selectedRange = textView.selectedRange()
         isApplyingProgrammaticEdit = true
         if isShowingSource {
-            // Capture the real document font before switching to plain source. NSTextView's
-            // `font` getter (in rich-text mode) returns the font at the current selection
-            // start, not a stable document-wide font. Once we overwrite every character
-            // (including the one at the selection start) with the tiny hidden-delimiter
-            // monospaced font, `textView.font` would otherwise return that corrupted font
-            // and poison the subsequent restyle when toggling back off.
-            let baseFont = textView.font ?? NSFont.systemFont(ofSize: 15)
-            fontBeforeShowingSource = baseFont
-            let plain = MarkdownStyler.plainSourceAttributedString(for: textView.string, font: baseFont)
+            let plain = MarkdownStyler.plainSourceAttributedString(for: textView.string, font: NSFont.systemFont(ofSize: editorFontSize))
             textView.textStorage?.setAttributedString(plain)
-        } else if let baseFont = fontBeforeShowingSource {
-            textView.font = baseFont
         }
+        // setSelectedRange must run before isApplyingProgrammaticEdit is cleared: it
+        // synchronously fires textViewDidChangeSelection, which would otherwise run
+        // unguarded and stomp the render this method just applied.
         textView.setSelectedRange(selectedRange)
         isApplyingProgrammaticEdit = false
         if !isShowingSource {
@@ -97,7 +98,7 @@ final class DocumentViewController: NSViewController {
         let attributed = MarkdownStyler.attributedString(
             for: text,
             model: model,
-            baseFont: textView.font ?? NSFont.systemFont(ofSize: 15),
+            baseFont: NSFont.systemFont(ofSize: editorFontSize),
             cursorLocation: cursorLocation
         )
 
@@ -129,11 +130,11 @@ extension DocumentViewController: NSTextViewDelegate {
 
 extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView) {
-        setFontSize(FontSizing.increased(from: textView.font?.pointSize ?? 15))
+        setFontSize(FontSizing.increased(from: editorFontSize))
     }
 
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) {
-        setFontSize(FontSizing.decreased(from: textView.font?.pointSize ?? 15))
+        setFontSize(FontSizing.decreased(from: editorFontSize))
     }
 
     func markdownTextViewCopyAsMarkdown(_ textView: MarkdownTextView) {
@@ -145,6 +146,7 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     }
 
     private func setFontSize(_ size: CGFloat) {
+        editorFontSize = size
         textView.font = NSFont.systemFont(ofSize: size)
         UserDefaults.standard.set(size, forKey: "editorFontPointSize")
         restyle(cursorLocation: currentCursorIndex())

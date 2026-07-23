@@ -24,7 +24,10 @@ final class MarkdownTextView: NSTextView {
             case "c" where event.modifierFlags.contains(.option):
                 shortcutDelegate?.markdownTextViewCopyAsMarkdown(self)
                 return
-            case "p" where event.modifierFlags.contains(.shift):
+            case "P":
+                // charactersIgnoringModifiers honors Shift (only Option/Command/Control are
+                // stripped), so Shift+P produces "P", never lowercase "p" — match the actual
+                // character Shift produces rather than gating on the modifier flag directly.
                 shortcutDelegate?.markdownTextViewToggleShowSource(self)
                 return
             default:
