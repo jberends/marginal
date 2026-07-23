@@ -23,6 +23,7 @@ Marginal is a native macOS markdown editor and beautiful viewer. It opens a sing
 - No bundled/hosted AI backend — AI features are BYOK (bring your own API key) only.
 - No multi-cursor editing, no plugin/extension system.
 - No iOS/iPadOS/Catalyst version — macOS only.
+- Project website design, App Store listing copy/assets, and marketing are out of scope for this spec — a separate follow-on design once the app's core shape is implemented.
 
 ## Prior art / competitive landscape
 
