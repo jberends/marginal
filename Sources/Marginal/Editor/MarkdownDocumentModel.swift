@@ -14,6 +14,27 @@ struct InlineStyleSpan: Equatable {
     let closingDelimiterRange: Range<String.Index>
 }
 
+struct HeaderSpan: Equatable {
+    let level: Int
+    let markerRange: Range<String.Index>
+    let contentRange: Range<String.Index>
+    let lineRange: Range<String.Index>
+}
+
+enum ListMarkerKind: Equatable {
+    case unordered
+    case ordered(number: Int)
+}
+
+struct ListItemSpan: Equatable {
+    let kind: ListMarkerKind
+    let markerRange: Range<String.Index>
+    let contentRange: Range<String.Index>
+    let lineRange: Range<String.Index>
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
+    var headers: [HeaderSpan] = []
+    var listItems: [ListItemSpan] = []
 }

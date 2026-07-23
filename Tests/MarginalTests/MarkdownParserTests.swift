@@ -65,3 +65,57 @@ final class MarkdownParserInlineStyleTests: XCTestCase {
         XCTAssertEqual(spans.count, 3)
     }
 }
+
+final class MarkdownParserHeaderAndListTests: XCTestCase {
+
+    func testParsesH1Header() {
+        let text = "# Title\nBody text"
+        let headers = MarkdownParser.parseHeaders(in: text)
+        XCTAssertEqual(headers.count, 1)
+        XCTAssertEqual(headers[0].level, 1)
+        XCTAssertEqual(String(text[headers[0].contentRange]), "Title")
+    }
+
+    func testParsesH2ThroughH6() {
+        for level in 2...6 {
+            let marker = String(repeating: "#", count: level)
+            let text = "\(marker) Heading\nmore"
+            let headers = MarkdownParser.parseHeaders(in: text)
+            XCTAssertEqual(headers.count, 1, "level \(level)")
+            XCTAssertEqual(headers.first?.level, level)
+        }
+    }
+
+    func testSevenHashesIsNotAHeader() {
+        XCTAssertTrue(MarkdownParser.parseHeaders(in: "####### Not a header").isEmpty)
+    }
+
+    func testHashWithoutSpaceIsNotAHeader() {
+        XCTAssertTrue(MarkdownParser.parseHeaders(in: "#NotAHeader").isEmpty)
+    }
+
+    func testParsesUnorderedListWithHyphen() {
+        let text = "- first item\n- second item"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].kind, .unordered)
+        XCTAssertEqual(String(text[items[0].contentRange]), "first item")
+    }
+
+    func testParsesUnorderedListWithAsteriskAndPlus() {
+        let items = MarkdownParser.parseListItems(in: "* one\n+ two")
+        XCTAssertEqual(items.count, 2)
+    }
+
+    func testParsesOrderedList() {
+        let text = "1. first\n2. second\n10. tenth"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items[0].kind, .ordered(number: 1))
+        XCTAssertEqual(items[2].kind, .ordered(number: 10))
+    }
+
+    func testPlainLineIsNotAListItem() {
+        XCTAssertTrue(MarkdownParser.parseListItems(in: "Just a normal sentence.").isEmpty)
+    }
+}

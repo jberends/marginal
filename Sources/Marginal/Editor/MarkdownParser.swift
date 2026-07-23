@@ -67,4 +67,51 @@ struct MarkdownParser {
 
         return spans.sorted { $0.contentRange.lowerBound < $1.contentRange.lowerBound }
     }
+
+    static func parseHeaders(in text: String) -> [HeaderSpan] {
+        var headers: [HeaderSpan] = []
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
+            let line = text[lineStart..<lineEnd]
+            if let markerRange = line.range(of: "^#{1,6} ", options: .regularExpression) {
+                let level = line.distance(from: markerRange.lowerBound, to: markerRange.upperBound) - 1
+                headers.append(HeaderSpan(
+                    level: level,
+                    markerRange: markerRange,
+                    contentRange: markerRange.upperBound..<lineEnd,
+                    lineRange: lineStart..<lineEnd
+                ))
+            }
+            lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
+        }
+        return headers
+    }
+
+    static func parseListItems(in text: String) -> [ListItemSpan] {
+        var items: [ListItemSpan] = []
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
+            let line = text[lineStart..<lineEnd]
+            if let markerRange = line.range(of: "^[-*+] ", options: .regularExpression) {
+                items.append(ListItemSpan(
+                    kind: .unordered,
+                    markerRange: markerRange,
+                    contentRange: markerRange.upperBound..<lineEnd,
+                    lineRange: lineStart..<lineEnd
+                ))
+            } else if let markerRange = line.range(of: "^[0-9]+\\. ", options: .regularExpression) {
+                let digits = line[markerRange].prefix { $0.isNumber }
+                items.append(ListItemSpan(
+                    kind: .ordered(number: Int(digits) ?? 0),
+                    markerRange: markerRange,
+                    contentRange: markerRange.upperBound..<lineEnd,
+                    lineRange: lineStart..<lineEnd
+                ))
+            }
+            lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
+        }
+        return items
+    }
 }
