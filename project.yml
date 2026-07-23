@@ -15,16 +15,14 @@ targets:
     platform: macOS
     sources:
       - path: Sources/Marginal
-    info:
-      path: Sources/Marginal/App/Info.plist
-    entitlements:
-      path: Sources/Marginal/App/Marginal.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jochemberends.marginal
         PRODUCT_NAME: Marginal
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: Sources/Marginal/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/Marginal/App/Marginal.entitlements
   MarginalTests:
     type: bundle.unit-test
     platform: macOS
