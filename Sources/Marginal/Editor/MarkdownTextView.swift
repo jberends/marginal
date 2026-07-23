@@ -1,4 +1,28 @@
 import AppKit
 
-/// Extension point for later phases (custom key handling is added in Task 10/11).
-final class MarkdownTextView: NSTextView {}
+@MainActor
+protocol MarkdownTextViewShortcutDelegate: AnyObject {
+    func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView)
+    func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView)
+}
+
+final class MarkdownTextView: NSTextView {
+
+    weak var shortcutDelegate: MarkdownTextViewShortcutDelegate?
+
+    override func keyDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command), let characters = event.charactersIgnoringModifiers {
+            switch characters {
+            case "=":
+                shortcutDelegate?.markdownTextViewIncreaseFontSize(self)
+                return
+            case "-":
+                shortcutDelegate?.markdownTextViewDecreaseFontSize(self)
+                return
+            default:
+                break
+            }
+        }
+        super.keyDown(with: event)
+    }
+}

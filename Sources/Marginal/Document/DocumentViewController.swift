@@ -23,6 +23,9 @@ final class DocumentViewController: NSViewController {
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = self
+        textView.shortcutDelegate = self
+        let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
+        textView.font = NSFont.systemFont(ofSize: savedSize > 0 ? savedSize : 15)
 
         scrollView.documentView = textView
         containerView.addSubview(scrollView)
@@ -87,6 +90,22 @@ extension DocumentViewController: NSTextViewDelegate {
 
     func textViewDidChangeSelection(_ notification: Notification) {
         guard !isApplyingProgrammaticEdit else { return }
+        restyle(cursorLocation: currentCursorIndex())
+    }
+}
+
+extension DocumentViewController: MarkdownTextViewShortcutDelegate {
+    func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView) {
+        setFontSize(FontSizing.increased(from: textView.font?.pointSize ?? 15))
+    }
+
+    func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) {
+        setFontSize(FontSizing.decreased(from: textView.font?.pointSize ?? 15))
+    }
+
+    private func setFontSize(_ size: CGFloat) {
+        textView.font = NSFont.systemFont(ofSize: size)
+        UserDefaults.standard.set(size, forKey: "editorFontPointSize")
         restyle(cursorLocation: currentCursorIndex())
     }
 }
