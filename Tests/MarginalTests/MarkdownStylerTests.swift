@@ -57,4 +57,22 @@ final class MarkdownStylerTests: XCTestCase {
         let url = attributed.attribute(.link, at: location, effectiveRange: nil) as? String
         XCTAssertEqual(url, "https://example.com")
     }
+
+    func testUnorderedListMarkerGetsGlyphSubstitutionAttribute() {
+        let text = "- one\n- two"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let glyphInfo = attributed.attribute(.glyphInfo, at: 0, effectiveRange: nil) as? NSGlyphInfo
+        XCTAssertNotNil(glyphInfo, "Unordered marker should carry a glyph-substitution attribute")
+        // The underlying string must stay the literal marker character -- this is the whole point.
+        XCTAssertEqual(attributed.string.first, "-")
+    }
+
+    func testOrderedListMarkerGetsNoGlyphSubstitution() {
+        let text = "1. one\n2. two"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let glyphInfo = attributed.attribute(.glyphInfo, at: 0, effectiveRange: nil) as? NSGlyphInfo
+        XCTAssertNil(glyphInfo, "Ordered markers keep their literal digits/period, no glyph substitution")
+    }
 }

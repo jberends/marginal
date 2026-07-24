@@ -60,7 +60,16 @@ struct MarkdownStyler {
         }
 
         for item in model.listItems {
-            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: NSRange(item.markerRange, in: text))
+            let markerRange = NSRange(item.markerRange, in: text)
+            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
+
+            if case .unordered = item.kind, markerRange.length > 0 {
+                let markerCharacterRange = NSRange(location: markerRange.location, length: 1)
+                let markerCharacter = String((text as NSString).substring(with: markerCharacterRange))
+                if let glyphInfo = NSGlyphInfo(glyphName: "bullet", for: baseFont, baseString: markerCharacter) {
+                    result.addAttribute(.glyphInfo, value: glyphInfo, range: markerCharacterRange)
+                }
+            }
         }
 
         return result
