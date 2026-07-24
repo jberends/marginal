@@ -37,4 +37,14 @@ final class CursorRevealControllerTests: XCTestCase {
         let cursor = text.index(text.startIndex, offsetBy: 9) // inside "Body"
         XCTAssertTrue(CursorRevealController.revealedHeaderSpans(in: model, cursorLocation: cursor).isEmpty)
     }
+
+    func testCursorAtSharedBoundaryOfAdjacentSpansRevealsOnlyOne() {
+        let text = "**a****b**"
+        // "**a**" spans indices 0..<5, "**b**" spans indices 5..<10 — index 5 is the exact
+        // shared boundary between the first span's closing "**" and the second span's opening "**".
+        let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 5)
+        let revealed = CursorRevealController.revealedInlineStyleSpans(in: model, cursorLocation: cursor)
+        XCTAssertEqual(revealed.count, 1, "Only one of the two touching spans should reveal at the shared boundary")
+    }
 }
