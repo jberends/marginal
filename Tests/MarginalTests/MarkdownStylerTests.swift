@@ -153,6 +153,66 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(style?.headIndent ?? -1, expectedIndent, accuracy: 0.01)
     }
 
+    // Regression: each item previously computed its own headIndent from its own marker's width,
+    // so "1." and "10." in the same list misaligned their content start.
+    func testOrderedListItemsInSameGroupShareIndentOfTheWidestMarker() {
+        let text = "1. one\n2. two\n3. three\n4. four\n5. five\n6. six\n7. seven\n8. eight\n9. nine\n10. ten"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let expectedIndent = ("10. " as NSString).size(withAttributes: [.font: baseFont]).width
+
+        let firstItemLocation = text.distance(from: text.startIndex, to: text.range(of: "1. one")!.lowerBound)
+        let tenthItemLocation = text.distance(from: text.startIndex, to: text.range(of: "10. ten")!.lowerBound)
+        let firstStyle = attributed.attribute(.paragraphStyle, at: firstItemLocation, effectiveRange: nil) as? NSParagraphStyle
+        let tenthStyle = attributed.attribute(.paragraphStyle, at: tenthItemLocation, effectiveRange: nil) as? NSParagraphStyle
+
+        XCTAssertEqual(firstStyle?.headIndent ?? -1, expectedIndent, accuracy: 0.01, "Item 1 must share the group's widest indent, not its own narrower marker width")
+        XCTAssertEqual(tenthStyle?.headIndent ?? -1, expectedIndent, accuracy: 0.01)
+    }
+
+    // CommonMark/GFM convention: within one contiguous run of ordered items, the displayed
+    // number auto-increments from the first item's own stated number, regardless of what
+    // digits the source repeats -- matching the "1./1./1." authoring idiom.
+    func testRepeatedOneAutoIncrementsWithinAContiguousGroup() {
+        let text = "1. one\n1. two\n1. three"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let firstLocation = text.distance(from: text.startIndex, to: text.range(of: "1. one")!.lowerBound)
+        let secondLocation = text.distance(from: text.startIndex, to: text.range(of: "1. two")!.lowerBound)
+        let thirdLocation = text.distance(from: text.startIndex, to: text.range(of: "1. three")!.lowerBound)
+
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: firstLocation, effectiveRange: nil) as? String, "1. ")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: secondLocation, effectiveRange: nil) as? String, "2. ")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "3. ")
+        // The literal source digit must stay hidden -- the drawn text carries the real value.
+        let firstColor = attributed.attribute(.foregroundColor, at: firstLocation, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(firstColor, NSColor.clear)
+    }
+
+    func testOrderedGroupStartingAtFiveContinuesFromFive() {
+        let text = "5. five\n6. six\n7. seven"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let firstLocation = text.distance(from: text.startIndex, to: text.range(of: "5. five")!.lowerBound)
+        let thirdLocation = text.distance(from: text.startIndex, to: text.range(of: "7. seven")!.lowerBound)
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: firstLocation, effectiveRange: nil) as? String, "5. ")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "7. ")
+    }
+
+    // A blank line breaks the group -- the second list restarts renumbering from its own first
+    // item rather than continuing the first list's sequence.
+    func testRenumberingResetsAcrossABlankLineGap() {
+        let text = "1. one\n2. two\n\n1. three"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let thirdLocation = text.distance(from: text.startIndex, to: text.range(of: "1. three")!.lowerBound)
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "1. ", "New list after a blank line must restart from its own first item, not continue the previous list's count")
+    }
+
     func testInlineCodeGetsMonospaceFontAndBackground() {
         let text = "Use `npm install` now"
         let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))
@@ -182,6 +242,18 @@ final class MarkdownStylerTests: XCTestCase {
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: cursor)
         let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, 14)
+    }
+
+    // A proper gap between the drawn bar and the quoted text, instead of content butting
+    // right up against the container edge where the bar is drawn.
+    func testBlockquoteContentGetsIndentGapFromTheBar() {
+        let text = "> Quoted text"
+        let model = MarkdownDocumentModel(blockquotes: MarkdownParser.parseBlockquotes(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertGreaterThan(style?.firstLineHeadIndent ?? 0, 0)
+        XCTAssertEqual(style?.headIndent, style?.firstLineHeadIndent, "Wrapped lines should stay aligned with the first line's indent")
     }
 
     // Regression: the blockquote loop ran after the inlineStyles loop and unconditionally

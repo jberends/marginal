@@ -62,12 +62,22 @@ struct MarkdownStyler {
             CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: $0)
         } ?? []
 
+        // Gap between the drawn left bar and the quoted text -- scales with type size (per Apple's
+        // HIG guidance to size spacing relative to text rather than a fixed pixel value) rather
+        // than a marker-derived width, since there's no marker character to align content under.
+        let blockquoteContentIndent = baseFont.pointSize * 0.75
+
         for blockquote in blockquotes {
             let markerRange = NSRange(blockquote.markerRange, in: text)
             let contentRange = NSRange(blockquote.contentRange, in: text)
             result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
             result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: contentRange)
             result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
+
+            let quoteParagraphStyle = NSMutableParagraphStyle()
+            quoteParagraphStyle.firstLineHeadIndent = blockquoteContentIndent
+            quoteParagraphStyle.headIndent = blockquoteContentIndent
+            result.addAttribute(.paragraphStyle, value: quoteParagraphStyle, range: NSRange(blockquote.lineRange, in: text))
 
             let markerFont = revealedBlockquotes.contains(blockquote) ? baseFont : hiddenFont
             if markerRange.length > 0 {
@@ -170,51 +180,108 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.closingFenceRange, in: text))
         }
 
-        for item in listItems {
-            let markerRange = NSRange(item.markerRange, in: text)
-            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
+        func sameListKind(_ a: ListMarkerKind, _ b: ListMarkerKind) -> Bool {
+            switch (a, b) {
+            case (.unordered, .unordered): return true
+            case (.ordered, .ordered): return true
+            default: return false
+            }
+        }
 
-            if case .unordered = item.kind, markerRange.length > 0 {
-                // NSGlyphInfo glyph substitution (an earlier attempt at this) does not preserve
-                // the substituted "bullet" glyph's own vertical metrics -- it reuses whatever
-                // position the base character ("-") would have drawn at, which reads as a tiny
-                // dot sitting almost on the baseline, not vertically centered on the line.
-                // Instead: keep the marker character at normal size (so it still occupies real,
-                // correctly-laid-out space and stays selectable/copyable as the literal
-                // "-"/"*"/"+"), make it fully transparent, and let MarkdownLayoutManager draw an
-                // actual filled circle sized from the font's real xHeight and centered within
-                // that character's own real, already-correctly-laid-out bounding rect -- the
-                // same technique already used for the blockquote bar and horizontal rule line.
-                let markerCharacterRange = NSRange(location: markerRange.location, length: 1)
-                result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerCharacterRange)
-                result.addAttribute(.marginalListBulletMarker, value: true, range: markerCharacterRange)
+        // Two items are part of the same visual list only if nothing (a blank line, a
+        // paragraph, a different list) separates them in the source.
+        func isImmediatelyFollowing(_ next: ListItemSpan, after previous: ListItemSpan) -> Bool {
+            guard previous.lineRange.upperBound < text.endIndex else { return false }
+            return text.index(after: previous.lineRange.upperBound) == next.lineRange.lowerBound
+        }
+
+        var listItemGroups: [[ListItemSpan]] = []
+        for item in listItems {
+            if let last = listItemGroups.last?.last, sameListKind(last.kind, item.kind), isImmediatelyFollowing(item, after: last) {
+                listItemGroups[listItemGroups.count - 1].append(item)
+            } else {
+                listItemGroups.append([item])
+            }
+        }
+
+        for group in listItemGroups {
+            guard let first = group.first else { continue }
+
+            // Ordered items auto-renumber sequentially from the first item's own stated number,
+            // regardless of what digits the rest of the group's source lines say -- matching the
+            // common "1./1./1." authoring convention CommonMark (and other renderers) support.
+            // Unordered items have no such display-vs-source distinction; use the literal marker.
+            let displayTexts: [String]
+            if case let .ordered(startNumber) = first.kind {
+                displayTexts = group.indices.map { "\(startNumber + $0). " }
+            } else {
+                displayTexts = group.map { String(text[$0.markerRange]) }
             }
 
-            // A wrapped continuation line must indent under the item's text, not wrap back to
-            // the paragraph's left margin -- headIndent matches this item's own marker width so
-            // it aligns exactly under where the content starts, whatever the marker's width.
-            let markerText = String(text[item.markerRange])
-            let indentWidth = (markerText as NSString).size(withAttributes: [.font: baseFont]).width
+            // All items in one list share a single hanging-indent tab stop -- computed from the
+            // group's widest display marker -- so e.g. "1." and "10." in the same list don't
+            // misalign their content start, and a renumbered display value that's wider than its
+            // literal source (e.g. three source lines all reading "1." rendering as "1./2./3.")
+            // still has enough reserved room to be drawn.
+            let indentWidth = displayTexts.map { ($0 as NSString).size(withAttributes: [.font: baseFont]).width }.max() ?? 0
 
-            // item.lineRange may span multiple source lines when a lazily-continued paragraph
-            // line follows with no blank line between them. TextKit treats each "\n"-delimited
-            // line as its own paragraph regardless of shared attributes, so the marker's own line
-            // and any lazy-continuation lines need separate paragraph styles: the marker line
-            // stays flush on its first visual line (headIndent handles its wrapped lines), while
-            // a lazy-continuation line must be fully indented from its own first character to
-            // read as belonging to the same item, not a new flush-left paragraph.
-            let markerLineEnd = text[item.lineRange].firstIndex(of: "\n") ?? item.lineRange.upperBound
-            let markerLineStyle = NSMutableParagraphStyle()
-            markerLineStyle.firstLineHeadIndent = 0
-            markerLineStyle.headIndent = indentWidth
-            result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
+            for (index, item) in group.enumerated() {
+                let markerRange = NSRange(item.markerRange, in: text)
 
-            if markerLineEnd < item.lineRange.upperBound {
-                let continuationStyle = NSMutableParagraphStyle()
-                continuationStyle.firstLineHeadIndent = indentWidth
-                continuationStyle.headIndent = indentWidth
-                let continuationStart = text.index(after: markerLineEnd)
-                result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
+                switch item.kind {
+                case .unordered:
+                    result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
+                    if markerRange.length > 0 {
+                        // NSGlyphInfo glyph substitution (an earlier attempt at this) does not
+                        // preserve the substituted "bullet" glyph's own vertical metrics -- it
+                        // reuses whatever position the base character ("-") would have drawn at,
+                        // which reads as a tiny dot sitting almost on the baseline, not vertically
+                        // centered on the line. Instead: keep the marker character at normal size
+                        // (so it still occupies real, correctly-laid-out space and stays
+                        // selectable/copyable as the literal "-"/"*"/"+"), make it fully
+                        // transparent, and let MarkdownLayoutManager draw an actual filled circle
+                        // sized from the font's real xHeight and centered within that character's
+                        // own real, already-correctly-laid-out bounding rect -- the same technique
+                        // already used for the blockquote bar and horizontal rule line.
+                        let markerCharacterRange = NSRange(location: markerRange.location, length: 1)
+                        result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerCharacterRange)
+                        result.addAttribute(.marginalListBulletMarker, value: true, range: markerCharacterRange)
+                    }
+                case .ordered:
+                    // The literal source digits may not match the auto-renumbered display value
+                    // (or may simply be a narrower/wider width than the group's shared indent), so
+                    // the whole literal marker is hidden and MarkdownLayoutManager draws the
+                    // correct display text into the reserved indent zone instead.
+                    if markerRange.length > 0 {
+                        result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
+                        result.addAttribute(
+                            .marginalOrderedListMarkerText,
+                            value: displayTexts[index],
+                            range: NSRange(location: markerRange.location, length: 1)
+                        )
+                    }
+                }
+
+                // item.lineRange may span multiple source lines when a lazily-continued paragraph
+                // line follows with no blank line between them. TextKit treats each "\n"-delimited
+                // line as its own paragraph regardless of shared attributes, so the marker's own
+                // line and any lazy-continuation lines need separate paragraph styles: the marker
+                // line stays flush on its first visual line (headIndent handles its wrapped
+                // lines), while a lazy-continuation line must be fully indented from its own first
+                // character to read as belonging to the same item, not a new flush-left paragraph.
+                let markerLineEnd = text[item.lineRange].firstIndex(of: "\n") ?? item.lineRange.upperBound
+                let markerLineStyle = NSMutableParagraphStyle()
+                markerLineStyle.firstLineHeadIndent = 0
+                markerLineStyle.headIndent = indentWidth
+                result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
+
+                if markerLineEnd < item.lineRange.upperBound {
+                    let continuationStyle = NSMutableParagraphStyle()
+                    continuationStyle.firstLineHeadIndent = indentWidth
+                    continuationStyle.headIndent = indentWidth
+                    let continuationStart = text.index(after: markerLineEnd)
+                    result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
+                }
             }
         }
 

@@ -4,6 +4,7 @@ extension NSAttributedString.Key {
     static let marginalBlockquoteMarker = NSAttributedString.Key("marginalBlockquoteMarker")
     static let marginalHorizontalRuleMarker = NSAttributedString.Key("marginalHorizontalRuleMarker")
     static let marginalListBulletMarker = NSAttributedString.Key("marginalListBulletMarker")
+    static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
 }
 
 /// Draws paragraph-level decorations that can't be expressed as ordinary run attributes: the
@@ -75,6 +76,27 @@ final class MarkdownLayoutManager: NSLayoutManager {
             )
             NSColor.labelColor.setFill()
             NSBezierPath(ovalIn: circleRect).fill()
+        }
+
+        textStorage.enumerateAttribute(.marginalOrderedListMarkerText, in: fullRange) { value, range, _ in
+            guard let displayText = value as? String,
+                  let font = textStorage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont,
+                  let paragraphStyle = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
+            else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            // The marker text is hidden (transparent) but still laid out at normal size, so its
+            // own bounding rect reflects this exact line's real vertical geometry. The literal
+            // source digits may auto-renumber to a different, possibly wider, display value (see
+            // MarkdownStyler), so this draws into the shared group indent zone rather than
+            // being confined to the literal marker's own width -- right-aligned against where
+            // the content starts (headIndent), matching how numbered lists conventionally
+            // right-align their digits before the period.
+            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
+            let markerSize = (displayText as NSString).size(withAttributes: markerAttributes)
+            let rightEdge = origin.x + paragraphStyle.headIndent
+            let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + charRect.midY - markerSize.height / 2)
+            (displayText as NSString).draw(at: drawPoint, withAttributes: markerAttributes)
         }
     }
 }
