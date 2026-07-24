@@ -125,4 +125,25 @@ final class MarkdownStylerTests: XCTestCase {
         let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, 14)
     }
+
+    func testHorizontalRuleLineIsHiddenWhenCursorIsElsewhereAndMarkedForLayoutManager() {
+        let text = "Above\n---\nBelow"
+        let model = MarkdownDocumentModel(horizontalRules: MarkdownParser.parseHorizontalRules(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let ruleLocation = text.distance(from: text.startIndex, to: text.range(of: "---")!.lowerBound)
+        let font = attributed.attribute(.font, at: ruleLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+        let marker = attributed.attribute(.marginalHorizontalRuleMarker, at: ruleLocation, effectiveRange: nil)
+        XCTAssertNotNil(marker, "Rule line must carry the layout-manager key so MarkdownLayoutManager draws the line")
+    }
+
+    func testHorizontalRuleLineIsRevealedWhenCursorIsOnIt() {
+        let text = "Above\n---\nBelow"
+        let model = MarkdownDocumentModel(horizontalRules: MarkdownParser.parseHorizontalRules(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 7)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: cursor)
+        let ruleLocation = text.distance(from: text.startIndex, to: text.range(of: "---")!.lowerBound)
+        let font = attributed.attribute(.font, at: ruleLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14)
+    }
 }

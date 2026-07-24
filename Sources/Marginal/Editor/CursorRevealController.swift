@@ -38,4 +38,10 @@ struct CursorRevealController {
             cursorLocation >= blockquote.lineRange.lowerBound && cursorLocation <= blockquote.lineRange.upperBound
         }
     }
+
+    static func revealedHorizontalRuleSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [HorizontalRuleSpan] {
+        model.horizontalRules.filter { rule in
+            cursorLocation >= rule.lineRange.lowerBound && cursorLocation <= rule.lineRange.upperBound
+        }
+    }
 }

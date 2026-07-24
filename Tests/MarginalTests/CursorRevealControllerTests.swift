@@ -75,4 +75,18 @@ final class CursorRevealControllerTests: XCTestCase {
         let cursor = text.index(text.startIndex, offsetBy: 12) // inside "Not quoted"
         XCTAssertTrue(CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: cursor).isEmpty)
     }
+
+    func testCursorOnHorizontalRuleLineRevealsIt() {
+        let text = "Above\n---\nBelow"
+        let model = MarkdownDocumentModel(horizontalRules: MarkdownParser.parseHorizontalRules(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 7) // on the "---" line
+        XCTAssertEqual(CursorRevealController.revealedHorizontalRuleSpans(in: model, cursorLocation: cursor).count, 1)
+    }
+
+    func testCursorOnOtherLineDoesNotRevealHorizontalRule() {
+        let text = "Above\n---\nBelow"
+        let model = MarkdownDocumentModel(horizontalRules: MarkdownParser.parseHorizontalRules(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 1) // on "Above"
+        XCTAssertTrue(CursorRevealController.revealedHorizontalRuleSpans(in: model, cursorLocation: cursor).isEmpty)
+    }
 }

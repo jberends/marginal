@@ -94,6 +94,17 @@ struct MarkdownStyler {
             }
         }
 
+        let revealedHorizontalRules = cursorLocation.map {
+            CursorRevealController.revealedHorizontalRuleSpans(in: model, cursorLocation: $0)
+        } ?? []
+
+        for rule in model.horizontalRules {
+            let lineNSRange = NSRange(rule.lineRange, in: text)
+            result.addAttribute(.marginalHorizontalRuleMarker, value: true, range: lineNSRange)
+            let ruleFont = revealedHorizontalRules.contains(rule) ? baseFont : hiddenFont
+            result.addAttribute(.font, value: ruleFont, range: lineNSRange)
+        }
+
         for item in model.listItems {
             let markerRange = NSRange(item.markerRange, in: text)
             result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)

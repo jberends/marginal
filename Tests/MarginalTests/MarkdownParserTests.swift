@@ -188,3 +188,33 @@ final class MarkdownParserBlockquoteTests: XCTestCase {
         XCTAssertEqual(String(text[blockquotes[0].contentRange]), "> nested")
     }
 }
+
+final class MarkdownParserHorizontalRuleTests: XCTestCase {
+
+    func testParsesThreeHyphens() {
+        XCTAssertEqual(MarkdownParser.parseHorizontalRules(in: "---").count, 1)
+    }
+
+    func testParsesThreeAsterisks() {
+        XCTAssertEqual(MarkdownParser.parseHorizontalRules(in: "***").count, 1)
+    }
+
+    func testParsesThreeUnderscores() {
+        XCTAssertEqual(MarkdownParser.parseHorizontalRules(in: "___").count, 1)
+    }
+
+    func testPlainLineIsNotAHorizontalRule() {
+        XCTAssertTrue(MarkdownParser.parseHorizontalRules(in: "Just a normal sentence.").isEmpty)
+    }
+
+    func testTwoHyphensIsNotAHorizontalRule() {
+        XCTAssertTrue(MarkdownParser.parseHorizontalRules(in: "--").isEmpty)
+    }
+
+    func testHorizontalRuleAmongOtherLines() {
+        let text = "Above\n---\nBelow"
+        let rules = MarkdownParser.parseHorizontalRules(in: text)
+        XCTAssertEqual(rules.count, 1)
+        XCTAssertEqual(String(text[rules[0].lineRange]), "---")
+    }
+}

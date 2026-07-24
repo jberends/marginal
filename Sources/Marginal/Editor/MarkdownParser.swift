@@ -138,6 +138,23 @@ struct MarkdownParser {
         return blockquotes
     }
 
+    /// Pragmatic subset of CommonMark's thematic-break rule: exactly "---", "***", or "___" on
+    /// their own line (no interior spaces, no other repetition counts) -- matches this parser's
+    /// established single-pass, not-full-CommonMark style.
+    static func parseHorizontalRules(in text: String) -> [HorizontalRuleSpan] {
+        var rules: [HorizontalRuleSpan] = []
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
+            let line = text[lineStart..<lineEnd]
+            if line == "---" || line == "***" || line == "___" {
+                rules.append(HorizontalRuleSpan(lineRange: lineStart..<lineEnd))
+            }
+            lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
+        }
+        return rules
+    }
+
     static func parseLinks(in text: String) -> [LinkSpan] {
         var links: [LinkSpan] = []
         guard let regex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return links }

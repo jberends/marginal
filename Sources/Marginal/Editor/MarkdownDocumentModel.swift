@@ -47,10 +47,15 @@ struct BlockquoteSpan: Equatable {
     let lineRange: Range<String.Index>
 }
 
+struct HorizontalRuleSpan: Equatable {
+    let lineRange: Range<String.Index>
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
     var headers: [HeaderSpan] = []
     var listItems: [ListItemSpan] = []
     var links: [LinkSpan] = []
     var blockquotes: [BlockquoteSpan] = []
+    var horizontalRules: [HorizontalRuleSpan] = []
 }

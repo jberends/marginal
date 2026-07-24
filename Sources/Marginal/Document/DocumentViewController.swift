@@ -32,6 +32,15 @@ final class DocumentViewController: NSViewController {
         // nib/storyboard-loaded ones default to true) -- without this, typing never
         // registers undo actions and Cmd+Z silently does nothing.
         textView.allowsUndo = true
+        // Markdown syntax depends on literal ASCII sequences ("---", straight quotes inside
+        // code spans, etc). Discovered via Task 7's manual GUI verification: with these left at
+        // their AppKit defaults, typing "---" was silently substituted into a single em-dash "—"
+        // by Smart Dashes before the parser ever saw the text, so a horizontal rule could never
+        // be recognized from real typing (only from pre-existing/pasted text). Disabling all
+        // three "smart" substitutions keeps typed markdown source literal.
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
         textView.font = NSFont.systemFont(ofSize: 15)
         textView.textContainerInset = NSSize(width: 40, height: 24)
         textView.autoresizingMask = [.width]
@@ -107,7 +116,8 @@ final class DocumentViewController: NSViewController {
             headers: MarkdownParser.parseHeaders(in: text),
             listItems: MarkdownParser.parseListItems(in: text),
             links: MarkdownParser.parseLinks(in: text),
-            blockquotes: MarkdownParser.parseBlockquotes(in: text)
+            blockquotes: MarkdownParser.parseBlockquotes(in: text),
+            horizontalRules: MarkdownParser.parseHorizontalRules(in: text)
         )
         let attributed = MarkdownStyler.attributedString(
             for: text,
@@ -125,6 +135,17 @@ final class DocumentViewController: NSViewController {
         textView.textStorage?.endEditing()
         textView.setSelectedRange(selectedRange)
         isApplyingProgrammaticEdit = false
+        // Horizontal rules are the first feature where revealing/hiding a marker changes an
+        // entire line's font size (0.1pt <-> baseFont), which changes that line's height and
+        // therefore shifts every line below it -- unlike headers/blockquotes, where only a
+        // marker prefix toggles size while the line's content stays at content size, so line
+        // height never changes. Found via manual GUI verification: NSTextView's automatic
+        // display invalidation after the in-place setAttributes calls above redraws only the
+        // stale (pre-shift) region, leaving lines below a revealed/hidden rule visually blank
+        // until some other event (e.g. a selection change) forces a full redraw. The layout
+        // itself is always correct (verified with a standalone NSLayoutManager harness); only
+        // the drawn pixels go stale. Forcing a full-view redraw after every restyle fixes it.
+        textView.needsDisplay = true
     }
 }
 
