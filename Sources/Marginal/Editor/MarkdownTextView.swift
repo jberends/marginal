@@ -39,7 +39,7 @@ final class MarkdownTextView: NSTextView {
     override func keyDown(with event: NSEvent) {
         if event.modifierFlags.contains(.command), let characters = event.charactersIgnoringModifiers {
             switch characters {
-            case "=":
+            case "=", "+":
                 shortcutDelegate?.markdownTextViewIncreaseFontSize(self)
                 return
             case "-":
