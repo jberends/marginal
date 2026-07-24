@@ -27,6 +27,10 @@ final class DocumentViewController: NSViewController {
         let textView = MarkdownTextView()
         textView.isEditable = true
         textView.isRichText = true
+        // Programmatically-created NSTextViews default allowsUndo to false (only
+        // nib/storyboard-loaded ones default to true) -- without this, typing never
+        // registers undo actions and Cmd+Z silently does nothing.
+        textView.allowsUndo = true
         textView.font = NSFont.systemFont(ofSize: 15)
         textView.textContainerInset = NSSize(width: 40, height: 24)
         textView.autoresizingMask = [.width]
