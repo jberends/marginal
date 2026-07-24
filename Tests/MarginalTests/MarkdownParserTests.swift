@@ -206,6 +206,30 @@ final class MarkdownParserHeaderAndListTests: XCTestCase {
         XCTAssertEqual(items[1].kind, .ordered(number: 2))
         XCTAssertEqual(String(text[items[1].contentRange]), "")
     }
+
+    func testTopLevelItemHasLevelZero() {
+        let items = MarkdownParser.parseListItems(in: "- top level")
+        XCTAssertEqual(items[0].level, 0)
+    }
+
+    func testTwoSpaceIndentIsLevelOne() {
+        let items = MarkdownParser.parseListItems(in: "- one\n  - nested")
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].level, 0)
+        XCTAssertEqual(items[1].level, 1)
+    }
+
+    func testFourSpaceIndentIsLevelTwo() {
+        let items = MarkdownParser.parseListItems(in: "- one\n    - double nested")
+        XCTAssertEqual(items[1].level, 2)
+    }
+
+    func testIndentedMarkerContentRangeExcludesTheIndentation() {
+        let text = "  - nested item"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(String(text[items[0].contentRange]), "nested item")
+    }
 }
 
 final class MarkdownParserLinkTests: XCTestCase {

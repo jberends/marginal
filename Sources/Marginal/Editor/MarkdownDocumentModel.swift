@@ -30,6 +30,8 @@ enum ListMarkerKind: Equatable {
 
 struct ListItemSpan: Equatable {
     let kind: ListMarkerKind
+    /// Nesting depth, 0 = top level. Derived from leading-space indentation (2 spaces per level).
+    let level: Int
     let markerRange: Range<String.Index>
     let contentRange: Range<String.Index>
     let lineRange: Range<String.Index>

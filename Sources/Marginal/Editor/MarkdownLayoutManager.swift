@@ -60,22 +60,35 @@ final class MarkdownLayoutManager: NSLayoutManager {
         }
 
         textStorage.enumerateAttribute(.marginalListBulletMarker, in: fullRange) { value, range, _ in
-            guard value != nil,
+            guard let shapeIndex = value as? Int,
                   let font = textStorage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             // The marker character is still laid out at normal size (just transparent), so its own
             // bounding rect already reflects this exact line's real vertical geometry -- centering
-            // the circle within it, sized from the font's own xHeight, needs no guessed offsets.
+            // the shape within it, sized from the font's own xHeight, needs no guessed offsets.
             let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
             let diameter = font.xHeight * 0.85
-            let circleRect = NSRect(
+            let shapeRect = NSRect(
                 x: origin.x + charRect.midX - diameter / 2,
                 y: origin.y + charRect.midY - diameter / 2,
                 width: diameter,
                 height: diameter
             )
-            NSColor.labelColor.setFill()
-            NSBezierPath(ovalIn: circleRect).fill()
+            // Cycles filled circle / hollow circle / filled square per nesting level, matching
+            // common editors' (Word, Notion, etc.) nested unordered-list marker conventions.
+            switch shapeIndex % 3 {
+            case 0:
+                NSColor.labelColor.setFill()
+                NSBezierPath(ovalIn: shapeRect).fill()
+            case 1:
+                NSColor.labelColor.setStroke()
+                let strokePath = NSBezierPath(ovalIn: shapeRect.insetBy(dx: 0.75, dy: 0.75))
+                strokePath.lineWidth = 1.2
+                strokePath.stroke()
+            default:
+                NSColor.labelColor.setFill()
+                NSBezierPath(rect: shapeRect).fill()
+            }
         }
 
         textStorage.enumerateAttribute(.marginalOrderedListMarkerText, in: fullRange) { value, range, _ in

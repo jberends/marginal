@@ -127,9 +127,27 @@ struct MarkdownParser {
         var items: [ListItemSpan] = []
         var lineStart = text.startIndex
 
+        // Nesting depth is derived from leading-space indentation, 2 spaces per level -- a
+        // pragmatic fixed unit (not CommonMark's column-based nesting rule), matching common
+        // editor conventions. Tabs aren't recognized as indentation (out of scope).
+        func level(of line: Substring) -> Int {
+            line.prefix { $0 == " " }.count / 2
+        }
+
+        func markerContentStart(of line: Substring) -> Substring {
+            line[line.prefix { $0 == " " }.endIndex...]
+        }
+
+        func unorderedMarkerRange(in line: Substring) -> Range<String.Index>? {
+            markerContentStart(of: line).range(of: "^[-*+]( |$)", options: .regularExpression)
+        }
+
+        func orderedMarkerRange(in line: Substring) -> Range<String.Index>? {
+            markerContentStart(of: line).range(of: "^[0-9]+\\.( |$)", options: .regularExpression)
+        }
+
         func isListMarkerLine(_ line: Substring) -> Bool {
-            line.range(of: "^[-*+]( |$)", options: .regularExpression) != nil
-                || line.range(of: "^[0-9]+\\.( |$)", options: .regularExpression) != nil
+            unorderedMarkerRange(in: line) != nil || orderedMarkerRange(in: line) != nil
         }
 
         // CommonMark "lazy continuation": a plain line immediately following a list item line,
@@ -154,20 +172,22 @@ struct MarkdownParser {
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
-            if let markerRange = line.range(of: "^[-*+]( |$)", options: .regularExpression) {
+            if let markerRange = unorderedMarkerRange(in: line) {
                 let itemEnd = extendedItemEnd(after: lineEnd)
                 items.append(ListItemSpan(
                     kind: .unordered,
+                    level: level(of: line),
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
                     lineRange: lineStart..<itemEnd
                 ))
                 lineStart = itemEnd < text.endIndex ? text.index(after: itemEnd) : text.endIndex
-            } else if let markerRange = line.range(of: "^[0-9]+\\.( |$)", options: .regularExpression) {
+            } else if let markerRange = orderedMarkerRange(in: line) {
                 let digits = line[markerRange].prefix { $0.isNumber }
                 let itemEnd = extendedItemEnd(after: lineEnd)
                 items.append(ListItemSpan(
                     kind: .ordered(number: Int(digits) ?? 0),
+                    level: level(of: line),
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
                     lineRange: lineStart..<itemEnd

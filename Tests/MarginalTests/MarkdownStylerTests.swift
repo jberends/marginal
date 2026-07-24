@@ -213,6 +213,43 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "1. ", "New list after a blank line must restart from its own first item, not continue the previous list's count")
     }
 
+    // Nested unordered lists: each deeper level shifts both the marker and its content one
+    // more indent slot to the right, and cycles the drawn shape (filled circle / hollow
+    // circle / filled square) rather than repeating the same bullet at every depth.
+    func testNestedListLevelsGetIncreasingIndentAndCyclingShapes() {
+        let text = "- level0\n  - level1\n    - level2\n      - level3"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let unitWidth = ("- " as NSString).size(withAttributes: [.font: baseFont]).width
+
+        let locations = ["level0", "level1", "level2", "level3"].map {
+            text.distance(from: text.startIndex, to: text.range(of: $0)!.lowerBound)
+        }
+        let styles = locations.map { attributed.attribute(.paragraphStyle, at: $0, effectiveRange: nil) as? NSParagraphStyle }
+
+        for (level, style) in styles.enumerated() {
+            XCTAssertEqual(style?.firstLineHeadIndent ?? -1, CGFloat(level) * unitWidth, accuracy: 0.01, "level \(level) marker position")
+            XCTAssertEqual(style?.headIndent ?? -1, CGFloat(level + 1) * unitWidth, accuracy: 0.01, "level \(level) content start")
+        }
+
+        let markerLocations = ["- level0", "- level1", "- level2", "- level3"].map {
+            text.distance(from: text.startIndex, to: text.range(of: $0)!.lowerBound)
+        }
+        let shapeIndices = markerLocations.map { attributed.attribute(.marginalListBulletMarker, at: $0, effectiveRange: nil) as? Int }
+        XCTAssertEqual(shapeIndices, [0, 1, 2, 0], "Shape must cycle filled circle / hollow circle / filled square / repeat")
+    }
+
+    func testNestedListIndentationIsHiddenFromDisplay() {
+        let text = "- one\n  - nested"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let nestedMarkerLineStart = text.distance(from: text.startIndex, to: text.range(of: "  - nested")!.lowerBound)
+        let font = attributed.attribute(.font, at: nestedMarkerLineStart, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize, "Leading indentation whitespace must be hidden; visual indent comes from paragraph style")
+    }
+
     func testInlineCodeGetsMonospaceFontAndBackground() {
         let text = "Use `npm install` now"
         let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))

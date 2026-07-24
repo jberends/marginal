@@ -195,9 +195,14 @@ struct MarkdownStyler {
             return text.index(after: previous.lineRange.upperBound) == next.lineRange.lowerBound
         }
 
+        // Grouping also requires matching nesting level: a run like "1. / 1. nested / 2. nested /
+        // 2." must not treat the nested pair as continuing the outer list's own numbering. This
+        // naturally splits an outer item on either side of a nested run into their own
+        // (single-item) groups, which still renumbers them correctly since each starts fresh from
+        // its own literal number.
         var listItemGroups: [[ListItemSpan]] = []
         for item in listItems {
-            if let last = listItemGroups.last?.last, sameListKind(last.kind, item.kind), isImmediatelyFollowing(item, after: last) {
+            if let last = listItemGroups.last?.last, sameListKind(last.kind, item.kind), last.level == item.level, isImmediatelyFollowing(item, after: last) {
                 listItemGroups[listItemGroups.count - 1].append(item)
             } else {
                 listItemGroups.append([item])
@@ -228,6 +233,14 @@ struct MarkdownStyler {
             for (index, item) in group.enumerated() {
                 let markerRange = NSRange(item.markerRange, in: text)
 
+                // Leading indentation (2 spaces per nesting level) is hidden -- the actual visual
+                // indent comes entirely from the paragraph style below, computed per level, so it
+                // stays consistent regardless of exactly how much whitespace was typed.
+                if item.markerRange.lowerBound > item.lineRange.lowerBound {
+                    let leadingWhitespaceRange = NSRange(item.lineRange.lowerBound..<item.markerRange.lowerBound, in: text)
+                    result.addAttribute(.font, value: hiddenFont, range: leadingWhitespaceRange)
+                }
+
                 switch item.kind {
                 case .unordered:
                     result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
@@ -239,13 +252,15 @@ struct MarkdownStyler {
                         // centered on the line. Instead: keep the marker character at normal size
                         // (so it still occupies real, correctly-laid-out space and stays
                         // selectable/copyable as the literal "-"/"*"/"+"), make it fully
-                        // transparent, and let MarkdownLayoutManager draw an actual filled circle
+                        // transparent, and let MarkdownLayoutManager draw an actual filled shape
                         // sized from the font's real xHeight and centered within that character's
                         // own real, already-correctly-laid-out bounding rect -- the same technique
-                        // already used for the blockquote bar and horizontal rule line.
+                        // already used for the blockquote bar and horizontal rule line. The shape
+                        // cycles filled circle / hollow circle / filled square per nesting level,
+                        // matching common editors' nested-list conventions.
                         let markerCharacterRange = NSRange(location: markerRange.location, length: 1)
                         result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerCharacterRange)
-                        result.addAttribute(.marginalListBulletMarker, value: true, range: markerCharacterRange)
+                        result.addAttribute(.marginalListBulletMarker, value: item.level % 3, range: markerCharacterRange)
                     }
                 case .ordered:
                     // The literal source digits may not match the auto-renumbered display value
@@ -262,23 +277,28 @@ struct MarkdownStyler {
                     }
                 }
 
+                // Each nesting level reserves one more indentWidth-sized slot: the marker itself
+                // shifts right by level * indentWidth, and content starts one slot further in.
+                let levelOffset = CGFloat(item.level) * indentWidth
+
                 // item.lineRange may span multiple source lines when a lazily-continued paragraph
                 // line follows with no blank line between them. TextKit treats each "\n"-delimited
                 // line as its own paragraph regardless of shared attributes, so the marker's own
                 // line and any lazy-continuation lines need separate paragraph styles: the marker
-                // line stays flush on its first visual line (headIndent handles its wrapped
-                // lines), while a lazy-continuation line must be fully indented from its own first
-                // character to read as belonging to the same item, not a new flush-left paragraph.
+                // line stays flush (at this level's own offset) on its first visual line
+                // (headIndent handles its wrapped lines), while a lazy-continuation line must be
+                // fully indented from its own first character to read as belonging to the same
+                // item, not a new flush-left paragraph.
                 let markerLineEnd = text[item.lineRange].firstIndex(of: "\n") ?? item.lineRange.upperBound
                 let markerLineStyle = NSMutableParagraphStyle()
-                markerLineStyle.firstLineHeadIndent = 0
-                markerLineStyle.headIndent = indentWidth
+                markerLineStyle.firstLineHeadIndent = levelOffset
+                markerLineStyle.headIndent = levelOffset + indentWidth
                 result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
 
                 if markerLineEnd < item.lineRange.upperBound {
                     let continuationStyle = NSMutableParagraphStyle()
-                    continuationStyle.firstLineHeadIndent = indentWidth
-                    continuationStyle.headIndent = indentWidth
+                    continuationStyle.firstLineHeadIndent = levelOffset + indentWidth
+                    continuationStyle.headIndent = levelOffset + indentWidth
                     let continuationStart = text.index(after: markerLineEnd)
                     result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
                 }
