@@ -158,10 +158,18 @@ struct MarkdownParser {
     /// Only recognizes ``` fences (not ~~~) -- a pragmatic subset matching this parser's
     /// established style. An unclosed fence (no matching closing ``` before end of document)
     /// produces no span at all; the rest of the document is treated as plain text.
+    ///
+    /// Matches CommonMark's fence-length rule: an opening fence may be 3-or-more backticks,
+    /// and only closes on a line that is backticks-only (no language tag or other trailing
+    /// content) with a count greater-than-or-equal-to the opening fence's count. This lets a
+    /// longer outer fence (e.g. four backticks) safely nest a shorter inner example (e.g. a
+    /// three-backtick fenced block used as documentation) without the inner fence's closing
+    /// line prematurely closing the outer block.
     static func parseFencedCodeBlocks(in text: String) -> [CodeBlockSpan] {
         var blocks: [CodeBlockSpan] = []
         var lineStart = text.startIndex
         var openingFenceRange: Range<String.Index>?
+        var openingFenceLength = 0
         var contentStart: String.Index?
         var language: String?
 
@@ -169,15 +177,17 @@ struct MarkdownParser {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let backtickCount = trimmed.prefix(while: { $0 == "`" }).count
 
-            if openingFenceRange == nil, trimmed.hasPrefix("```") {
+            if openingFenceRange == nil, backtickCount >= 3 {
                 openingFenceRange = lineStart..<lineEnd
-                let tag = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                openingFenceLength = backtickCount
+                let tag = trimmed.dropFirst(backtickCount).trimmingCharacters(in: .whitespaces)
                 language = tag.isEmpty ? nil : tag
                 contentStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : lineEnd
-            } else if let openRange = openingFenceRange, trimmed == "```" {
+            } else if openingFenceRange != nil, backtickCount >= openingFenceLength, trimmed.count == backtickCount {
                 blocks.append(CodeBlockSpan(
-                    openingFenceRange: openRange,
+                    openingFenceRange: openingFenceRange!,
                     contentRange: contentStart!..<lineStart,
                     closingFenceRange: lineStart..<lineEnd,
                     language: language

@@ -261,6 +261,33 @@ final class MarkdownParserFencedCodeBlockTests: XCTestCase {
         let blocks = MarkdownParser.parseFencedCodeBlocks(in: text)
         XCTAssertEqual(blocks.count, 2)
     }
+
+    func testLongerOuterFenceIsNotClosedByShorterNestedInnerFence() {
+        // A 4-backtick outer fence nesting a complete 3-backtick example: the inner
+        // ``` lines must be treated as literal content of the outer block, not as
+        // the outer block's close (regression test for premature-close bug).
+        let text = "````markdown\n```javascript\nconsole.log(\"x\")\n```\n````\nAfter"
+        let blocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        XCTAssertEqual(blocks.count, 1, "Expected exactly one code block for the outer fence, got \(blocks.count)")
+        guard let block = blocks.first else { return }
+
+        let content = String(text[block.contentRange])
+        XCTAssertTrue(content.contains("```javascript"), "Inner 3-backtick fence lines must be literal content of the outer block")
+        XCTAssertTrue(content.contains("console.log(\"x\")"))
+        XCTAssertTrue(content.contains("```"))
+        XCTAssertEqual(block.language, "markdown")
+
+        // The closing fence must be the 4-backtick line, not the inner 3-backtick line.
+        XCTAssertEqual(String(text[block.closingFenceRange]), "````")
+
+        // Text after the real closing fence must not be swallowed into the block.
+        guard let afterRange = text.range(of: "After") else {
+            XCTFail("Could not find 'After' in text")
+            return
+        }
+        XCTAssertFalse(block.contentRange.contains(afterRange.lowerBound), "'After' must be outside the code block's content range")
+        XCTAssertTrue(afterRange.lowerBound >= block.closingFenceRange.upperBound, "'After' must come after the closing fence")
+    }
 }
 
 final class MarkdownParserCodeHighlightTests: XCTestCase {
