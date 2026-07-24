@@ -105,6 +105,36 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: ruleFont, range: lineNSRange)
         }
 
+        let revealedCodeBlocks = cursorLocation.map {
+            CursorRevealController.revealedCodeBlockSpans(in: model, cursorLocation: $0)
+        } ?? []
+
+        for codeBlock in model.codeBlocks {
+            let contentNSRange = NSRange(codeBlock.contentRange, in: text)
+            let codeFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular)
+            result.addAttribute(.font, value: codeFont, range: contentNSRange)
+            result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentNSRange)
+
+            let codeText = String(text[codeBlock.contentRange])
+            for token in MarkdownParser.parseCodeHighlightTokens(in: codeText) {
+                let startOffset = codeText.distance(from: codeText.startIndex, to: token.range.lowerBound)
+                let endOffset = codeText.distance(from: codeText.startIndex, to: token.range.upperBound)
+                guard let tokenStart = text.index(codeBlock.contentRange.lowerBound, offsetBy: startOffset, limitedBy: text.endIndex),
+                      let tokenEnd = text.index(codeBlock.contentRange.lowerBound, offsetBy: endOffset, limitedBy: text.endIndex) else { continue }
+                let tokenColor: NSColor
+                switch token.kind {
+                case .string: tokenColor = NSColor.systemGreen
+                case .comment: tokenColor = NSColor.secondaryLabelColor
+                case .number: tokenColor = NSColor.systemPurple
+                }
+                result.addAttribute(.foregroundColor, value: tokenColor, range: NSRange(tokenStart..<tokenEnd, in: text))
+            }
+
+            let fenceFont = revealedCodeBlocks.contains(codeBlock) ? baseFont : hiddenFont
+            result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.openingFenceRange, in: text))
+            result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.closingFenceRange, in: text))
+        }
+
         for item in model.listItems {
             let markerRange = NSRange(item.markerRange, in: text)
             result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)

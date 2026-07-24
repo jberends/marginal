@@ -89,4 +89,18 @@ final class CursorRevealControllerTests: XCTestCase {
         let cursor = text.index(text.startIndex, offsetBy: 1) // on "Above"
         XCTAssertTrue(CursorRevealController.revealedHorizontalRuleSpans(in: model, cursorLocation: cursor).isEmpty)
     }
+
+    func testCursorInCodeBlockRevealsItsFences() {
+        let text = "```\ncode here\n```"
+        let model = MarkdownDocumentModel(codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 6) // inside "code here"
+        XCTAssertEqual(CursorRevealController.revealedCodeBlockSpans(in: model, cursorLocation: cursor).count, 1)
+    }
+
+    func testCursorOutsideCodeBlockDoesNotRevealFences() {
+        let text = "```\ncode here\n```\nafter"
+        let model = MarkdownDocumentModel(codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: text.count - 2) // inside "after"
+        XCTAssertTrue(CursorRevealController.revealedCodeBlockSpans(in: model, cursorLocation: cursor).isEmpty)
+    }
 }

@@ -51,6 +51,24 @@ struct HorizontalRuleSpan: Equatable {
     let lineRange: Range<String.Index>
 }
 
+struct CodeBlockSpan: Equatable {
+    let openingFenceRange: Range<String.Index>
+    let contentRange: Range<String.Index>
+    let closingFenceRange: Range<String.Index>
+    let language: String?
+}
+
+enum CodeTokenKind: Equatable {
+    case string
+    case comment
+    case number
+}
+
+struct CodeHighlightToken: Equatable {
+    let kind: CodeTokenKind
+    let range: Range<String.Index>
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
     var headers: [HeaderSpan] = []
@@ -58,4 +76,5 @@ struct MarkdownDocumentModel: Equatable {
     var links: [LinkSpan] = []
     var blockquotes: [BlockquoteSpan] = []
     var horizontalRules: [HorizontalRuleSpan] = []
+    var codeBlocks: [CodeBlockSpan] = []
 }

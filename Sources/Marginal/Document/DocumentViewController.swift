@@ -117,7 +117,8 @@ final class DocumentViewController: NSViewController {
             listItems: MarkdownParser.parseListItems(in: text),
             links: MarkdownParser.parseLinks(in: text),
             blockquotes: MarkdownParser.parseBlockquotes(in: text),
-            horizontalRules: MarkdownParser.parseHorizontalRules(in: text)
+            horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
         )
         let attributed = MarkdownStyler.attributedString(
             for: text,

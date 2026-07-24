@@ -146,4 +146,32 @@ final class MarkdownStylerTests: XCTestCase {
         let font = attributed.attribute(.font, at: ruleLocation, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, 14)
     }
+
+    func testCodeBlockContentGetsMonospaceFontAndBackground() {
+        let text = "```\nplain content\n```"
+        let model = MarkdownDocumentModel(codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let contentLocation = text.distance(from: text.startIndex, to: text.range(of: "plain")!.lowerBound)
+        let font = attributed.attribute(.font, at: contentLocation, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.isFixedPitch ?? false)
+        let background = attributed.attribute(.backgroundColor, at: contentLocation, effectiveRange: nil) as? NSColor
+        XCTAssertNotNil(background)
+    }
+
+    func testCodeBlockFencesAreHiddenWhenCursorIsElsewhere() {
+        let text = "```\nplain content\n```\nafter"
+        let model = MarkdownDocumentModel(codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+    }
+
+    func testCodeBlockHighlightTokensGetColored() {
+        let text = "```\nlet s = \"hi\"\n```"
+        let model = MarkdownDocumentModel(codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let stringLocation = text.distance(from: text.startIndex, to: text.range(of: "\"hi\"")!.lowerBound)
+        let color = attributed.attribute(.foregroundColor, at: stringLocation, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(color, NSColor.labelColor, "The string literal should get a distinct highlight color, not the default text color")
+    }
 }

@@ -218,3 +218,87 @@ final class MarkdownParserHorizontalRuleTests: XCTestCase {
         XCTAssertEqual(String(text[rules[0].lineRange]), "---")
     }
 }
+
+final class MarkdownParserFencedCodeBlockTests: XCTestCase {
+
+    func testParsesPlainFencedCodeBlock() {
+        let text = "```\nplain content\n```"
+        let blocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(String(text[blocks[0].contentRange]), "plain content\n")
+        XCTAssertNil(blocks[0].language)
+    }
+
+    func testParsesFencedCodeBlockWithLanguageTag() {
+        let text = "```swift\nlet x = 1\n```"
+        let blocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks[0].language, "swift")
+        XCTAssertEqual(String(text[blocks[0].contentRange]), "let x = 1\n")
+    }
+
+    func testMarkdownInsideFencedCodeBlockIsNotParsedAsOtherSpans() {
+        // This test only proves parseFencedCodeBlocks correctly identifies the block's
+        // content range -- MarkdownStyler (a later step) is responsible for not re-parsing
+        // that content range as headers/lists/etc.
+        let text = "```markdown\n# Not a real heading\n- Not a real list\n```"
+        let blocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertTrue(String(text[blocks[0].contentRange]).contains("# Not a real heading"))
+    }
+
+    func testUnclosedFenceProducesNoSpan() {
+        let text = "```swift\nlet x = 1"
+        XCTAssertTrue(MarkdownParser.parseFencedCodeBlocks(in: text).isEmpty)
+    }
+
+    func testTextWithoutFencesReturnsEmpty() {
+        XCTAssertTrue(MarkdownParser.parseFencedCodeBlocks(in: "Just a normal paragraph.").isEmpty)
+    }
+
+    func testMultipleFencedCodeBlocks() {
+        let text = "```\nfirst\n```\n\nSome text\n\n```\nsecond\n```"
+        let blocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        XCTAssertEqual(blocks.count, 2)
+    }
+}
+
+final class MarkdownParserCodeHighlightTests: XCTestCase {
+
+    func testParsesStringLiteral() {
+        let code = "let greeting = \"hello\""
+        let tokens = MarkdownParser.parseCodeHighlightTokens(in: code)
+        XCTAssertTrue(tokens.contains { $0.kind == .string })
+        let stringToken = tokens.first { $0.kind == .string }!
+        XCTAssertEqual(String(code[stringToken.range]), "\"hello\"")
+    }
+
+    func testParsesLineCommentWithDoubleSlash() {
+        let code = "let x = 1 // a comment"
+        let tokens = MarkdownParser.parseCodeHighlightTokens(in: code)
+        XCTAssertTrue(tokens.contains { $0.kind == .comment })
+    }
+
+    func testParsesLineCommentWithHash() {
+        let code = "x = 1  # a comment"
+        let tokens = MarkdownParser.parseCodeHighlightTokens(in: code)
+        XCTAssertTrue(tokens.contains { $0.kind == .comment })
+    }
+
+    func testParsesNumber() {
+        let code = "let x = 42"
+        let tokens = MarkdownParser.parseCodeHighlightTokens(in: code)
+        XCTAssertTrue(tokens.contains { $0.kind == .number })
+    }
+
+    func testHashInsideStringIsNotMistakenForAComment() {
+        let code = "let s = \"contains # not a comment\""
+        let tokens = MarkdownParser.parseCodeHighlightTokens(in: code)
+        XCTAssertEqual(tokens.filter { $0.kind == .string }.count, 1)
+        XCTAssertTrue(tokens.filter { $0.kind == .comment }.isEmpty, "The # is inside the string, already claimed -- must not also match as a comment")
+    }
+
+    func testPlainCodeWithNoTokensReturnsEmpty() {
+        XCTAssertTrue(MarkdownParser.parseCodeHighlightTokens(in: "print(x)").isEmpty)
+    }
+}

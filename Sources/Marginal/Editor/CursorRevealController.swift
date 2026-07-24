@@ -44,4 +44,11 @@ struct CursorRevealController {
             cursorLocation >= rule.lineRange.lowerBound && cursorLocation <= rule.lineRange.upperBound
         }
     }
+
+    static func revealedCodeBlockSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [CodeBlockSpan] {
+        model.codeBlocks.filter { block in
+            let fullRange = block.openingFenceRange.lowerBound..<block.closingFenceRange.upperBound
+            return cursorLocation >= fullRange.lowerBound && cursorLocation <= fullRange.upperBound
+        }
+    }
 }

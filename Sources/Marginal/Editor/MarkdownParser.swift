@@ -155,6 +155,88 @@ struct MarkdownParser {
         return rules
     }
 
+    /// Only recognizes ``` fences (not ~~~) -- a pragmatic subset matching this parser's
+    /// established style. An unclosed fence (no matching closing ``` before end of document)
+    /// produces no span at all; the rest of the document is treated as plain text.
+    static func parseFencedCodeBlocks(in text: String) -> [CodeBlockSpan] {
+        var blocks: [CodeBlockSpan] = []
+        var lineStart = text.startIndex
+        var openingFenceRange: Range<String.Index>?
+        var contentStart: String.Index?
+        var language: String?
+
+        while lineStart < text.endIndex {
+            let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
+            let line = text[lineStart..<lineEnd]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if openingFenceRange == nil, trimmed.hasPrefix("```") {
+                openingFenceRange = lineStart..<lineEnd
+                let tag = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                language = tag.isEmpty ? nil : tag
+                contentStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : lineEnd
+            } else if let openRange = openingFenceRange, trimmed == "```" {
+                blocks.append(CodeBlockSpan(
+                    openingFenceRange: openRange,
+                    contentRange: contentStart!..<lineStart,
+                    closingFenceRange: lineStart..<lineEnd,
+                    language: language
+                ))
+                openingFenceRange = nil
+                contentStart = nil
+                language = nil
+            }
+
+            if lineEnd >= text.endIndex { break }
+            lineStart = text.index(after: lineEnd)
+        }
+        return blocks
+    }
+
+    /// Basic, language-agnostic heuristic highlighting -- not a real tokenizer. Order matters:
+    /// strings claim first so a "#"/"//" INSIDE a string literal isn't later mistaken for a
+    /// comment marker (the comment regex's match would overlap the already-claimed string
+    /// range and get skipped by the isClaimed check).
+    ///
+    /// Known v1 limitation: this only protects strings-containing-comment-markers, not the
+    /// reverse (e.g. a "#"/"//" that starts a real comment whose text happens to contain a
+    /// quote character can still misparse) -- acceptable for a basic heuristic highlighter,
+    /// not a real tokenizer.
+    static func parseCodeHighlightTokens(in codeText: String) -> [CodeHighlightToken] {
+        var tokens: [CodeHighlightToken] = []
+        var claimed = Set<Int>()
+
+        func offset(_ index: String.Index) -> Int {
+            codeText.distance(from: codeText.startIndex, to: index)
+        }
+        func claim(_ range: Range<String.Index>) {
+            for i in offset(range.lowerBound)..<offset(range.upperBound) { claimed.insert(i) }
+        }
+        func isClaimed(_ range: Range<String.Index>) -> Bool {
+            for i in offset(range.lowerBound)..<offset(range.upperBound) where claimed.contains(i) { return true }
+            return false
+        }
+
+        func findMatches(pattern: String, kind: CodeTokenKind) {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+            let nsrange = NSRange(codeText.startIndex..<codeText.endIndex, in: codeText)
+            regex.enumerateMatches(in: codeText, range: nsrange) { match, _, _ in
+                guard let match, let fullRange = Range(match.range, in: codeText) else { return }
+                if isClaimed(fullRange) { return }
+                tokens.append(CodeHighlightToken(kind: kind, range: fullRange))
+                claim(fullRange)
+            }
+        }
+
+        findMatches(pattern: "\"[^\"\\n]*\"", kind: .string)
+        findMatches(pattern: "'[^'\\n]*'", kind: .string)
+        findMatches(pattern: "//[^\\n]*", kind: .comment)
+        findMatches(pattern: "#[^\\n]*", kind: .comment)
+        findMatches(pattern: "\\b\\d+(\\.\\d+)?\\b", kind: .number)
+
+        return tokens
+    }
+
     static func parseLinks(in text: String) -> [LinkSpan] {
         var links: [LinkSpan] = []
         guard let regex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return links }
