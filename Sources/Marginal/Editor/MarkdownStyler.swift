@@ -23,7 +23,27 @@ struct MarkdownStyler {
         } ?? []
         let hiddenFont = NSFont.systemFont(ofSize: hiddenDelimiterFontSize)
 
-        for header in model.headers {
+        // Code blocks are parsed independently from every other span type and share no "claimed
+        // ranges" mechanism with them, so a span from another parser (header/link/blockquote/
+        // horizontal-rule/list-item/inline-style) can end up with a range that falls entirely
+        // inside a fenced code block -- e.g. a YAML "- item" line, a "[text](url)" link, or a
+        // "---" separator shown as example code. Filter those out before styling so code block
+        // content and its fences only ever get code styling, never reinterpreted as markdown.
+        func overlapsAnyCodeBlock(_ range: Range<String.Index>) -> Bool {
+            model.codeBlocks.contains { codeBlock in
+                let blockRange = codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound
+                return range.lowerBound < blockRange.upperBound && range.upperBound > blockRange.lowerBound
+            }
+        }
+
+        let headers = model.headers.filter { !overlapsAnyCodeBlock($0.lineRange) }
+        let inlineStyles = model.inlineStyles.filter { !overlapsAnyCodeBlock($0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound) }
+        let links = model.links.filter { !overlapsAnyCodeBlock($0.fullRange) }
+        let blockquotes = model.blockquotes.filter { !overlapsAnyCodeBlock($0.lineRange) }
+        let horizontalRules = model.horizontalRules.filter { !overlapsAnyCodeBlock($0.lineRange) }
+        let listItems = model.listItems.filter { !overlapsAnyCodeBlock($0.lineRange) }
+
+        for header in headers {
             let headerFont = NSFontManager.shared.convert(
                 NSFont.systemFont(ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize)),
                 toHaveTrait: .boldFontMask
@@ -34,7 +54,7 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: revealedHeaders.contains(header) ? headerFont : hiddenFont, range: markerRange)
         }
 
-        for span in model.inlineStyles {
+        for span in inlineStyles {
             let contentRange = NSRange(span.contentRange, in: text)
             switch span.kind {
             case .bold:
@@ -59,7 +79,7 @@ struct MarkdownStyler {
             CursorRevealController.revealedLinkSpans(in: model, cursorLocation: $0)
         } ?? []
 
-        for link in model.links {
+        for link in links {
             let textRange = NSRange(link.textRange, in: text)
             result.addAttribute(.foregroundColor, value: NSColor.linkColor, range: textRange)
             result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: textRange)
@@ -81,7 +101,7 @@ struct MarkdownStyler {
             CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: $0)
         } ?? []
 
-        for blockquote in model.blockquotes {
+        for blockquote in blockquotes {
             let markerRange = NSRange(blockquote.markerRange, in: text)
             let contentRange = NSRange(blockquote.contentRange, in: text)
             result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
@@ -98,7 +118,7 @@ struct MarkdownStyler {
             CursorRevealController.revealedHorizontalRuleSpans(in: model, cursorLocation: $0)
         } ?? []
 
-        for rule in model.horizontalRules {
+        for rule in horizontalRules {
             let lineNSRange = NSRange(rule.lineRange, in: text)
             result.addAttribute(.marginalHorizontalRuleMarker, value: true, range: lineNSRange)
             let ruleFont = revealedHorizontalRules.contains(rule) ? baseFont : hiddenFont
@@ -135,7 +155,7 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.closingFenceRange, in: text))
         }
 
-        for item in model.listItems {
+        for item in listItems {
             let markerRange = NSRange(item.markerRange, in: text)
             result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
 

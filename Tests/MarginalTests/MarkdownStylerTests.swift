@@ -174,4 +174,75 @@ final class MarkdownStylerTests: XCTestCase {
         let color = attributed.attribute(.foregroundColor, at: stringLocation, effectiveRange: nil) as? NSColor
         XCTAssertNotEqual(color, NSColor.labelColor, "The string literal should get a distinct highlight color, not the default text color")
     }
+
+    // MARK: - Code block content must not be reinterpreted by other parsers.
+    //
+    // These regression tests build a model with BOTH `codeBlocks:` AND another span type
+    // parsed from the SAME text, since the bug only manifests when both see the same
+    // document (a fenced code block and an unrelated span that happens to land inside it).
+
+    func testLinkInsideCodeBlockDoesNotGetLinkStyling() {
+        let text = "```\n[docs](http://example.com)\n```"
+        let model = MarkdownDocumentModel(
+            links: MarkdownParser.parseLinks(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "docs")!.lowerBound)
+        XCTAssertNil(attributed.attribute(.link, at: location, effectiveRange: nil), "A literal link inside a code block must not become a live link")
+        let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(color, NSColor.linkColor, "Code block content must not be recolored as a link")
+        let underline = attributed.attribute(.underlineStyle, at: location, effectiveRange: nil) as? Int
+        XCTAssertNil(underline, "Code block content must not be underlined as a link")
+    }
+
+    func testHorizontalRuleInsideCodeBlockDoesNotGetMarkedForLayoutManager() {
+        let text = "```\n---\n```"
+        let model = MarkdownDocumentModel(
+            horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let ruleLocation = text.distance(from: text.startIndex, to: text.range(of: "---")!.lowerBound)
+        let marker = attributed.attribute(.marginalHorizontalRuleMarker, at: ruleLocation, effectiveRange: nil)
+        XCTAssertNil(marker, "A '---' shown as example code must not get a drawn divider line")
+    }
+
+    func testBlockquoteInsideCodeBlockDoesNotGetMarkedForLayoutManager() {
+        let text = "```\n> quoted\n```"
+        let model = MarkdownDocumentModel(
+            blockquotes: MarkdownParser.parseBlockquotes(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "quoted")!.lowerBound)
+        let marker = attributed.attribute(.marginalBlockquoteMarker, at: location, effectiveRange: nil)
+        XCTAssertNil(marker, "A '> quoted' line shown as example code must not get a drawn blockquote bar")
+    }
+
+    func testStrikethroughInsideCodeBlockDoesNotGetStrikethroughStyling() {
+        let text = "```\n~~strikethrough~~\n```"
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "strikethrough")!.lowerBound)
+        let style = attributed.attribute(.strikethroughStyle, at: location, effectiveRange: nil) as? Int
+        XCTAssertNil(style, "'~~strikethrough~~' shown as example code must not be struck through")
+    }
+
+    func testUnderlineInsideCodeBlockDoesNotGetUnderlineStyling() {
+        // Underline in this codebase's markdown dialect is written as inline HTML `<u>...</u>`
+        // (see MarkdownParser's doc comment), not `__...__` -- double-underscore maps to bold.
+        let text = "```\n<u>underline</u>\n```"
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "underline")!.lowerBound)
+        let style = attributed.attribute(.underlineStyle, at: location, effectiveRange: nil) as? Int
+        XCTAssertNil(style, "'<u>underline</u>' shown as example code must not be underlined")
+    }
 }
