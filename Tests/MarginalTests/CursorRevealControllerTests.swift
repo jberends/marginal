@@ -47,4 +47,18 @@ final class CursorRevealControllerTests: XCTestCase {
         let revealed = CursorRevealController.revealedInlineStyleSpans(in: model, cursorLocation: cursor)
         XCTAssertEqual(revealed.count, 1, "Only one of the two touching spans should reveal at the shared boundary")
     }
+
+    func testCursorOutsideLinkDoesNotRevealIt() {
+        let text = "Check [this](https://example.com) out"
+        let model = MarkdownDocumentModel(links: MarkdownParser.parseLinks(in: text))
+        let cursor = text.startIndex
+        XCTAssertTrue(CursorRevealController.revealedLinkSpans(in: model, cursorLocation: cursor).isEmpty)
+    }
+
+    func testCursorInsideLinkRevealsIt() {
+        let text = "Check [this](https://example.com) out"
+        let model = MarkdownDocumentModel(links: MarkdownParser.parseLinks(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 10) // inside "this"
+        XCTAssertEqual(CursorRevealController.revealedLinkSpans(in: model, cursorLocation: cursor).count, 1)
+    }
 }

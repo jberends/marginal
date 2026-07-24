@@ -26,4 +26,10 @@ struct CursorRevealController {
             cursorLocation >= header.lineRange.lowerBound && cursorLocation <= header.lineRange.upperBound
         }
     }
+
+    static func revealedLinkSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [LinkSpan] {
+        model.links.filter { link in
+            cursorLocation >= link.fullRange.lowerBound && cursorLocation <= link.fullRange.upperBound
+        }
+    }
 }

@@ -52,11 +52,26 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: delimiterFont, range: NSRange(span.closingDelimiterRange, in: text))
         }
 
+        let revealedLinks = cursorLocation.map {
+            CursorRevealController.revealedLinkSpans(in: model, cursorLocation: $0)
+        } ?? []
+
         for link in model.links {
             let textRange = NSRange(link.textRange, in: text)
             result.addAttribute(.foregroundColor, value: NSColor.linkColor, range: textRange)
             result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: textRange)
             result.addAttribute(.link, value: link.url, range: textRange)
+
+            let delimiterFont = revealedLinks.contains(link) ? baseFont : hiddenFont
+            let fullNSRange = NSRange(link.fullRange, in: text)
+            let prefixRange = NSRange(location: fullNSRange.location, length: textRange.location - fullNSRange.location)
+            let suffixRange = NSRange(location: textRange.location + textRange.length, length: fullNSRange.location + fullNSRange.length - (textRange.location + textRange.length))
+            if prefixRange.length > 0 {
+                result.addAttribute(.font, value: delimiterFont, range: prefixRange)
+            }
+            if suffixRange.length > 0 {
+                result.addAttribute(.font, value: delimiterFont, range: suffixRange)
+            }
         }
 
         for item in model.listItems {

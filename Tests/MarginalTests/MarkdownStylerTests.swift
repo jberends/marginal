@@ -58,6 +58,25 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(url, "https://example.com")
     }
 
+    func testLinkDelimitersAreHiddenWhenCursorIsElsewhere() {
+        let text = "Check [this](https://example.com) out"
+        let model = MarkdownDocumentModel(links: MarkdownParser.parseLinks(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let openBracketLocation = text.distance(from: text.startIndex, to: text.range(of: "[")!.lowerBound)
+        let font = attributed.attribute(.font, at: openBracketLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+    }
+
+    func testLinkDelimitersAreRevealedWhenCursorIsInside() {
+        let text = "Check [this](https://example.com) out"
+        let model = MarkdownDocumentModel(links: MarkdownParser.parseLinks(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 10) // inside "this"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: cursor)
+        let openBracketLocation = text.distance(from: text.startIndex, to: text.range(of: "[")!.lowerBound)
+        let font = attributed.attribute(.font, at: openBracketLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14)
+    }
+
     func testUnorderedListMarkerGetsGlyphSubstitutionAttribute() {
         let text = "- one\n- two"
         let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
