@@ -250,6 +250,89 @@ struct MarkdownParser {
         return rules
     }
 
+    /// Requires both a leading and trailing "|" on every row -- the vast majority of real-world
+    /// pipe tables, and a pragmatic subset matching this parser's established style (a table row
+    /// without outer pipes, e.g. "a | b", is not recognized). A header row immediately followed by
+    /// a valid alignment separator row starts a table; every subsequent consecutive row-shaped
+    /// line becomes a body row, until a line that isn't row-shaped, a blank line, or the end of
+    /// text. Escaped pipes ("\|") do not split a cell.
+    static func parseTables(in text: String) -> [TableSpan] {
+        var tables: [TableSpan] = []
+        var lineStart = text.startIndex
+
+        func lineRange(at start: String.Index) -> Range<String.Index> {
+            let end = text[start...].firstIndex(of: "\n") ?? text.endIndex
+            return start..<end
+        }
+
+        func pipePositions(in range: Range<String.Index>) -> [String.Index] {
+            var positions: [String.Index] = []
+            var i = range.lowerBound
+            while i < range.upperBound {
+                if text[i] == "|" {
+                    let isEscaped = i > range.lowerBound && text[text.index(before: i)] == "\\"
+                    if !isEscaped { positions.append(i) }
+                }
+                i = text.index(after: i)
+            }
+            return positions
+        }
+
+        func isTableRow(_ range: Range<String.Index>) -> Bool {
+            let line = text[range]
+            guard line.hasPrefix("|"), line.hasSuffix("|") else { return false }
+            return pipePositions(in: range).count >= 2
+        }
+
+        func isSeparatorRow(_ range: Range<String.Index>) -> Bool {
+            text[range].range(of: "^\\|(\\s*:?-+:?\\s*\\|)+$", options: .regularExpression) != nil
+        }
+
+        func alignments(fromSeparator range: Range<String.Index>) -> [TableAlignment] {
+            let pipes = pipePositions(in: range)
+            guard pipes.count >= 2 else { return [] }
+            return (0..<(pipes.count - 1)).map { i in
+                let cell = text[text.index(after: pipes[i])..<pipes[i + 1]].trimmingCharacters(in: .whitespaces)
+                switch (cell.hasPrefix(":"), cell.hasSuffix(":")) {
+                case (true, true): return .center
+                case (false, true): return .right
+                default: return .left
+                }
+            }
+        }
+
+        func row(for range: Range<String.Index>) -> TableRowSpan {
+            TableRowSpan(lineRange: range, pipeRanges: pipePositions(in: range).map { $0..<text.index(after: $0) })
+        }
+
+        while lineStart < text.endIndex {
+            let headerRange = lineRange(at: lineStart)
+            if isTableRow(headerRange), headerRange.upperBound < text.endIndex {
+                let separatorRange = lineRange(at: text.index(after: headerRange.upperBound))
+                if isSeparatorRow(separatorRange) {
+                    var bodyRows: [TableRowSpan] = []
+                    var cursor = separatorRange.upperBound < text.endIndex ? text.index(after: separatorRange.upperBound) : text.endIndex
+                    while cursor < text.endIndex {
+                        let rowRange = lineRange(at: cursor)
+                        guard isTableRow(rowRange) else { break }
+                        bodyRows.append(row(for: rowRange))
+                        cursor = rowRange.upperBound < text.endIndex ? text.index(after: rowRange.upperBound) : text.endIndex
+                    }
+                    tables.append(TableSpan(
+                        headerRow: row(for: headerRange),
+                        separatorRowRange: separatorRange,
+                        bodyRows: bodyRows,
+                        columnAlignments: alignments(fromSeparator: separatorRange)
+                    ))
+                    lineStart = cursor
+                    continue
+                }
+            }
+            lineStart = headerRange.upperBound < text.endIndex ? text.index(after: headerRange.upperBound) : text.endIndex
+        }
+        return tables
+    }
+
     /// Only recognizes ``` fences (not ~~~) -- a pragmatic subset matching this parser's
     /// established style. An unclosed fence (no matching closing ``` before end of document)
     /// produces no span at all; the rest of the document is treated as plain text.

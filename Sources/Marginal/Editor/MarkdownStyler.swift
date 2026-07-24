@@ -42,6 +42,10 @@ struct MarkdownStyler {
         let blockquotes = model.blockquotes.filter { !overlapsAnyCodeBlock($0.lineRange) }
         let horizontalRules = model.horizontalRules.filter { !overlapsAnyCodeBlock($0.lineRange) }
         let listItems = model.listItems.filter { !overlapsAnyCodeBlock($0.lineRange) }
+        let tables = model.tables.filter { table in
+            let fullRange = table.headerRow.lineRange.lowerBound..<(table.bodyRows.last?.lineRange.upperBound ?? table.separatorRowRange.upperBound)
+            return !overlapsAnyCodeBlock(fullRange)
+        }
 
         for header in headers {
             let headerFont = NSFontManager.shared.convert(
@@ -83,6 +87,107 @@ struct MarkdownStyler {
             if markerRange.length > 0 {
                 result.addAttribute(.font, value: markerFont, range: markerRange)
             }
+        }
+
+        // Tables run before inlineStyles (like blockquotes) so nested bold/italic/code/links
+        // within a cell layer their own font on top afterward, instead of the header row's
+        // blanket bold being applied last and clobbering them.
+        //
+        // Column alignment is achieved without ever restructuring the text into real per-cell
+        // paragraphs (which NSTextTable would require, and which would mean inserting paragraph
+        // breaks that aren't in the source -- a real mutation of the underlying markdown). Instead:
+        // every "|" and the whitespace padding around each cell's trimmed content is hidden (same
+        // technique as every other custom marker in this file), and a precisely computed .kern
+        // value on each hidden pipe pushes the FOLLOWING cell's visible content to land exactly at
+        // that column's shared target x-position -- the same shared position on every row, so the
+        // columns line up into a real grid despite each row's content having a different natural
+        // width. The separator ("|---|") row is pure syntax and stays fully hidden.
+        for table in tables {
+            let columnCount = table.headerRow.pipeRanges.count - 1
+            guard columnCount > 0 else { continue }
+            let alignments: [TableAlignment] = (0..<columnCount).map {
+                table.columnAlignments.indices.contains($0) ? table.columnAlignments[$0] : .left
+            }
+            let allRows = [table.headerRow] + table.bodyRows
+
+            func trimmedCellRange(_ pipeStart: Range<String.Index>, _ pipeEnd: Range<String.Index>) -> Range<String.Index> {
+                var start = pipeStart.upperBound
+                var end = pipeEnd.lowerBound
+                while start < end, text[start] == " " { start = text.index(after: start) }
+                while end > start, text[text.index(before: end)] == " " { end = text.index(before: end) }
+                return start..<end
+            }
+
+            // Pass 1: gather each row's trimmed cell ranges/widths so column widths (the max
+            // across every row) can be computed before any row is actually styled.
+            var rowCellRanges: [[Range<String.Index>]] = []
+            var rowCellWidths: [[CGFloat]] = []
+            for row in allRows {
+                let cols = min(columnCount, row.pipeRanges.count - 1)
+                var ranges: [Range<String.Index>] = []
+                var widths: [CGFloat] = []
+                for c in 0..<cols {
+                    let range = trimmedCellRange(row.pipeRanges[c], row.pipeRanges[c + 1])
+                    ranges.append(range)
+                    widths.append((String(text[range]) as NSString).size(withAttributes: [.font: baseFont]).width)
+                }
+                rowCellRanges.append(ranges)
+                rowCellWidths.append(widths)
+            }
+
+            let cellPadding: CGFloat = 10
+            var columnWidths = [CGFloat](repeating: 0, count: columnCount)
+            for widths in rowCellWidths {
+                for (c, w) in widths.enumerated() { columnWidths[c] = max(columnWidths[c], w) }
+            }
+            var slotStarts: [CGFloat] = [0]
+            for c in 0..<columnCount { slotStarts.append(slotStarts[c] + columnWidths[c] + cellPadding * 2) }
+            let gridColumnBoundaries = slotStarts
+
+            for (rowIndex, row) in allRows.enumerated() {
+                let isHeader = rowIndex == 0
+                let cols = min(columnCount, row.pipeRanges.count - 1)
+                var flowPosition: CGFloat = 0
+                for c in 0..<cols {
+                    let cellRange = rowCellRanges[rowIndex][c]
+                    let rawWidth = rowCellWidths[rowIndex][c]
+                    let slotStart = slotStarts[c]
+                    let slotWidth = columnWidths[c] + cellPadding * 2
+                    let desiredContentStart: CGFloat
+                    switch alignments[c] {
+                    case .left: desiredContentStart = slotStart + cellPadding
+                    case .right: desiredContentStart = slotStart + slotWidth - cellPadding - rawWidth
+                    case .center: desiredContentStart = slotStart + (slotWidth - rawWidth) / 2
+                    }
+
+                    let pipeNSRange = NSRange(row.pipeRanges[c], in: text)
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: pipeNSRange)
+                    result.addAttribute(.kern, value: desiredContentStart - flowPosition, range: pipeNSRange)
+
+                    if row.pipeRanges[c].upperBound < cellRange.lowerBound {
+                        result.addAttribute(.font, value: hiddenFont, range: NSRange(row.pipeRanges[c].upperBound..<cellRange.lowerBound, in: text))
+                    }
+                    if cellRange.upperBound < row.pipeRanges[c + 1].lowerBound {
+                        result.addAttribute(.font, value: hiddenFont, range: NSRange(cellRange.upperBound..<row.pipeRanges[c + 1].lowerBound, in: text))
+                    }
+                    if isHeader {
+                        result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask), range: NSRange(cellRange, in: text))
+                    }
+
+                    flowPosition = desiredContentStart + rawWidth
+                }
+                if let lastPipe = row.pipeRanges.last {
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: NSRange(lastPipe, in: text))
+                }
+
+                result.addAttribute(
+                    .marginalTableGridMarker,
+                    value: TableGridInfo(columnBoundaries: gridColumnBoundaries, isHeaderRow: isHeader),
+                    range: NSRange(row.lineRange, in: text)
+                )
+            }
+
+            result.addAttribute(.font, value: hiddenFont, range: NSRange(table.separatorRowRange, in: text))
         }
 
         for span in inlineStyles {

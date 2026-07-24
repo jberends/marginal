@@ -500,3 +500,91 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertNotEqual(color, NSColor.secondaryLabelColor, "Code block content must not be recolored as a list marker")
     }
 }
+
+final class MarkdownStylerTableTests: XCTestCase {
+
+    private func model(for text: String) -> MarkdownDocumentModel {
+        MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            tables: MarkdownParser.parseTables(in: text)
+        )
+    }
+
+    func testTableHeaderRowGetsBoldFont() {
+        let text = "| Feature | Notes |\n|---|---|\n| Headings | Levels 1-6 |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "Feature")!.lowerBound)
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+
+        let bodyLocation = text.distance(from: text.startIndex, to: text.range(of: "Headings")!.lowerBound)
+        let bodyFont = attributed.attribute(.font, at: bodyLocation, effectiveRange: nil) as? NSFont
+        XCTAssertFalse(bodyFont?.fontDescriptor.symbolicTraits.contains(.bold) ?? true, "Body rows must not be bold")
+    }
+
+    func testTablePipesAreHiddenAndSeparatorRowIsFullyHidden() {
+        let text = "| A | B |\n|---|---|\n| 1 | 2 |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let pipeLocation = text.distance(from: text.startIndex, to: text.range(of: "|")!.lowerBound)
+        let color = attributed.attribute(.foregroundColor, at: pipeLocation, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, NSColor.clear)
+
+        let separatorLocation = text.distance(from: text.startIndex, to: text.range(of: "|---|---|")!.lowerBound)
+        let separatorFont = attributed.attribute(.font, at: separatorLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(separatorFont?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+    }
+
+    // The first column is always left-aligned by default and its slot always starts at x=0, so
+    // the kern needed on every row's very first pipe (to reach the shared cellPadding constant)
+    // must be identical regardless of that row's own content -- a solid, font-metric-independent
+    // check that the kern algorithm is actually computing a shared target position, not just
+    // echoing each row's own natural width back at itself.
+    func testFirstColumnKernIsIdenticalAcrossRowsRegardlessOfContentLength() {
+        let text = "| A | much longer header |\n|---|---|\n| much longer body cell | B |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let headerPipeLocation = text.distance(from: text.startIndex, to: text.range(of: "| A")!.lowerBound)
+        let bodyPipeLocation = text.distance(from: text.startIndex, to: text.range(of: "| much longer body")!.lowerBound)
+        let headerKern = attributed.attribute(.kern, at: headerPipeLocation, effectiveRange: nil) as? CGFloat
+        let bodyKern = attributed.attribute(.kern, at: bodyPipeLocation, effectiveRange: nil) as? CGFloat
+        XCTAssertNotNil(headerKern)
+        XCTAssertEqual(headerKern, bodyKern, "Column 0 always starts at the same x position, so its leading kern must be identical across rows")
+    }
+
+    // The user's exact reported case: an escaped pipe inside a cell must not become a hidden
+    // "column boundary" -- it should render as ordinary (visible) text.
+    func testEscapedPipeInsideACellStaysVisible() {
+        let text = "| Expression | Meaning |\n|---|---|\n| A \\| B | A literal pipe |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let escapedPipeLocation = text.distance(from: text.startIndex, to: text.range(of: "\\|")!.lowerBound) + 1
+        let color = attributed.attribute(.foregroundColor, at: escapedPipeLocation, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(color, NSColor.clear, "An escaped pipe must stay visible, not be hidden as a column separator")
+    }
+
+    // The user's exact reported case: empty cells must not crash or corrupt the grid.
+    func testEmptyCellsDoNotCrashAndStillProduceAGrid() {
+        let text = "| Column A | Column B | Column C |\n|---|---|---|\n| Value | | Value |\n| | | |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "| | | |")!.lowerBound)
+        let gridInfo = attributed.attribute(.marginalTableGridMarker, at: location, effectiveRange: nil) as? TableGridInfo
+        XCTAssertEqual(gridInfo?.columnBoundaries.count, 4, "3 columns need 4 boundaries")
+    }
+
+    func testBoldNestedInsideTableCellKeepsBoldFont() {
+        let text = "| Type | Example |\n|---|---|\n| Bold | **Bold text** |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "Bold text")!.lowerBound)
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false, "Nested bold inside a cell must survive the table pass, which runs before inlineStyles")
+    }
+
+    func testGridMarkerDistinguishesHeaderFromBodyRows() {
+        let text = "| A |\n|---|\n| 1 |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let headerLocation = text.distance(from: text.startIndex, to: text.range(of: "| A |")!.lowerBound)
+        let bodyLocation = text.distance(from: text.startIndex, to: text.range(of: "| 1 |")!.lowerBound)
+        let headerGrid = attributed.attribute(.marginalTableGridMarker, at: headerLocation, effectiveRange: nil) as? TableGridInfo
+        let bodyGrid = attributed.attribute(.marginalTableGridMarker, at: bodyLocation, effectiveRange: nil) as? TableGridInfo
+        XCTAssertEqual(headerGrid?.isHeaderRow, true)
+        XCTAssertEqual(bodyGrid?.isHeaderRow, false)
+    }
+}

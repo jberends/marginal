@@ -475,3 +475,54 @@ final class MarkdownParserCodeHighlightTests: XCTestCase {
         XCTAssertTrue(MarkdownParser.parseCodeHighlightTokens(in: "print(x)").isEmpty)
     }
 }
+
+final class MarkdownParserTableTests: XCTestCase {
+
+    func testBasicTableIsDetected() {
+        let text = "| Feature | Supported |\n|---|---|\n| Headings | Yes |"
+        let tables = MarkdownParser.parseTables(in: text)
+        XCTAssertEqual(tables.count, 1)
+        XCTAssertEqual(tables[0].headerRow.pipeRanges.count, 3, "3 pipes bound 2 cells")
+        XCTAssertEqual(tables[0].bodyRows.count, 1)
+    }
+
+    func testAlignmentMarkersAreParsedPerColumn() {
+        let text = "| L | C | R |\n|:---|:---:|---:|\n| a | b | c |"
+        let tables = MarkdownParser.parseTables(in: text)
+        XCTAssertEqual(tables[0].columnAlignments, [.left, .center, .right])
+    }
+
+    func testPlainTextWithPipesButNoSeparatorIsNotATable() {
+        let text = "| not | a | table |\nsome other line"
+        XCTAssertTrue(MarkdownParser.parseTables(in: text).isEmpty)
+    }
+
+    // The user's exact reported case: an escaped pipe inside a cell must not split it into two.
+    func testEscapedPipeDoesNotSplitACell() {
+        let text = "| Expression | Meaning |\n|---|---|\n| A \\| B | A literal pipe between A and B |"
+        let tables = MarkdownParser.parseTables(in: text)
+        XCTAssertEqual(tables[0].bodyRows[0].pipeRanges.count, 3, "the escaped pipe must not count as a 4th real pipe")
+    }
+
+    // The user's exact reported case: empty cells must not break parsing.
+    func testEmptyCellsAreParsedAsZeroWidthCells() {
+        let text = "| Column A | Column B | Column C |\n|---|---|---|\n| Value | | Value |\n| | Value | |\n| | | |"
+        let tables = MarkdownParser.parseTables(in: text)
+        XCTAssertEqual(tables[0].bodyRows.count, 3)
+        for row in tables[0].bodyRows {
+            XCTAssertEqual(row.pipeRanges.count, 4, "still 3 cells even when some are empty")
+        }
+    }
+
+    func testTableStopsAtTheFirstNonRowLine() {
+        let text = "| a | b |\n|---|---|\n| 1 | 2 |\nplain paragraph, not part of the table"
+        let tables = MarkdownParser.parseTables(in: text)
+        XCTAssertEqual(tables[0].bodyRows.count, 1)
+    }
+
+    func testTwoSeparateTablesAreNotMerged() {
+        let text = "| a |\n|---|\n| 1 |\n\n| b |\n|---|\n| 2 |"
+        let tables = MarkdownParser.parseTables(in: text)
+        XCTAssertEqual(tables.count, 2)
+    }
+}

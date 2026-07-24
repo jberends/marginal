@@ -82,6 +82,27 @@ struct CodeHighlightToken: Equatable {
     let range: Range<String.Index>
 }
 
+enum TableAlignment: Equatable {
+    case left
+    case center
+    case right
+}
+
+struct TableRowSpan: Equatable {
+    let lineRange: Range<String.Index>
+    /// Every real (non-escaped) "|" in the row, including the leading and trailing pipes.
+    /// N pipes bound N-1 cells: cell c is pipeRanges[c].upperBound..<pipeRanges[c+1].lowerBound.
+    let pipeRanges: [Range<String.Index>]
+}
+
+struct TableSpan: Equatable {
+    let headerRow: TableRowSpan
+    /// The "| --- |:---:|---: |" alignment row -- pure syntax, always hidden, never shown.
+    let separatorRowRange: Range<String.Index>
+    let bodyRows: [TableRowSpan]
+    let columnAlignments: [TableAlignment]
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
     var headers: [HeaderSpan] = []
@@ -90,4 +111,5 @@ struct MarkdownDocumentModel: Equatable {
     var blockquotes: [BlockquoteSpan] = []
     var horizontalRules: [HorizontalRuleSpan] = []
     var codeBlocks: [CodeBlockSpan] = []
+    var tables: [TableSpan] = []
 }

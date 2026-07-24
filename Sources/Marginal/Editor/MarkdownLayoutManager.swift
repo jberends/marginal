@@ -6,6 +6,16 @@ extension NSAttributedString.Key {
     static let marginalListBulletMarker = NSAttributedString.Key("marginalListBulletMarker")
     static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
     static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
+    static let marginalTableGridMarker = NSAttributedString.Key("marginalTableGridMarker")
+}
+
+/// One table row's grid geometry, computed once per table in MarkdownStyler and drawn by
+/// MarkdownLayoutManager. Column boundaries are relative x-offsets from the row's own left edge
+/// (0, then each column's cumulative slot width), shared by every row in the same table so the
+/// grid lines up across rows regardless of each row's own content width.
+struct TableGridInfo: Equatable {
+    let columnBoundaries: [CGFloat]
+    let isHeaderRow: Bool
 }
 
 /// Draws paragraph-level decorations that can't be expressed as ordinary run attributes: the
@@ -142,6 +152,41 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 NSColor.tertiaryLabelColor.setStroke()
                 boxPath.lineWidth = 1.2
                 boxPath.stroke()
+            }
+        }
+
+        textStorage.enumerateAttribute(.marginalTableGridMarker, in: fullRange) { value, range, _ in
+            guard let gridInfo = value as? TableGridInfo, let totalWidth = gridInfo.columnBoundaries.last else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let rowRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let left = origin.x + rowRect.minX
+            let top = origin.y + rowRect.minY
+            let bottom = origin.y + rowRect.maxY
+
+            if gridInfo.isHeaderRow {
+                NSColor.textBackgroundColor.blended(withFraction: 0.06, of: .labelColor)?.setFill()
+                NSRect(x: left, y: top, width: totalWidth, height: rowRect.height).fill()
+            }
+
+            NSColor.separatorColor.setStroke()
+            for x in gridInfo.columnBoundaries {
+                let line = NSBezierPath()
+                line.lineWidth = 1
+                line.move(to: NSPoint(x: left + x, y: top))
+                line.line(to: NSPoint(x: left + x, y: bottom))
+                line.stroke()
+            }
+            let bottomLine = NSBezierPath()
+            bottomLine.lineWidth = 1
+            bottomLine.move(to: NSPoint(x: left, y: bottom))
+            bottomLine.line(to: NSPoint(x: left + totalWidth, y: bottom))
+            bottomLine.stroke()
+            if gridInfo.isHeaderRow {
+                let topLine = NSBezierPath()
+                topLine.lineWidth = 1
+                topLine.move(to: NSPoint(x: left, y: top))
+                topLine.line(to: NSPoint(x: left + totalWidth, y: top))
+                topLine.stroke()
             }
         }
     }
