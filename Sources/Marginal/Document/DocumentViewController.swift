@@ -84,6 +84,26 @@ final class DocumentViewController: NSViewController {
         NSPasteboard.general.setString(String(textView.string[range]), forType: .string)
     }
 
+    func copyCurrentSelectionAsHTML() {
+        guard let range = Range(textView.selectedRange(), in: textView.string) else { return }
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: String(textView.string[range]))
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(html, forType: .string)
+    }
+
+    // The underlying text storage is always the literal markdown source (never mutated for
+    // display), so Cmd+C must copy that raw source as plain text -- not NSTextView's default
+    // copy:, which would also place an RTF/attributed representation on the pasteboard (carrying
+    // WYSIWYG font/color runs, including near-invisible hidden-delimiter and transparent-bullet
+    // runs) that a rich-text-aware paste target would use instead of the plain string.
+    @objc func copySelectionAsMarkdown(_ sender: Any?) {
+        copyCurrentSelectionAsMarkdown()
+    }
+
+    @objc func copySelectionAsHTML(_ sender: Any?) {
+        copyCurrentSelectionAsHTML()
+    }
+
     func toggleShowSource() {
         isShowingSource.toggle()
         if isShowingSource {
@@ -179,10 +199,6 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
 
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) {
         setFontSize(FontSizing.decreased(from: editorFontSize))
-    }
-
-    func markdownTextViewCopyAsMarkdown(_ textView: MarkdownTextView) {
-        copyCurrentSelectionAsMarkdown()
     }
 
     func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {

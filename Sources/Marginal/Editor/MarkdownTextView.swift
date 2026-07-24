@@ -4,7 +4,6 @@ import AppKit
 protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView)
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView)
-    func markdownTextViewCopyAsMarkdown(_ textView: MarkdownTextView)
     func markdownTextViewToggleShowSource(_ textView: MarkdownTextView)
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL)
 }
@@ -44,9 +43,6 @@ final class MarkdownTextView: NSTextView {
                 return
             case "-":
                 shortcutDelegate?.markdownTextViewDecreaseFontSize(self)
-                return
-            case "c" where event.modifierFlags.contains(.option):
-                shortcutDelegate?.markdownTextViewCopyAsMarkdown(self)
                 return
             case "P":
                 // charactersIgnoringModifiers honors Shift (only Option/Command/Control are

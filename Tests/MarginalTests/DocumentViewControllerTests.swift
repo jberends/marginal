@@ -15,6 +15,17 @@ final class DocumentViewControllerTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "**world**")
     }
 
+    func testCopyCurrentSelectionAsHTMLPutsRenderedHTMLOnPasteboard() {
+        let viewController = DocumentViewController()
+        _ = viewController.view
+        viewController.loadInitialText("Hello **world**")
+        viewController.textView.setSelectedRange(NSRange(location: 0, length: 16))
+
+        viewController.copyCurrentSelectionAsHTML()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "<p>Hello <strong>world</strong></p>")
+    }
+
     func testToggleShowSourceRendersPlainMonospaceText() {
         let viewController = DocumentViewController()
         _ = viewController.view

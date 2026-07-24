@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "New", action: #selector(NSDocumentController.newDocument(_:)), keyEquivalent: "n")
+        fileMenu.addItem(withTitle: "New Tab", action: #selector(NSWindow.newWindowForTab(_:)), keyEquivalent: "t")
         fileMenu.addItem(withTitle: "Open…", action: #selector(NSDocumentController.openDocument(_:)), keyEquivalent: "o")
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -84,7 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
         editMenu.addItem(NSMenuItem.separator())
         editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        // Copy is routed through DocumentViewController rather than NSText.copy(_:) so it puts
+        // only the raw markdown source on the pasteboard -- see the doc comment on
+        // DocumentViewController.copySelectionAsMarkdown(_:) for why the default rich-text copy
+        // isn't safe to use here.
+        editMenu.addItem(withTitle: "Copy", action: #selector(DocumentViewController.copySelectionAsMarkdown(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Copy as HTML", action: #selector(DocumentViewController.copySelectionAsHTML(_:)), keyEquivalent: "C")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Delete", action: Selector(("delete:")), keyEquivalent: "")
         editMenu.addItem(NSMenuItem.separator())
