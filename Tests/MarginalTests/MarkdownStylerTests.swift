@@ -245,4 +245,18 @@ final class MarkdownStylerTests: XCTestCase {
         let style = attributed.attribute(.underlineStyle, at: location, effectiveRange: nil) as? Int
         XCTAssertNil(style, "'<u>underline</u>' shown as example code must not be underlined")
     }
+
+    func testListItemInsideCodeBlockDoesNotGetBulletGlyphSubstitution() {
+        let text = "```\n- item\n```"
+        let model = MarkdownDocumentModel(
+            listItems: MarkdownParser.parseListItems(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "- item")!.lowerBound)
+        let glyphInfo = attributed.attribute(.glyphInfo, at: location, effectiveRange: nil) as? NSGlyphInfo
+        XCTAssertNil(glyphInfo, "A '- item' line shown as example code must not get bullet glyph substitution")
+        let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(color, NSColor.secondaryLabelColor, "Code block content must not be recolored as a list marker")
+    }
 }
