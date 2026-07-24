@@ -77,21 +77,30 @@ struct MarkdownStyler {
 
         for span in inlineStyles {
             let contentRange = NSRange(span.contentRange, in: text)
+            // A span nested inside a header (e.g. "# **Bold Header**") must keep the header's
+            // larger font size -- this loop runs after headers, so hard-coding baseFont here
+            // would shrink the nested span back down to editor-content size.
+            let spanBaseFont: NSFont
+            if let header = headers.first(where: { $0.contentRange.contains(span.contentRange.lowerBound) }) {
+                spanBaseFont = NSFont.systemFont(ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize))
+            } else {
+                spanBaseFont = baseFont
+            }
             switch span.kind {
             case .bold:
-                result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask), range: contentRange)
+                result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .boldFontMask), range: contentRange)
             case .italic:
-                result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
+                result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .italicFontMask), range: contentRange)
             case .strikethrough:
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .underline:
                 result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .code:
-                result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular), range: contentRange)
+                result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: spanBaseFont.pointSize, weight: .regular), range: contentRange)
                 result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentRange)
             }
 
-            let delimiterFont = revealedStyles.contains(span) ? baseFont : hiddenFont
+            let delimiterFont = revealedStyles.contains(span) ? spanBaseFont : hiddenFont
             result.addAttribute(.font, value: delimiterFont, range: NSRange(span.openingDelimiterRange, in: text))
             result.addAttribute(.font, value: delimiterFont, range: NSRange(span.closingDelimiterRange, in: text))
         }

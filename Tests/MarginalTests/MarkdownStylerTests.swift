@@ -40,6 +40,23 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertGreaterThan(font?.pointSize ?? 0, 14)
     }
 
+    // Related pre-existing bug found while investigating the bold/blockquote regressions:
+    // inlineStyles runs after headers and hard-codes baseFont for its trait conversion, so a
+    // bold/italic span nested inside a header shrank back down to editor-content size instead
+    // of keeping the header's larger font.
+    func testBoldNestedInsideHeaderKeepsHeaderFontSize() {
+        let text = "# **Bold Header**"
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            headers: MarkdownParser.parseHeaders(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "Bold")!.lowerBound)
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+        XCTAssertGreaterThan(font?.pointSize ?? 0, 14, "Bold text nested inside a header must keep the header's larger font size")
+    }
+
     func testStrikethroughContentGetsStrikethroughAttribute() {
         let text = "This is ~~wrong~~"
         let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))
