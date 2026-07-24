@@ -5,6 +5,7 @@ enum InlineStyleKind: Equatable {
     case italic
     case strikethrough
     case underline
+    case code
 }
 
 struct InlineStyleSpan: Equatable {

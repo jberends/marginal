@@ -94,4 +94,15 @@ final class MarkdownStylerTests: XCTestCase {
         let glyphInfo = attributed.attribute(.glyphInfo, at: 0, effectiveRange: nil) as? NSGlyphInfo
         XCTAssertNil(glyphInfo, "Ordered markers keep their literal digits/period, no glyph substitution")
     }
+
+    func testInlineCodeGetsMonospaceFontAndBackground() {
+        let text = "Use `npm install` now"
+        let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "npm")!.lowerBound)
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.isFixedPitch ?? false)
+        let background = attributed.attribute(.backgroundColor, at: location, effectiveRange: nil) as? NSColor
+        XCTAssertNotNil(background)
+    }
 }

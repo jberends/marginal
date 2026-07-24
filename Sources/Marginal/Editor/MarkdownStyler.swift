@@ -45,6 +45,9 @@ struct MarkdownStyler {
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .underline:
                 result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
+            case .code:
+                result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular), range: contentRange)
+                result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentRange)
             }
 
             let delimiterFont = revealedStyles.contains(span) ? baseFont : hiddenFont

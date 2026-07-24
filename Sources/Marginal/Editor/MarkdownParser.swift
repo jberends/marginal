@@ -58,6 +58,8 @@ struct MarkdownParser {
 
         // Order matters: higher-priority (longer/more specific) delimiters
         // claim their ranges first so shorter delimiters don't cut through them.
+        // Inline code claims first: its content must never be reinterpreted as bold/italic/etc.
+        findMatches(pattern: "`([^`\\n]+?)`", kind: .code, openLength: 1, closeLength: 1)
         findMatches(pattern: "\\*\\*(.+?)\\*\\*", kind: .bold, openLength: 2, closeLength: 2)
         findMatches(pattern: "__(.+?)__", kind: .bold, openLength: 2, closeLength: 2)
         findMatches(pattern: "~~(.+?)~~", kind: .strikethrough, openLength: 2, closeLength: 2)

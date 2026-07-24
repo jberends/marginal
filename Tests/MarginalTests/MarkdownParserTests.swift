@@ -139,3 +139,21 @@ final class MarkdownParserLinkTests: XCTestCase {
         XCTAssertTrue(MarkdownParser.parseLinks(in: "No links here.").isEmpty)
     }
 }
+
+final class MarkdownParserInlineCodeTests: XCTestCase {
+
+    func testParsesInlineCode() {
+        let text = "Use `npm install` to install"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].kind, .code)
+        XCTAssertEqual(String(text[spans[0].contentRange]), "npm install")
+    }
+
+    func testMarkdownInsideInlineCodeDoesNotAlsoMatchAsOtherStyles() {
+        let text = "`**not bold** and *not italic*`"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertEqual(spans.count, 1, "The whole backtick span should win; asterisks inside must not also parse as bold/italic")
+        XCTAssertEqual(spans[0].kind, .code)
+    }
+}
