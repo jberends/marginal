@@ -33,6 +33,7 @@ final class DocumentViewController: NSViewController {
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = self
         textView.shortcutDelegate = self
+        textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
         editorFontSize = savedSize > 0 ? savedSize : 15
         textView.font = NSFont.systemFont(ofSize: editorFontSize)
@@ -158,6 +159,23 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
 
     func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {
         toggleShowSource()
+    }
+
+    // Dropping a markdown file always opens it. If this window's document is untitled and
+    // still empty, the dropped file replaces it in place (closing this now-redundant empty
+    // window) rather than leaving a stray blank window behind. Any other content-bearing
+    // window is left untouched and the file opens in a new window, so existing work is
+    // never silently overwritten.
+    func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL) {
+        let windowToCloseIfOpenSucceeds: NSWindow? = (document?.fileURL == nil && textView.string.isEmpty) ? view.window : nil
+
+        NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
+            if let error {
+                NSApp.presentError(error)
+                return
+            }
+            windowToCloseIfOpenSucceeds?.close()
+        }
     }
 
     private func setFontSize(_ size: CGFloat) {
