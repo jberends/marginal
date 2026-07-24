@@ -77,6 +77,23 @@ struct MarkdownStyler {
             }
         }
 
+        let revealedBlockquotes = cursorLocation.map {
+            CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: $0)
+        } ?? []
+
+        for blockquote in model.blockquotes {
+            let markerRange = NSRange(blockquote.markerRange, in: text)
+            let contentRange = NSRange(blockquote.contentRange, in: text)
+            result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
+            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: contentRange)
+            result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
+
+            let markerFont = revealedBlockquotes.contains(blockquote) ? baseFont : hiddenFont
+            if markerRange.length > 0 {
+                result.addAttribute(.font, value: markerFont, range: markerRange)
+            }
+        }
+
         for item in model.listItems {
             let markerRange = NSRange(item.markerRange, in: text)
             result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)

@@ -157,3 +157,34 @@ final class MarkdownParserInlineCodeTests: XCTestCase {
         XCTAssertEqual(spans[0].kind, .code)
     }
 }
+
+final class MarkdownParserBlockquoteTests: XCTestCase {
+
+    func testParsesSingleLineBlockquote() {
+        let text = "> This is a quote"
+        let blockquotes = MarkdownParser.parseBlockquotes(in: text)
+        XCTAssertEqual(blockquotes.count, 1)
+        XCTAssertEqual(String(text[blockquotes[0].contentRange]), "This is a quote")
+    }
+
+    func testParsesMultiLineBlockquoteAsOneSpanPerLine() {
+        let text = "> Line one\n> Line two"
+        let blockquotes = MarkdownParser.parseBlockquotes(in: text)
+        XCTAssertEqual(blockquotes.count, 2)
+        XCTAssertEqual(String(text[blockquotes[0].contentRange]), "Line one")
+        XCTAssertEqual(String(text[blockquotes[1].contentRange]), "Line two")
+    }
+
+    func testPlainLineIsNotABlockquote() {
+        XCTAssertTrue(MarkdownParser.parseBlockquotes(in: "Just a normal sentence.").isEmpty)
+    }
+
+    func testNestedMarkerIsNotSpeciallyDetected() {
+        // Known v1 limitation: ">> nested" is parsed as ONE blockquote level whose content
+        // literally starts with the second ">" -- not detected as a nested level.
+        let text = ">> nested"
+        let blockquotes = MarkdownParser.parseBlockquotes(in: text)
+        XCTAssertEqual(blockquotes.count, 1)
+        XCTAssertEqual(String(text[blockquotes[0].contentRange]), "> nested")
+    }
+}

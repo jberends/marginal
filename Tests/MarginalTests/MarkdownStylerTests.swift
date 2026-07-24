@@ -105,4 +105,24 @@ final class MarkdownStylerTests: XCTestCase {
         let background = attributed.attribute(.backgroundColor, at: location, effectiveRange: nil) as? NSColor
         XCTAssertNotNil(background)
     }
+
+    func testBlockquoteMarkerIsHiddenWhenCursorIsElsewhereAndMarkedForLayoutManager() {
+        let text = "> Quoted text"
+        let model = MarkdownDocumentModel(blockquotes: MarkdownParser.parseBlockquotes(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+        let contentLocation = text.distance(from: text.startIndex, to: text.range(of: "Quoted")!.lowerBound)
+        let marker = attributed.attribute(.marginalBlockquoteMarker, at: contentLocation, effectiveRange: nil)
+        XCTAssertNotNil(marker, "Content range must carry the layout-manager key so MarkdownLayoutManager can draw the bar")
+    }
+
+    func testBlockquoteMarkerIsRevealedWhenCursorIsInside() {
+        let text = "> Quoted text"
+        let model = MarkdownDocumentModel(blockquotes: MarkdownParser.parseBlockquotes(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 5)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: cursor)
+        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14)
+    }
 }

@@ -32,4 +32,10 @@ struct CursorRevealController {
             cursorLocation >= link.fullRange.lowerBound && cursorLocation <= link.fullRange.upperBound
         }
     }
+
+    static func revealedBlockquoteSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [BlockquoteSpan] {
+        model.blockquotes.filter { blockquote in
+            cursorLocation >= blockquote.lineRange.lowerBound && cursorLocation <= blockquote.lineRange.upperBound
+        }
+    }
 }

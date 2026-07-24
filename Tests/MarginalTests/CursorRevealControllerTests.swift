@@ -61,4 +61,18 @@ final class CursorRevealControllerTests: XCTestCase {
         let cursor = text.index(text.startIndex, offsetBy: 10) // inside "this"
         XCTAssertEqual(CursorRevealController.revealedLinkSpans(in: model, cursorLocation: cursor).count, 1)
     }
+
+    func testCursorInBlockquoteLineRevealsItsMarker() {
+        let text = "> Quoted\nNot quoted"
+        let model = MarkdownDocumentModel(blockquotes: MarkdownParser.parseBlockquotes(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 3) // inside "Quoted"
+        XCTAssertEqual(CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: cursor).count, 1)
+    }
+
+    func testCursorOnOtherLineDoesNotRevealBlockquoteMarker() {
+        let text = "> Quoted\nNot quoted"
+        let model = MarkdownDocumentModel(blockquotes: MarkdownParser.parseBlockquotes(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 12) // inside "Not quoted"
+        XCTAssertTrue(CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: cursor).isEmpty)
+    }
 }

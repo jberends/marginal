@@ -117,6 +117,27 @@ struct MarkdownParser {
         return items
     }
 
+    /// Single-level only: a line's leading ">" marks it as a blockquote line. Any additional
+    /// ">" characters are treated as literal content, not further nesting -- known v1 limitation,
+    /// matching Phase 1's single-level-lists precedent.
+    static func parseBlockquotes(in text: String) -> [BlockquoteSpan] {
+        var blockquotes: [BlockquoteSpan] = []
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
+            let line = text[lineStart..<lineEnd]
+            if let markerRange = line.range(of: "^> ?", options: .regularExpression) {
+                blockquotes.append(BlockquoteSpan(
+                    markerRange: markerRange,
+                    contentRange: markerRange.upperBound..<lineEnd,
+                    lineRange: lineStart..<lineEnd
+                ))
+            }
+            lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
+        }
+        return blockquotes
+    }
+
     static func parseLinks(in text: String) -> [LinkSpan] {
         var links: [LinkSpan] = []
         guard let regex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return links }

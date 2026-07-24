@@ -41,9 +41,16 @@ struct LinkSpan: Equatable {
     let url: String
 }
 
+struct BlockquoteSpan: Equatable {
+    let markerRange: Range<String.Index>
+    let contentRange: Range<String.Index>
+    let lineRange: Range<String.Index>
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
     var headers: [HeaderSpan] = []
     var listItems: [ListItemSpan] = []
     var links: [LinkSpan] = []
+    var blockquotes: [BlockquoteSpan] = []
 }

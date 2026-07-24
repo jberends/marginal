@@ -25,6 +25,7 @@ final class DocumentViewController: NSViewController {
         scrollView.hasHorizontalScroller = false
 
         let textView = MarkdownTextView()
+        textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
         textView.isEditable = true
         textView.isRichText = true
         // Programmatically-created NSTextViews default allowsUndo to false (only
@@ -105,7 +106,8 @@ final class DocumentViewController: NSViewController {
             inlineStyles: MarkdownParser.parseInlineStyles(in: text),
             headers: MarkdownParser.parseHeaders(in: text),
             listItems: MarkdownParser.parseListItems(in: text),
-            links: MarkdownParser.parseLinks(in: text)
+            links: MarkdownParser.parseLinks(in: text),
+            blockquotes: MarkdownParser.parseBlockquotes(in: text)
         )
         let attributed = MarkdownStyler.attributedString(
             for: text,
