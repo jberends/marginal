@@ -54,6 +54,27 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: revealedHeaders.contains(header) ? headerFont : hiddenFont, range: markerRange)
         }
 
+        // Blockquotes style their whole content range with a blanket italic font/color before
+        // inlineStyles and links run, so those narrower, nested spans (e.g. bold or a link inside
+        // a quoted line) layer their own font/color on top afterward instead of being clobbered by
+        // this loop's blanket range if it ran later.
+        let revealedBlockquotes = cursorLocation.map {
+            CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: $0)
+        } ?? []
+
+        for blockquote in blockquotes {
+            let markerRange = NSRange(blockquote.markerRange, in: text)
+            let contentRange = NSRange(blockquote.contentRange, in: text)
+            result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
+            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: contentRange)
+            result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
+
+            let markerFont = revealedBlockquotes.contains(blockquote) ? baseFont : hiddenFont
+            if markerRange.length > 0 {
+                result.addAttribute(.font, value: markerFont, range: markerRange)
+            }
+        }
+
         for span in inlineStyles {
             let contentRange = NSRange(span.contentRange, in: text)
             switch span.kind {
@@ -94,23 +115,6 @@ struct MarkdownStyler {
             }
             if suffixRange.length > 0 {
                 result.addAttribute(.font, value: delimiterFont, range: suffixRange)
-            }
-        }
-
-        let revealedBlockquotes = cursorLocation.map {
-            CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: $0)
-        } ?? []
-
-        for blockquote in blockquotes {
-            let markerRange = NSRange(blockquote.markerRange, in: text)
-            let contentRange = NSRange(blockquote.contentRange, in: text)
-            result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
-            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: contentRange)
-            result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
-
-            let markerFont = revealedBlockquotes.contains(blockquote) ? baseFont : hiddenFont
-            if markerRange.length > 0 {
-                result.addAttribute(.font, value: markerFont, range: markerRange)
             }
         }
 

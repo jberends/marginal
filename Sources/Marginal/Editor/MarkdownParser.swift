@@ -13,23 +13,24 @@ struct MarkdownParser {
 
     static func parseInlineStyles(in text: String) -> [InlineStyleSpan] {
         var spans: [InlineStyleSpan] = []
-        var claimed = Set<Int>()
-
-        func offset(_ index: String.Index) -> Int {
-            text.distance(from: text.startIndex, to: index)
-        }
+        var claimedRanges: [Range<String.Index>] = []
 
         func claim(_ range: Range<String.Index>) {
-            for i in offset(range.lowerBound)..<offset(range.upperBound) {
-                claimed.insert(i)
-            }
+            claimedRanges.append(range)
         }
 
+        // A later (lower-priority) pattern is allowed to match a range that fully contains an
+        // already-claimed range -- that's legitimate nesting (e.g. **bold with `code` inside**,
+        // where code claims first per the priority order below, and bold's full range
+        // necessarily spans across it). It is rejected only when it partially overlaps a claimed
+        // range without containing it -- a real conflict between two same-level delimiters.
         func isClaimed(_ range: Range<String.Index>) -> Bool {
-            for i in offset(range.lowerBound)..<offset(range.upperBound) where claimed.contains(i) {
-                return true
+            claimedRanges.contains { claimed in
+                let overlaps = range.lowerBound < claimed.upperBound && range.upperBound > claimed.lowerBound
+                guard overlaps else { return false }
+                let fullyContainsClaimed = range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound
+                return !fullyContainsClaimed
             }
-            return false
         }
 
         func findMatches(pattern: String, kind: InlineStyleKind, openLength: Int, closeLength: Int) {

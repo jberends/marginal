@@ -64,6 +64,16 @@ final class MarkdownParserInlineStyleTests: XCTestCase {
         let spans = MarkdownParser.parseInlineStyles(in: text)
         XCTAssertEqual(spans.count, 3)
     }
+
+    // Regression: a bold span whose range fully contains an already-claimed inline-code
+    // span was being rejected entirely (isClaimed treated legitimate nesting as a conflict),
+    // so the whole bold span silently disappeared. Repro string is the user's exact report.
+    func testBoldSpanCanContainNestedInlineCode() {
+        let text = "**Repos & branches (both from `dev-gis`):**"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertTrue(spans.contains { $0.kind == .bold }, "Bold span must survive nesting an inline code span")
+        XCTAssertTrue(spans.contains { $0.kind == .code })
+    }
 }
 
 final class MarkdownParserHeaderAndListTests: XCTestCase {

@@ -126,6 +126,31 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(font?.pointSize, 14)
     }
 
+    // Regression: the blockquote loop ran after the inlineStyles loop and unconditionally
+    // overwrote .font across the whole blockquote content range, clobbering bold (and
+    // un-hiding its ** delimiters, since the blanket italic font replaced the hidden-size
+    // font). Repro shape matches the user's exact report (bold inside a blockquote).
+    func testBoldInsideBlockquoteKeepsBoldFontAndHidesDelimiters() {
+        let text = "> **Bold** rest of quote"
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            blockquotes: MarkdownParser.parseBlockquotes(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let boldContentLocation = text.distance(from: text.startIndex, to: text.range(of: "Bold")!.lowerBound)
+        let boldFont = attributed.attribute(.font, at: boldContentLocation, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(boldFont?.fontDescriptor.symbolicTraits.contains(.bold) ?? false, "Bold inside a blockquote must stay bold")
+
+        let openingDelimiterLocation = text.distance(from: text.startIndex, to: text.range(of: "**Bold")!.lowerBound)
+        let delimiterFont = attributed.attribute(.font, at: openingDelimiterLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(delimiterFont?.pointSize, MarkdownStyler.hiddenDelimiterFontSize, "Bold delimiters inside a blockquote must stay hidden")
+
+        let restLocation = text.distance(from: text.startIndex, to: text.range(of: "rest")!.lowerBound)
+        let restFont = attributed.attribute(.font, at: restLocation, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(restFont?.fontDescriptor.symbolicTraits.contains(.italic) ?? false, "Non-bold blockquote content stays italic")
+    }
+
     func testHorizontalRuleLineIsHiddenWhenCursorIsElsewhereAndMarkedForLayoutManager() {
         let text = "Above\n---\nBelow"
         let model = MarkdownDocumentModel(horizontalRules: MarkdownParser.parseHorizontalRules(in: text))
