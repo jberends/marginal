@@ -71,20 +71,27 @@ final class DocumentViewController: NSViewController {
 
     func toggleShowSource() {
         isShowingSource.toggle()
+        if isShowingSource {
+            applyPlainSourceRendering()
+        } else {
+            restyle(cursorLocation: currentCursorIndex())
+        }
+    }
+
+    // Re-applies the plain monospace source rendering, preserving the selection across the
+    // text storage mutation. Used both when Show Source is first toggled on and whenever a
+    // delegate callback (selection change, text change, font size change) would otherwise
+    // have called restyle() while still in Show Source mode.
+    private func applyPlainSourceRendering() {
+        let plain = MarkdownStyler.plainSourceAttributedString(for: textView.string, font: NSFont.systemFont(ofSize: editorFontSize))
         let selectedRange = textView.selectedRange()
         isApplyingProgrammaticEdit = true
-        if isShowingSource {
-            let plain = MarkdownStyler.plainSourceAttributedString(for: textView.string, font: NSFont.systemFont(ofSize: editorFontSize))
-            textView.textStorage?.setAttributedString(plain)
-        }
+        textView.textStorage?.setAttributedString(plain)
         // setSelectedRange must run before isApplyingProgrammaticEdit is cleared: it
         // synchronously fires textViewDidChangeSelection, which would otherwise run
         // unguarded and stomp the render this method just applied.
         textView.setSelectedRange(selectedRange)
         isApplyingProgrammaticEdit = false
-        if !isShowingSource {
-            restyle(cursorLocation: currentCursorIndex())
-        }
     }
 
     private func restyle(cursorLocation: String.Index?) {
@@ -119,12 +126,20 @@ extension DocumentViewController: NSTextViewDelegate {
         guard !isApplyingProgrammaticEdit else { return }
         document?.text = textView.string
         document?.updateChangeCount(.changeDone)
-        restyle(cursorLocation: currentCursorIndex())
+        if isShowingSource {
+            applyPlainSourceRendering()
+        } else {
+            restyle(cursorLocation: currentCursorIndex())
+        }
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
         guard !isApplyingProgrammaticEdit else { return }
-        restyle(cursorLocation: currentCursorIndex())
+        if isShowingSource {
+            applyPlainSourceRendering()
+        } else {
+            restyle(cursorLocation: currentCursorIndex())
+        }
     }
 }
 
@@ -149,6 +164,10 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         editorFontSize = size
         textView.font = NSFont.systemFont(ofSize: size)
         UserDefaults.standard.set(size, forKey: "editorFontPointSize")
-        restyle(cursorLocation: currentCursorIndex())
+        if isShowingSource {
+            applyPlainSourceRendering()
+        } else {
+            restyle(cursorLocation: currentCursorIndex())
+        }
     }
 }
