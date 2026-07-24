@@ -242,6 +242,9 @@ struct MarkdownStyler {
                 }
 
                 switch item.kind {
+                case .unordered where item.taskState != nil:
+                    // A task item shows only its checkbox, not the usual bullet shape.
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
                 case .unordered:
                     result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
                     if markerRange.length > 0 {
@@ -274,6 +277,26 @@ struct MarkdownStyler {
                             value: displayTexts[index],
                             range: NSRange(location: markerRange.location, length: 1)
                         )
+                    }
+                }
+
+                if let taskState = item.taskState, let taskMarkerRange = item.taskMarkerRange {
+                    // Hide the literal "[ ]"/"[x] " text -- it's still laid out at normal size (so
+                    // it reserves the correct space and stays selectable/copyable), and
+                    // MarkdownLayoutManager draws an actual checkbox square (+ checkmark when
+                    // complete) into that same reserved space, the same technique as the bullet.
+                    let taskMarkerNSRange = NSRange(taskMarkerRange, in: text)
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: taskMarkerNSRange)
+                    result.addAttribute(.marginalTaskCheckboxMarker, value: taskState == .complete, range: taskMarkerNSRange)
+
+                    if taskState == .complete {
+                        // Completed tasks read as done: struck through and de-emphasized, matching
+                        // common editors' (e.g. Notion's) convention. This runs after inlineStyles
+                        // and only touches color/strikethrough, not .font, so nested bold/italic
+                        // within the task text keeps its own font trait.
+                        let taskTextRange = NSRange(taskMarkerRange.upperBound..<item.lineRange.upperBound, in: text)
+                        result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: taskTextRange)
+                        result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: taskTextRange)
                     }
                 }
 

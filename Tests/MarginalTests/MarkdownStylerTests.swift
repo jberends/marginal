@@ -250,6 +250,54 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize, "Leading indentation whitespace must be hidden; visual indent comes from paragraph style")
     }
 
+    func testIncompleteTaskCheckboxIsHiddenAndMarkedForLayoutManager() {
+        let text = "- [ ] Incomplete task"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let checkboxLocation = text.distance(from: text.startIndex, to: text.range(of: "[ ]")!.lowerBound)
+        let color = attributed.attribute(.foregroundColor, at: checkboxLocation, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, NSColor.clear, "Literal checkbox brackets must be hidden -- the layout manager draws the actual checkbox")
+        let marker = attributed.attribute(.marginalTaskCheckboxMarker, at: checkboxLocation, effectiveRange: nil) as? Bool
+        XCTAssertEqual(marker, false)
+
+        // No regular bullet dot should be drawn for a task item.
+        let bulletMarker = attributed.attribute(.marginalListBulletMarker, at: 0, effectiveRange: nil)
+        XCTAssertNil(bulletMarker, "A task item must not also get the regular bullet shape")
+
+        let taskTextLocation = text.distance(from: text.startIndex, to: text.range(of: "Incomplete task")!.lowerBound)
+        let strikethrough = attributed.attribute(.strikethroughStyle, at: taskTextLocation, effectiveRange: nil)
+        XCTAssertNil(strikethrough, "Incomplete task text must not be struck through")
+    }
+
+    func testCompletedTaskGetsCheckedMarkerAndStrikethroughText() {
+        let text = "- [x] Completed task"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let checkboxLocation = text.distance(from: text.startIndex, to: text.range(of: "[x]")!.lowerBound)
+        let marker = attributed.attribute(.marginalTaskCheckboxMarker, at: checkboxLocation, effectiveRange: nil) as? Bool
+        XCTAssertEqual(marker, true)
+
+        let taskTextLocation = text.distance(from: text.startIndex, to: text.range(of: "Completed task")!.lowerBound)
+        let strikethrough = attributed.attribute(.strikethroughStyle, at: taskTextLocation, effectiveRange: nil) as? Int
+        XCTAssertEqual(strikethrough, NSUnderlineStyle.single.rawValue)
+        let color = attributed.attribute(.foregroundColor, at: taskTextLocation, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, NSColor.secondaryLabelColor)
+    }
+
+    func testBoldNestedInsideCompletedTaskKeepsBoldFont() {
+        let text = "- [x] **Completed** task"
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            listItems: MarkdownParser.parseListItems(in: text)
+        )
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: "Completed")!.lowerBound)
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false, "Nested bold must survive the completed-task color/strikethrough pass, which only touches color and strikethrough, not font")
+    }
+
     func testInlineCodeGetsMonospaceFontAndBackground() {
         let text = "Use `npm install` now"
         let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))

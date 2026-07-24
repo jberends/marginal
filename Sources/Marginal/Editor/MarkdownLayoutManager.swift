@@ -5,6 +5,7 @@ extension NSAttributedString.Key {
     static let marginalHorizontalRuleMarker = NSAttributedString.Key("marginalHorizontalRuleMarker")
     static let marginalListBulletMarker = NSAttributedString.Key("marginalListBulletMarker")
     static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
+    static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
 }
 
 /// Draws paragraph-level decorations that can't be expressed as ordinary run attributes: the
@@ -110,6 +111,38 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let rightEdge = origin.x + paragraphStyle.headIndent
             let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + charRect.midY - markerSize.height / 2)
             (displayText as NSString).draw(at: drawPoint, withAttributes: markerAttributes)
+        }
+
+        textStorage.enumerateAttribute(.marginalTaskCheckboxMarker, in: fullRange) { value, range, _ in
+            guard let isComplete = value as? Bool,
+                  let font = textStorage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            // The hidden "[ ]"/"[x] " text is still laid out at normal size, so its own bounding
+            // rect reflects this exact line's real geometry -- the checkbox is anchored at its
+            // left edge (where the bullet would otherwise sit) and sized from xHeight, same
+            // principle as the bullet/ordered-number markers.
+            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let side = font.xHeight * 1.35
+            let boxRect = NSRect(x: origin.x + charRect.minX, y: origin.y + charRect.midY - side / 2, width: side, height: side)
+            let boxPath = NSBezierPath(roundedRect: boxRect, xRadius: 3, yRadius: 3)
+
+            if isComplete {
+                NSColor.controlAccentColor.setFill()
+                boxPath.fill()
+                let check = NSBezierPath()
+                check.lineCapStyle = .round
+                check.lineJoinStyle = .round
+                check.lineWidth = max(1.2, side * 0.12)
+                check.move(to: NSPoint(x: boxRect.minX + side * 0.22, y: boxRect.minY + side * 0.52))
+                check.line(to: NSPoint(x: boxRect.minX + side * 0.42, y: boxRect.minY + side * 0.70))
+                check.line(to: NSPoint(x: boxRect.minX + side * 0.78, y: boxRect.minY + side * 0.28))
+                NSColor.white.setStroke()
+                check.stroke()
+            } else {
+                NSColor.tertiaryLabelColor.setStroke()
+                boxPath.lineWidth = 1.2
+                boxPath.stroke()
+            }
         }
     }
 }

@@ -150,6 +150,13 @@ struct MarkdownParser {
             unorderedMarkerRange(in: line) != nil || orderedMarkerRange(in: line) != nil
         }
 
+        // GFM task-list checkbox: only recognized on unordered items, matching convention.
+        func taskCheckbox(in content: Substring) -> (state: TaskState, matchRange: Range<String.Index>)? {
+            guard let matchRange = content.range(of: "^\\[([ xX])\\] ", options: .regularExpression) else { return nil }
+            let stateChar = content[content.index(after: matchRange.lowerBound)]
+            return (stateChar == "x" || stateChar == "X") ? (.complete, matchRange) : (.incomplete, matchRange)
+        }
+
         // CommonMark "lazy continuation": a plain line immediately following a list item line,
         // with no blank line between them, is part of that item's paragraph rather than a
         // separate top-level paragraph. Consume such lines until a blank line, a new list
@@ -174,12 +181,15 @@ struct MarkdownParser {
             let line = text[lineStart..<lineEnd]
             if let markerRange = unorderedMarkerRange(in: line) {
                 let itemEnd = extendedItemEnd(after: lineEnd)
+                let checkbox = taskCheckbox(in: text[markerRange.upperBound..<lineEnd])
                 items.append(ListItemSpan(
                     kind: .unordered,
                     level: level(of: line),
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
-                    lineRange: lineStart..<itemEnd
+                    lineRange: lineStart..<itemEnd,
+                    taskState: checkbox?.state,
+                    taskMarkerRange: checkbox?.matchRange
                 ))
                 lineStart = itemEnd < text.endIndex ? text.index(after: itemEnd) : text.endIndex
             } else if let markerRange = orderedMarkerRange(in: line) {
@@ -190,7 +200,9 @@ struct MarkdownParser {
                     level: level(of: line),
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
-                    lineRange: lineStart..<itemEnd
+                    lineRange: lineStart..<itemEnd,
+                    taskState: nil,
+                    taskMarkerRange: nil
                 ))
                 lineStart = itemEnd < text.endIndex ? text.index(after: itemEnd) : text.endIndex
             } else {

@@ -230,6 +230,40 @@ final class MarkdownParserHeaderAndListTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(String(text[items[0].contentRange]), "nested item")
     }
+
+    func testIncompleteTaskCheckboxIsDetected() {
+        let text = "- [ ] Incomplete task"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items[0].taskState, .incomplete)
+        XCTAssertEqual(String(text[items[0].taskMarkerRange!]), "[ ] ")
+    }
+
+    func testCompletedTaskCheckboxIsDetectedLowercaseAndUppercase() {
+        let lower = MarkdownParser.parseListItems(in: "- [x] Done")
+        XCTAssertEqual(lower[0].taskState, .complete)
+        let upper = MarkdownParser.parseListItems(in: "- [X] Done")
+        XCTAssertEqual(upper[0].taskState, .complete)
+    }
+
+    func testPlainListItemHasNoTaskState() {
+        let items = MarkdownParser.parseListItems(in: "- just a normal item")
+        XCTAssertNil(items[0].taskState)
+        XCTAssertNil(items[0].taskMarkerRange)
+    }
+
+    func testOrderedListItemsNeverGetTaskState() {
+        let items = MarkdownParser.parseListItems(in: "1. [ ] not a task, ordered lists don't support checkboxes")
+        XCTAssertNil(items[0].taskState)
+    }
+
+    func testNestedTaskItemUnderAParentTaskIsDetected() {
+        let text = "- [ ] Parent task\n  - [x] Completed child task"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].taskState, .incomplete)
+        XCTAssertEqual(items[1].taskState, .complete)
+        XCTAssertEqual(items[1].level, 1)
+    }
 }
 
 final class MarkdownParserLinkTests: XCTestCase {

@@ -28,6 +28,11 @@ enum ListMarkerKind: Equatable {
     case ordered(number: Int)
 }
 
+enum TaskState: Equatable {
+    case incomplete
+    case complete
+}
+
 struct ListItemSpan: Equatable {
     let kind: ListMarkerKind
     /// Nesting depth, 0 = top level. Derived from leading-space indentation (2 spaces per level).
@@ -35,6 +40,11 @@ struct ListItemSpan: Equatable {
     let markerRange: Range<String.Index>
     let contentRange: Range<String.Index>
     let lineRange: Range<String.Index>
+    /// Non-nil when the content starts with a GFM task-list checkbox ("[ ]"/"[x]"/"[X] ").
+    let taskState: TaskState?
+    /// The full "[ ] "/"[x] " checkbox match (brackets, state character, trailing space), so the
+    /// styler can hide it and know exactly where the real task text begins. nil iff taskState is.
+    let taskMarkerRange: Range<String.Index>?
 }
 
 struct LinkSpan: Equatable {
