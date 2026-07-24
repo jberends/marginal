@@ -128,6 +128,31 @@ final class MarkdownParserHeaderAndListTests: XCTestCase {
     func testPlainLineIsNotAListItem() {
         XCTAssertTrue(MarkdownParser.parseListItems(in: "Just a normal sentence.").isEmpty)
     }
+
+    // CommonMark "lazy continuation": a plain line immediately following a list item line (no
+    // blank line between them) is part of that item's paragraph, not a separate top-level
+    // paragraph -- matches how Notion (and other CommonMark renderers) render the same source.
+    func testListItemLazilyContinuesOntoNonBlankFollowingLine() {
+        let text = "- one\ncontinued text"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(String(text[items[0].lineRange]), text)
+    }
+
+    func testListItemDoesNotContinueAcrossABlankLine() {
+        let text = "- one\n\nseparate paragraph"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(String(text[items[0].lineRange]), "- one")
+    }
+
+    func testListItemContinuationStopsAtTheNextListMarker() {
+        let text = "- one\n- two"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(String(text[items[0].lineRange]), "- one")
+        XCTAssertEqual(String(text[items[1].lineRange]), "- two")
+    }
 }
 
 final class MarkdownParserLinkTests: XCTestCase {

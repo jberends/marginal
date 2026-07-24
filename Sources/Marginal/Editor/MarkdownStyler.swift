@@ -175,9 +175,43 @@ struct MarkdownStyler {
             if case .unordered = item.kind, markerRange.length > 0 {
                 let markerCharacterRange = NSRange(location: markerRange.location, length: 1)
                 let markerCharacter = String((text as NSString).substring(with: markerCharacterRange))
-                if let glyphInfo = NSGlyphInfo(glyphName: "bullet", for: baseFont, baseString: markerCharacter) {
+                // The plain secondaryLabelColor + baseFont substitution read as a tiny, faint dot
+                // sitting almost on the baseline -- a solid, heavier, larger, better-centered
+                // bullet reads much closer to how other editors (e.g. Notion) render it.
+                let bulletFont = NSFont.systemFont(ofSize: baseFont.pointSize * 1.2, weight: .heavy)
+                if let glyphInfo = NSGlyphInfo(glyphName: "bullet", for: bulletFont, baseString: markerCharacter) {
                     result.addAttribute(.glyphInfo, value: glyphInfo, range: markerCharacterRange)
+                    result.addAttribute(.font, value: bulletFont, range: markerCharacterRange)
+                    result.addAttribute(.foregroundColor, value: NSColor.labelColor, range: markerCharacterRange)
+                    result.addAttribute(.baselineOffset, value: baseFont.pointSize * 0.12, range: markerCharacterRange)
                 }
+            }
+
+            // A wrapped continuation line must indent under the item's text, not wrap back to
+            // the paragraph's left margin -- headIndent matches this item's own marker width so
+            // it aligns exactly under where the content starts, whatever the marker's width.
+            let markerText = String(text[item.markerRange])
+            let indentWidth = (markerText as NSString).size(withAttributes: [.font: baseFont]).width
+
+            // item.lineRange may span multiple source lines when a lazily-continued paragraph
+            // line follows with no blank line between them. TextKit treats each "\n"-delimited
+            // line as its own paragraph regardless of shared attributes, so the marker's own line
+            // and any lazy-continuation lines need separate paragraph styles: the marker line
+            // stays flush on its first visual line (headIndent handles its wrapped lines), while
+            // a lazy-continuation line must be fully indented from its own first character to
+            // read as belonging to the same item, not a new flush-left paragraph.
+            let markerLineEnd = text[item.lineRange].firstIndex(of: "\n") ?? item.lineRange.upperBound
+            let markerLineStyle = NSMutableParagraphStyle()
+            markerLineStyle.firstLineHeadIndent = 0
+            markerLineStyle.headIndent = indentWidth
+            result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
+
+            if markerLineEnd < item.lineRange.upperBound {
+                let continuationStyle = NSMutableParagraphStyle()
+                continuationStyle.firstLineHeadIndent = indentWidth
+                continuationStyle.headIndent = indentWidth
+                let continuationStart = text.index(after: markerLineEnd)
+                result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
             }
         }
 

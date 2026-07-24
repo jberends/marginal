@@ -112,6 +112,45 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertNil(glyphInfo, "Ordered markers keep their literal digits/period, no glyph substitution")
     }
 
+    // A wrapped continuation line of a list item should indent under the item's text, not
+    // wrap back to the paragraph's left margin -- headIndent matches the marker's own
+    // rendered width so wrapped lines align exactly under where the content starts.
+    func testListItemGetsHangingIndentMatchingMarkerWidth() {
+        let text = "- one\n- two"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.firstLineHeadIndent, 0, "First visual line starts at the marker, unindented")
+        let expectedIndent = ("- " as NSString).size(withAttributes: [.font: baseFont]).width
+        XCTAssertEqual(style?.headIndent ?? -1, expectedIndent, accuracy: 0.01, "Wrapped lines must indent to align under the marker's text, not the marker's own width")
+    }
+
+    // A lazily-continued line (no blank line separating it from the list item) must be fully
+    // indented from its own first character, matching a wrapped continuation line -- not flush
+    // left, which is what made "Normal paragraph after..." wrongly hug the margin before this fix.
+    func testLazyContinuationLineIsFullyIndentedNotFlushLeft() {
+        let text = "- one\ncontinued text"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let continuationLocation = text.distance(from: text.startIndex, to: text.range(of: "continued")!.lowerBound)
+        let style = attributed.attribute(.paragraphStyle, at: continuationLocation, effectiveRange: nil) as? NSParagraphStyle
+        let expectedIndent = ("- " as NSString).size(withAttributes: [.font: baseFont]).width
+        XCTAssertEqual(style?.firstLineHeadIndent ?? -1, expectedIndent, accuracy: 0.01)
+        XCTAssertEqual(style?.headIndent ?? -1, expectedIndent, accuracy: 0.01)
+    }
+
+    func testOrderedListItemGetsHangingIndentMatchingItsWiderMarker() {
+        let text = "10. ten"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        let expectedIndent = ("10. " as NSString).size(withAttributes: [.font: baseFont]).width
+        XCTAssertEqual(style?.headIndent ?? -1, expectedIndent, accuracy: 0.01)
+    }
+
     func testInlineCodeGetsMonospaceFontAndBackground() {
         let text = "Use `npm install` now"
         let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))

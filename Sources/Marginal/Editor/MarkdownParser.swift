@@ -94,26 +94,56 @@ struct MarkdownParser {
     static func parseListItems(in text: String) -> [ListItemSpan] {
         var items: [ListItemSpan] = []
         var lineStart = text.startIndex
+
+        func isListMarkerLine(_ line: Substring) -> Bool {
+            line.range(of: "^[-*+] ", options: .regularExpression) != nil
+                || line.range(of: "^[0-9]+\\. ", options: .regularExpression) != nil
+        }
+
+        // CommonMark "lazy continuation": a plain line immediately following a list item line,
+        // with no blank line between them, is part of that item's paragraph rather than a
+        // separate top-level paragraph. Consume such lines until a blank line, a new list
+        // marker, or the end of the text.
+        func extendedItemEnd(after firstLineEnd: String.Index) -> String.Index {
+            var end = firstLineEnd
+            var nextLineStart = end < text.endIndex ? text.index(after: end) : text.endIndex
+            while nextLineStart < text.endIndex {
+                let nextLineEnd = text[nextLineStart...].firstIndex(of: "\n") ?? text.endIndex
+                let nextLine = text[nextLineStart..<nextLineEnd]
+                if nextLine.trimmingCharacters(in: .whitespaces).isEmpty || isListMarkerLine(nextLine) {
+                    break
+                }
+                end = nextLineEnd
+                nextLineStart = end < text.endIndex ? text.index(after: end) : text.endIndex
+            }
+            return end
+        }
+
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
             if let markerRange = line.range(of: "^[-*+] ", options: .regularExpression) {
+                let itemEnd = extendedItemEnd(after: lineEnd)
                 items.append(ListItemSpan(
                     kind: .unordered,
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
-                    lineRange: lineStart..<lineEnd
+                    lineRange: lineStart..<itemEnd
                 ))
+                lineStart = itemEnd < text.endIndex ? text.index(after: itemEnd) : text.endIndex
             } else if let markerRange = line.range(of: "^[0-9]+\\. ", options: .regularExpression) {
                 let digits = line[markerRange].prefix { $0.isNumber }
+                let itemEnd = extendedItemEnd(after: lineEnd)
                 items.append(ListItemSpan(
                     kind: .ordered(number: Int(digits) ?? 0),
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
-                    lineRange: lineStart..<lineEnd
+                    lineRange: lineStart..<itemEnd
                 ))
+                lineStart = itemEnd < text.endIndex ? text.index(after: itemEnd) : text.endIndex
+            } else {
+                lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
             }
-            lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
         }
         return items
     }
