@@ -321,9 +321,14 @@ struct MarkdownStyler {
             // regardless of what digits the rest of the group's source lines say -- matching the
             // common "1./1./1." authoring convention CommonMark (and other renderers) support.
             // Unordered items have no such display-vs-source distinction; use the literal marker.
+            // The ordered display text deliberately excludes a trailing space -- an earlier
+            // version relied on NSString.size(withAttributes:) including a trailing space's
+            // advance width to create the gap before content, which is not guaranteed and read
+            // as the number nearly colliding with the following text. The gap is now an explicit,
+            // guaranteed value (below) instead of an implicit byproduct of string measurement.
             let displayTexts: [String]
             if case let .ordered(startNumber) = first.kind {
-                displayTexts = group.indices.map { "\(startNumber + $0). " }
+                displayTexts = group.indices.map { "\(startNumber + $0)." }
             } else {
                 displayTexts = group.map { String(text[$0.markerRange]) }
             }
@@ -332,8 +337,14 @@ struct MarkdownStyler {
             // group's widest display marker -- so e.g. "1." and "10." in the same list don't
             // misalign their content start, and a renumbered display value that's wider than its
             // literal source (e.g. three source lines all reading "1." rendering as "1./2./3.")
-            // still has enough reserved room to be drawn.
-            let indentWidth = displayTexts.map { ($0 as NSString).size(withAttributes: [.font: baseFont]).width }.max() ?? 0
+            // still has enough reserved room to be drawn. Ordered markers reserve extra room for
+            // an explicit gap before the content starts (MarkdownLayoutManager draws the digits
+            // right-aligned against headIndent minus this same gap).
+            let isOrderedGroup = { if case .ordered = first.kind { return true } else { return false } }()
+            let indentWidth = displayTexts.map { text -> CGFloat in
+                let width = (text as NSString).size(withAttributes: [.font: baseFont]).width
+                return isOrderedGroup ? width + orderedMarkerContentGap(for: baseFont) : width
+            }.max() ?? 0
 
             for (index, item) in group.enumerated() {
                 let markerRange = NSRange(item.markerRange, in: text)
@@ -446,5 +457,13 @@ struct MarkdownStyler {
     private static func headerPointSize(for level: Int, baseSize: CGFloat) -> CGFloat {
         let scale: [Int: CGFloat] = [1: 2.0, 2: 1.6, 3: 1.35, 4: 1.15, 5: 1.0, 6: 0.9]
         return baseSize * (scale[level] ?? 1.0)
+    }
+
+    /// Gap between an ordered list marker's period and where the content starts. Shared with
+    /// MarkdownLayoutManager (which draws the marker text right-aligned against
+    /// headIndent minus this same gap) so the reserved indent width and the actual draw position
+    /// always agree.
+    static func orderedMarkerContentGap(for font: NSFont) -> CGFloat {
+        font.pointSize * 0.35
     }
 }

@@ -149,7 +149,7 @@ final class MarkdownStylerTests: XCTestCase {
         let baseFont = NSFont.systemFont(ofSize: 14)
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
         let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
-        let expectedIndent = ("10. " as NSString).size(withAttributes: [.font: baseFont]).width
+        let expectedIndent = ("10." as NSString).size(withAttributes: [.font: baseFont]).width + MarkdownStyler.orderedMarkerContentGap(for: baseFont)
         XCTAssertEqual(style?.headIndent ?? -1, expectedIndent, accuracy: 0.01)
     }
 
@@ -160,7 +160,7 @@ final class MarkdownStylerTests: XCTestCase {
         let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
         let baseFont = NSFont.systemFont(ofSize: 14)
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
-        let expectedIndent = ("10. " as NSString).size(withAttributes: [.font: baseFont]).width
+        let expectedIndent = ("10." as NSString).size(withAttributes: [.font: baseFont]).width + MarkdownStyler.orderedMarkerContentGap(for: baseFont)
 
         let firstItemLocation = text.distance(from: text.startIndex, to: text.range(of: "1. one")!.lowerBound)
         let tenthItemLocation = text.distance(from: text.startIndex, to: text.range(of: "10. ten")!.lowerBound)
@@ -183,9 +183,9 @@ final class MarkdownStylerTests: XCTestCase {
         let secondLocation = text.distance(from: text.startIndex, to: text.range(of: "1. two")!.lowerBound)
         let thirdLocation = text.distance(from: text.startIndex, to: text.range(of: "1. three")!.lowerBound)
 
-        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: firstLocation, effectiveRange: nil) as? String, "1. ")
-        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: secondLocation, effectiveRange: nil) as? String, "2. ")
-        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "3. ")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: firstLocation, effectiveRange: nil) as? String, "1.")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: secondLocation, effectiveRange: nil) as? String, "2.")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "3.")
         // The literal source digit must stay hidden -- the drawn text carries the real value.
         let firstColor = attributed.attribute(.foregroundColor, at: firstLocation, effectiveRange: nil) as? NSColor
         XCTAssertEqual(firstColor, NSColor.clear)
@@ -198,8 +198,8 @@ final class MarkdownStylerTests: XCTestCase {
 
         let firstLocation = text.distance(from: text.startIndex, to: text.range(of: "5. five")!.lowerBound)
         let thirdLocation = text.distance(from: text.startIndex, to: text.range(of: "7. seven")!.lowerBound)
-        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: firstLocation, effectiveRange: nil) as? String, "5. ")
-        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "7. ")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: firstLocation, effectiveRange: nil) as? String, "5.")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "7.")
     }
 
     // A blank line breaks the group -- the second list restarts renumbering from its own first
@@ -210,7 +210,19 @@ final class MarkdownStylerTests: XCTestCase {
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
 
         let thirdLocation = text.distance(from: text.startIndex, to: text.range(of: "1. three")!.lowerBound)
-        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "1. ", "New list after a blank line must restart from its own first item, not continue the previous list's count")
+        XCTAssertEqual(attributed.attribute(.marginalOrderedListMarkerText, at: thirdLocation, effectiveRange: nil) as? String, "1.", "New list after a blank line must restart from its own first item, not continue the previous list's count")
+    }
+
+    // Regression: right-aligning the drawn number flush against headIndent (zero gap) relied on
+    // trailing-space measurement for spacing and read as the number colliding with the text.
+    func testOrderedMarkerReservesAnExplicitGapBeforeContent() {
+        let text = "1. one"
+        let baseFont = NSFont.systemFont(ofSize: 14)
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        let markerWidth = ("1." as NSString).size(withAttributes: [.font: baseFont]).width
+        XCTAssertEqual(style?.headIndent ?? -1, markerWidth + MarkdownStyler.orderedMarkerContentGap(for: baseFont), accuracy: 0.01)
     }
 
     // Nested unordered lists: each deeper level shifts both the marker and its content one

@@ -114,11 +114,15 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // MarkdownStyler), so this draws into the shared group indent zone rather than
             // being confined to the literal marker's own width -- right-aligned against where
             // the content starts (headIndent), matching how numbered lists conventionally
-            // right-align their digits before the period.
+            // right-align their digits before the period. A explicit gap (matching the one
+            // MarkdownStyler reserved room for) is subtracted rather than drawing flush against
+            // headIndent: relying on a trailing space's advance width for the gap (an earlier
+            // version) is not guaranteed by NSString measurement and read as the number nearly
+            // colliding with the following text.
             let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
             let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
             let markerSize = (displayText as NSString).size(withAttributes: markerAttributes)
-            let rightEdge = origin.x + paragraphStyle.headIndent
+            let rightEdge = origin.x + paragraphStyle.headIndent - MarkdownStyler.orderedMarkerContentGap(for: font)
             let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + charRect.midY - markerSize.height / 2)
             (displayText as NSString).draw(at: drawPoint, withAttributes: markerAttributes)
         }
