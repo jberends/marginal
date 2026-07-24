@@ -94,22 +94,24 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(font?.pointSize, 14)
     }
 
-    func testUnorderedListMarkerGetsGlyphSubstitutionAttribute() {
+    func testUnorderedListMarkerGetsBulletDrawingMarkerAndIsHidden() {
         let text = "- one\n- two"
         let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
-        let glyphInfo = attributed.attribute(.glyphInfo, at: 0, effectiveRange: nil) as? NSGlyphInfo
-        XCTAssertNotNil(glyphInfo, "Unordered marker should carry a glyph-substitution attribute")
+        let marker = attributed.attribute(.marginalListBulletMarker, at: 0, effectiveRange: nil)
+        XCTAssertNotNil(marker, "Marker character must carry the layout-manager key so MarkdownLayoutManager can draw the bullet")
+        let color = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, NSColor.clear, "The literal marker character must be invisible -- the layout manager draws the actual bullet")
         // The underlying string must stay the literal marker character -- this is the whole point.
         XCTAssertEqual(attributed.string.first, "-")
     }
 
-    func testOrderedListMarkerGetsNoGlyphSubstitution() {
+    func testOrderedListMarkerGetsNoBulletDrawingMarker() {
         let text = "1. one\n2. two"
         let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
-        let glyphInfo = attributed.attribute(.glyphInfo, at: 0, effectiveRange: nil) as? NSGlyphInfo
-        XCTAssertNil(glyphInfo, "Ordered markers keep their literal digits/period, no glyph substitution")
+        let marker = attributed.attribute(.marginalListBulletMarker, at: 0, effectiveRange: nil)
+        XCTAssertNil(marker, "Ordered markers keep their literal digits/period, no bullet drawn")
     }
 
     // A wrapped continuation line of a list item should indent under the item's text, not
@@ -327,7 +329,7 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertNil(style, "'<u>underline</u>' shown as example code must not be underlined")
     }
 
-    func testListItemInsideCodeBlockDoesNotGetBulletGlyphSubstitution() {
+    func testListItemInsideCodeBlockDoesNotGetBulletMarker() {
         let text = "```\n- item\n```"
         let model = MarkdownDocumentModel(
             listItems: MarkdownParser.parseListItems(in: text),
@@ -335,8 +337,8 @@ final class MarkdownStylerTests: XCTestCase {
         )
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let location = text.distance(from: text.startIndex, to: text.range(of: "- item")!.lowerBound)
-        let glyphInfo = attributed.attribute(.glyphInfo, at: location, effectiveRange: nil) as? NSGlyphInfo
-        XCTAssertNil(glyphInfo, "A '- item' line shown as example code must not get bullet glyph substitution")
+        let marker = attributed.attribute(.marginalListBulletMarker, at: location, effectiveRange: nil)
+        XCTAssertNil(marker, "A '- item' line shown as example code must not get a drawn bullet")
         let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
         XCTAssertNotEqual(color, NSColor.secondaryLabelColor, "Code block content must not be recolored as a list marker")
     }

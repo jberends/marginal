@@ -173,18 +173,19 @@ struct MarkdownStyler {
             result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
 
             if case .unordered = item.kind, markerRange.length > 0 {
+                // NSGlyphInfo glyph substitution (an earlier attempt at this) does not preserve
+                // the substituted "bullet" glyph's own vertical metrics -- it reuses whatever
+                // position the base character ("-") would have drawn at, which reads as a tiny
+                // dot sitting almost on the baseline, not vertically centered on the line.
+                // Instead: keep the marker character at normal size (so it still occupies real,
+                // correctly-laid-out space and stays selectable/copyable as the literal
+                // "-"/"*"/"+"), make it fully transparent, and let MarkdownLayoutManager draw an
+                // actual filled circle sized from the font's real xHeight and centered within
+                // that character's own real, already-correctly-laid-out bounding rect -- the
+                // same technique already used for the blockquote bar and horizontal rule line.
                 let markerCharacterRange = NSRange(location: markerRange.location, length: 1)
-                let markerCharacter = String((text as NSString).substring(with: markerCharacterRange))
-                // The plain secondaryLabelColor + baseFont substitution read as a tiny, faint dot
-                // sitting almost on the baseline -- a solid, heavier, larger, better-centered
-                // bullet reads much closer to how other editors (e.g. Notion) render it.
-                let bulletFont = NSFont.systemFont(ofSize: baseFont.pointSize * 1.2, weight: .heavy)
-                if let glyphInfo = NSGlyphInfo(glyphName: "bullet", for: bulletFont, baseString: markerCharacter) {
-                    result.addAttribute(.glyphInfo, value: glyphInfo, range: markerCharacterRange)
-                    result.addAttribute(.font, value: bulletFont, range: markerCharacterRange)
-                    result.addAttribute(.foregroundColor, value: NSColor.labelColor, range: markerCharacterRange)
-                    result.addAttribute(.baselineOffset, value: baseFont.pointSize * 0.12, range: markerCharacterRange)
-                }
+                result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerCharacterRange)
+                result.addAttribute(.marginalListBulletMarker, value: true, range: markerCharacterRange)
             }
 
             // A wrapped continuation line must indent under the item's text, not wrap back to

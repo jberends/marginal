@@ -3,6 +3,7 @@ import AppKit
 extension NSAttributedString.Key {
     static let marginalBlockquoteMarker = NSAttributedString.Key("marginalBlockquoteMarker")
     static let marginalHorizontalRuleMarker = NSAttributedString.Key("marginalHorizontalRuleMarker")
+    static let marginalListBulletMarker = NSAttributedString.Key("marginalListBulletMarker")
 }
 
 /// Draws paragraph-level decorations that can't be expressed as ordinary run attributes: the
@@ -55,6 +56,25 @@ final class MarkdownLayoutManager: NSLayoutManager {
             )
             NSColor.separatorColor.setFill()
             lineRect.fill()
+        }
+
+        textStorage.enumerateAttribute(.marginalListBulletMarker, in: fullRange) { value, range, _ in
+            guard value != nil,
+                  let font = textStorage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            // The marker character is still laid out at normal size (just transparent), so its own
+            // bounding rect already reflects this exact line's real vertical geometry -- centering
+            // the circle within it, sized from the font's own xHeight, needs no guessed offsets.
+            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let diameter = font.xHeight * 0.85
+            let circleRect = NSRect(
+                x: origin.x + charRect.midX - diameter / 2,
+                y: origin.y + charRect.midY - diameter / 2,
+                width: diameter,
+                height: diameter
+            )
+            NSColor.labelColor.setFill()
+            NSBezierPath(ovalIn: circleRect).fill()
         }
     }
 }
