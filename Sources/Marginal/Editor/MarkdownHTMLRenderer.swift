@@ -147,6 +147,7 @@ struct MarkdownHTMLRenderer {
             switch style.kind {
             case .bold: (openTag, closeTag) = ("<strong>", "</strong>")
             case .italic: (openTag, closeTag) = ("<em>", "</em>")
+            case .boldItalic: (openTag, closeTag) = ("<strong><em>", "</em></strong>")
             case .strikethrough: (openTag, closeTag) = ("<del>", "</del>")
             case .underline: (openTag, closeTag) = ("<u>", "</u>")
             case .code: (openTag, closeTag) = ("<code>", "</code>")

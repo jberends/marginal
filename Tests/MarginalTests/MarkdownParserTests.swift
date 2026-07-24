@@ -33,10 +33,19 @@ final class MarkdownParserInlineStyleTests: XCTestCase {
         XCTAssertEqual(spans[0].kind, .italic)
     }
 
-    func testBoldTakesPrecedenceAndTripleDelimiterStillYieldsABoldSpan() {
+    func testTripleAsteriskDelimiterYieldsBoldItalicSpan() {
         let text = "Hello ***world*** today"
         let spans = MarkdownParser.parseInlineStyles(in: text)
-        XCTAssertTrue(spans.contains { $0.kind == .bold })
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].kind, .boldItalic)
+        XCTAssertEqual(String(text[spans[0].contentRange]), "world")
+    }
+
+    func testTripleUnderscoreDelimiterYieldsBoldItalicSpan() {
+        let text = "Hello ___world___ today"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].kind, .boldItalic)
     }
 
     func testParsesStrikethrough() {
@@ -73,6 +82,32 @@ final class MarkdownParserInlineStyleTests: XCTestCase {
         let spans = MarkdownParser.parseInlineStyles(in: text)
         XCTAssertTrue(spans.contains { $0.kind == .bold }, "Bold span must survive nesting an inline code span")
         XCTAssertTrue(spans.contains { $0.kind == .code })
+    }
+
+    // A backslash immediately before a backtick escapes it -- CommonMark's "Escaped Markdown
+    // characters" case. The escaped backticks must not be treated as code-span delimiters.
+    func testBackslashEscapedBacktickIsNotTreatedAsCodeDelimiter() {
+        let text = "\\`This should not be inline code.\\`"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertTrue(spans.isEmpty, "Escaped backticks must not produce a code span")
+    }
+
+    // CommonMark: a code span may be delimited by a run of 2+ backticks so its content can
+    // contain a shorter (e.g. single) backtick run without ending the span early.
+    func testDoubleBacktickCodeSpanCanContainALiteralSingleBacktick() {
+        let text = "A code span containing a backtick: ``Use the ` character.``"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].kind, .code)
+        XCTAssertEqual(String(text[spans[0].contentRange]), "Use the ` character.")
+    }
+
+    func testSingleBacktickCodeSpanStillWorks() {
+        let text = "Use `npm install` now"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].kind, .code)
+        XCTAssertEqual(String(text[spans[0].contentRange]), "npm install")
     }
 }
 
@@ -152,6 +187,24 @@ final class MarkdownParserHeaderAndListTests: XCTestCase {
         XCTAssertEqual(items.count, 2)
         XCTAssertEqual(String(text[items[0].lineRange]), "- one")
         XCTAssertEqual(String(text[items[1].lineRange]), "- two")
+    }
+
+    // A marker with no trailing space and no content (just "-" alone on the line) is still a
+    // valid, empty list item -- it must not be silently dropped to plain unstyled text.
+    func testBareMarkerWithNoTrailingSpaceIsAnEmptyListItem() {
+        let text = "- item before\n-\n- item after"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items[1].kind, .unordered)
+        XCTAssertEqual(String(text[items[1].contentRange]), "")
+    }
+
+    func testBareOrderedMarkerWithNoTrailingSpaceIsAnEmptyListItem() {
+        let text = "1. item before\n2.\n3. item after"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items[1].kind, .ordered(number: 2))
+        XCTAssertEqual(String(text[items[1].contentRange]), "")
     }
 }
 

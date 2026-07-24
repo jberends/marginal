@@ -3,6 +3,7 @@ import Foundation
 enum InlineStyleKind: Equatable {
     case bold
     case italic
+    case boldItalic
     case strikethrough
     case underline
     case code

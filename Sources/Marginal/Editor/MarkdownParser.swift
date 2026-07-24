@@ -6,9 +6,7 @@ import Foundation
 ///
 /// This is a pragmatic single-pass parser, not a full CommonMark
 /// implementation: it does not apply CommonMark's intraword-emphasis
-/// flanking rules (so `snake_case_like_this` can be misdetected as italic),
-/// and `***bold+italic***` nesting is only partially handled (recognized as
-/// bold, with the extra asterisk left as a literal character).
+/// flanking rules (so `snake_case_like_this` can be misdetected as italic).
 struct MarkdownParser {
 
     static func parseInlineStyles(in text: String) -> [InlineStyleSpan] {
@@ -60,7 +58,41 @@ struct MarkdownParser {
         // Order matters: higher-priority (longer/more specific) delimiters
         // claim their ranges first so shorter delimiters don't cut through them.
         // Inline code claims first: its content must never be reinterpreted as bold/italic/etc.
-        findMatches(pattern: "`([^`\\n]+?)`", kind: .code, openLength: 1, closeLength: 1)
+        // Delimiter run length is 1-3 backticks (CommonMark: a code span's content may contain a
+        // backtick run shorter than its own delimiter, e.g. ``a single ` backtick``); the
+        // backreference (\1) requires the closing run to match the opening run's exact length.
+        // A backslash immediately before the opening run escapes it -- "\`not code\`" stays literal.
+        if let codeRegex = try? NSRegularExpression(pattern: "(?<!\\\\)(`{1,3})(?!`)(.+?)(?<!`)\\1(?!`)") {
+            let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+            codeRegex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+                guard let match,
+                      let fullRange = Range(match.range, in: text),
+                      let delimiterRange = Range(match.range(at: 1), in: text),
+                      let contentRange = Range(match.range(at: 2), in: text) else { return }
+                if isClaimed(fullRange) { return }
+
+                let delimiterLength = text.distance(from: delimiterRange.lowerBound, to: delimiterRange.upperBound)
+                let openStart = fullRange.lowerBound
+                let openEnd = text.index(openStart, offsetBy: delimiterLength)
+                let closeEnd = fullRange.upperBound
+                let closeStart = text.index(closeEnd, offsetBy: -delimiterLength)
+
+                spans.append(InlineStyleSpan(
+                    kind: .code,
+                    contentRange: contentRange,
+                    openingDelimiterRange: openStart..<openEnd,
+                    closingDelimiterRange: closeStart..<closeEnd
+                ))
+                claim(fullRange)
+            }
+        }
+        // Triple delimiters claim next, before plain bold: **/__ would otherwise absorb two of
+        // the three delimiter characters and leave the third as stray literal content (the old,
+        // documented limitation). Claiming the full ***/___ span first makes the bold pattern's
+        // later, narrower match on the same text a partial-overlap conflict that isClaimed
+        // correctly rejects, so no separate suppression logic is needed.
+        findMatches(pattern: "\\*\\*\\*(.+?)\\*\\*\\*", kind: .boldItalic, openLength: 3, closeLength: 3)
+        findMatches(pattern: "___(.+?)___", kind: .boldItalic, openLength: 3, closeLength: 3)
         findMatches(pattern: "\\*\\*(.+?)\\*\\*", kind: .bold, openLength: 2, closeLength: 2)
         findMatches(pattern: "__(.+?)__", kind: .bold, openLength: 2, closeLength: 2)
         findMatches(pattern: "~~(.+?)~~", kind: .strikethrough, openLength: 2, closeLength: 2)
@@ -96,8 +128,8 @@ struct MarkdownParser {
         var lineStart = text.startIndex
 
         func isListMarkerLine(_ line: Substring) -> Bool {
-            line.range(of: "^[-*+] ", options: .regularExpression) != nil
-                || line.range(of: "^[0-9]+\\. ", options: .regularExpression) != nil
+            line.range(of: "^[-*+]( |$)", options: .regularExpression) != nil
+                || line.range(of: "^[0-9]+\\.( |$)", options: .regularExpression) != nil
         }
 
         // CommonMark "lazy continuation": a plain line immediately following a list item line,
@@ -122,7 +154,7 @@ struct MarkdownParser {
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
-            if let markerRange = line.range(of: "^[-*+] ", options: .regularExpression) {
+            if let markerRange = line.range(of: "^[-*+]( |$)", options: .regularExpression) {
                 let itemEnd = extendedItemEnd(after: lineEnd)
                 items.append(ListItemSpan(
                     kind: .unordered,
@@ -131,7 +163,7 @@ struct MarkdownParser {
                     lineRange: lineStart..<itemEnd
                 ))
                 lineStart = itemEnd < text.endIndex ? text.index(after: itemEnd) : text.endIndex
-            } else if let markerRange = line.range(of: "^[0-9]+\\. ", options: .regularExpression) {
+            } else if let markerRange = line.range(of: "^[0-9]+\\.( |$)", options: .regularExpression) {
                 let digits = line[markerRange].prefix { $0.isNumber }
                 let itemEnd = extendedItemEnd(after: lineEnd)
                 items.append(ListItemSpan(

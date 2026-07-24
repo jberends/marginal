@@ -91,6 +91,8 @@ struct MarkdownStyler {
                 result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .boldFontMask), range: contentRange)
             case .italic:
                 result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .italicFontMask), range: contentRange)
+            case .boldItalic:
+                result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: [.boldFontMask, .italicFontMask]), range: contentRange)
             case .strikethrough:
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .underline:
