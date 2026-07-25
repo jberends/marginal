@@ -17,7 +17,8 @@ final class VisualRenderHarnessTests: XCTestCase {
             blockquotes: MarkdownParser.parseBlockquotes(in: text),
             horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
             codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),
-            tables: MarkdownParser.parseTables(in: text)
+            tables: MarkdownParser.parseTables(in: text),
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
         )
         let baseFont = NSFont.systemFont(ofSize: fontSize)
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
@@ -80,6 +81,8 @@ final class VisualRenderHarnessTests: XCTestCase {
         ```swift
         let x = 1
         ```
+
+        Great job :white_check_mark: :rocket: :+1: :smile:
         """
         // App Sandbox restricts writes to arbitrary paths -- the container's own home directory
         // is always writable regardless of entitlements.

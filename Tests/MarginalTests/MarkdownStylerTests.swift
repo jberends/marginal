@@ -600,3 +600,40 @@ final class MarkdownStylerTableTests: XCTestCase {
         XCTAssertEqual(bodyGrid?.isHeaderRow, false)
     }
 }
+
+final class MarkdownStylerEmojiShortcodeTests: XCTestCase {
+
+    func testShortcodeTextIsHiddenAndMarkedForLayoutManager() {
+        let text = "Done :white_check_mark: today"
+        let model = MarkdownDocumentModel(emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+
+        let shortcodeRange = text.range(of: ":white_check_mark:")!
+        let location = text.distance(from: text.startIndex, to: shortcodeRange.lowerBound)
+        let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, NSColor.clear, "Literal shortcode text must be hidden -- the layout manager draws the actual emoji")
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+        let marker = attributed.attribute(.marginalEmojiShortcode, at: location, effectiveRange: nil) as? EmojiGlyphInfo
+        XCTAssertEqual(marker?.emoji, "✅")
+
+        // A kern on the run's last character reserves exactly the emoji's own width, rather than
+        // the (often much longer) shortcode text's own width leaving a big dead gap around it.
+        let lastCharLocation = text.distance(from: text.startIndex, to: text.index(before: shortcodeRange.upperBound))
+        let kern = attributed.attribute(.kern, at: lastCharLocation, effectiveRange: nil) as? CGFloat
+        XCTAssertNotNil(kern)
+        XCTAssertGreaterThan(kern ?? 0, 0)
+
+        // The underlying string must stay the literal shortcode -- copy/paste/export must see it.
+        XCTAssertEqual(String(text[shortcodeRange]), ":white_check_mark:")
+    }
+
+    func testUnrecognizedShortcodeIsNotHidden() {
+        let text = "This is :not_a_real_emoji_alias: here"
+        let model = MarkdownDocumentModel(emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let location = text.distance(from: text.startIndex, to: text.range(of: ":not_a_real_emoji_alias:")!.lowerBound)
+        let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(color, NSColor.clear)
+    }
+}

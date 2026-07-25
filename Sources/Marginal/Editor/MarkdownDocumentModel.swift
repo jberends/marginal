@@ -103,6 +103,13 @@ struct TableSpan: Equatable {
     let columnAlignments: [TableAlignment]
 }
 
+/// A ":shortcode:" that matches a known GFM/gemoji alias (e.g. ":smile:", ":+1:",
+/// ":white_check_mark:") -- unrecognized ":word:" text is left alone.
+struct EmojiShortcodeSpan: Equatable {
+    let fullRange: Range<String.Index>
+    let emoji: String
+}
+
 struct MarkdownDocumentModel: Equatable {
     var inlineStyles: [InlineStyleSpan] = []
     var headers: [HeaderSpan] = []
@@ -112,4 +119,5 @@ struct MarkdownDocumentModel: Equatable {
     var horizontalRules: [HorizontalRuleSpan] = []
     var codeBlocks: [CodeBlockSpan] = []
     var tables: [TableSpan] = []
+    var emojiShortcodes: [EmojiShortcodeSpan] = []
 }

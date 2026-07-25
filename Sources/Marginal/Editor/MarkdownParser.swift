@@ -55,6 +55,14 @@ struct MarkdownParser {
             }
         }
 
+        // Emoji shortcodes claim first, highest priority: many contain underscores between
+        // words (":white_check_mark:") which would otherwise be misdetected as italic by the
+        // italic pattern below (this parser doesn't implement CommonMark's intraword-emphasis
+        // flanking rules -- see the type doc comment).
+        for shortcode in parseEmojiShortcodes(in: text) {
+            claim(shortcode.fullRange)
+        }
+
         // Order matters: higher-priority (longer/more specific) delimiters
         // claim their ranges first so shorter delimiters don't cut through them.
         // Inline code claims first: its content must never be reinterpreted as bold/italic/etc.
@@ -437,5 +445,22 @@ struct MarkdownParser {
             links.append(LinkSpan(textRange: textRange, urlRange: urlRange, fullRange: fullRange, url: String(text[urlRange])))
         }
         return links
+    }
+
+    /// Only recognizes ":word:" sequences that match a known GFM/gemoji alias (see
+    /// GemojiTable.swift) -- an unrecognized ":word:" (e.g. a literal time-like ":thinking:" typo
+    /// or unrelated colon-wrapped text) is left as plain text, not guessed at.
+    static func parseEmojiShortcodes(in text: String) -> [EmojiShortcodeSpan] {
+        var spans: [EmojiShortcodeSpan] = []
+        guard let regex = try? NSRegularExpression(pattern: ":([a-zA-Z0-9_+-]+):") else { return spans }
+        let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+        regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+            guard let match,
+                  let fullRange = Range(match.range, in: text),
+                  let aliasRange = Range(match.range(at: 1), in: text),
+                  let emoji = GemojiTable.shortcodeToEmoji[String(text[aliasRange])] else { return }
+            spans.append(EmojiShortcodeSpan(fullRange: fullRange, emoji: emoji))
+        }
+        return spans
     }
 }

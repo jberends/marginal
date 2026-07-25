@@ -139,7 +139,8 @@ final class DocumentViewController: NSViewController {
             blockquotes: MarkdownParser.parseBlockquotes(in: text),
             horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
             codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),
-            tables: MarkdownParser.parseTables(in: text)
+            tables: MarkdownParser.parseTables(in: text),
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
         )
         let attributed = MarkdownStyler.attributedString(
             for: text,

@@ -46,6 +46,26 @@ struct MarkdownStyler {
             let fullRange = table.headerRow.lineRange.lowerBound..<(table.bodyRows.last?.lineRange.upperBound ?? table.separatorRowRange.upperBound)
             return !overlapsAnyCodeBlock(fullRange)
         }
+        let emojiShortcodes = model.emojiShortcodes.filter { !overlapsAnyCodeBlock($0.fullRange) }
+
+        // The literal ":shortcode:" text is fully hidden (tiny font, not just cleared color) --
+        // reserving its own (often much longer) text width read as a big dead gap around a much
+        // narrower emoji glyph. Instead a kern on the run's last character reserves exactly the
+        // emoji's own rendered width, so surrounding text flows tightly around it, matching
+        // normal inline emoji spacing.
+        for shortcode in emojiShortcodes {
+            let fullNSRange = NSRange(shortcode.fullRange, in: text)
+            result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
+            result.addAttribute(.foregroundColor, value: NSColor.clear, range: fullNSRange)
+
+            let emojiFontSize = baseFont.pointSize * 1.15
+            let emojiWidth = (shortcode.emoji as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: emojiFontSize)]).width
+            let lastCharRange = NSRange(location: fullNSRange.location + fullNSRange.length - 1, length: 1)
+            result.addAttribute(.kern, value: emojiWidth, range: lastCharRange)
+
+            let firstCharRange = NSRange(location: fullNSRange.location, length: 1)
+            result.addAttribute(.marginalEmojiShortcode, value: EmojiGlyphInfo(emoji: shortcode.emoji, fontSize: emojiFontSize), range: firstCharRange)
+        }
 
         for header in headers {
             let headerFont = NSFontManager.shared.convert(

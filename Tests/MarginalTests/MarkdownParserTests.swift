@@ -109,6 +109,15 @@ final class MarkdownParserInlineStyleTests: XCTestCase {
         XCTAssertEqual(spans[0].kind, .code)
         XCTAssertEqual(String(text[spans[0].contentRange]), "npm install")
     }
+
+    // Regression: an underscore-containing emoji shortcode alias (very common -- gemoji aliases
+    // routinely use snake_case) must not have its underscores misdetected as italic, since this
+    // parser doesn't implement CommonMark's intraword-emphasis flanking rules.
+    func testEmojiShortcodeUnderscoresAreNotMisdetectedAsItalic() {
+        let text = "Done :white_check_mark: today"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertTrue(spans.isEmpty, "The shortcode's underscores must not produce a spurious italic span")
+    }
 }
 
 final class MarkdownParserHeaderAndListTests: XCTestCase {
@@ -524,5 +533,39 @@ final class MarkdownParserTableTests: XCTestCase {
         let text = "| a |\n|---|\n| 1 |\n\n| b |\n|---|\n| 2 |"
         let tables = MarkdownParser.parseTables(in: text)
         XCTAssertEqual(tables.count, 2)
+    }
+}
+
+final class MarkdownParserEmojiShortcodeTests: XCTestCase {
+
+    func testKnownShortcodeIsRecognized() {
+        let text = "Hello :smile: world"
+        let spans = MarkdownParser.parseEmojiShortcodes(in: text)
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].emoji, "😄")
+        XCTAssertEqual(String(text[spans[0].fullRange]), ":smile:")
+    }
+
+    func testPlusOneShortcodeWithSymbolCharacterIsRecognized() {
+        let spans = MarkdownParser.parseEmojiShortcodes(in: "Nice :+1: work")
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].emoji, "👍")
+    }
+
+    // The user's exact reported case: an underscore-containing shortcode alias.
+    func testUnderscoreContainingShortcodeIsRecognized() {
+        let spans = MarkdownParser.parseEmojiShortcodes(in: "Done :white_check_mark:")
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].emoji, "✅")
+    }
+
+    func testUnrecognizedColonWrappedTextIsIgnored() {
+        let spans = MarkdownParser.parseEmojiShortcodes(in: "This is :not_a_real_emoji_alias: here")
+        XCTAssertTrue(spans.isEmpty)
+    }
+
+    func testMultipleShortcodesInOneLineAreAllFound() {
+        let spans = MarkdownParser.parseEmojiShortcodes(in: ":smile: :rocket: :heart:")
+        XCTAssertEqual(spans.map(\.emoji), ["😄", "🚀", "❤️"])
     }
 }

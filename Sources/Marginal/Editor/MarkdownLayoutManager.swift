@@ -7,6 +7,7 @@ extension NSAttributedString.Key {
     static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
     static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
     static let marginalTableGridMarker = NSAttributedString.Key("marginalTableGridMarker")
+    static let marginalEmojiShortcode = NSAttributedString.Key("marginalEmojiShortcode")
 }
 
 /// One table row's grid geometry, computed once per table in MarkdownStyler and drawn by
@@ -16,6 +17,14 @@ extension NSAttributedString.Key {
 struct TableGridInfo: Equatable {
     let columnBoundaries: [CGFloat]
     let isHeaderRow: Bool
+}
+
+/// An emoji glyph to draw in place of a hidden ":shortcode:" run. Carries its own intended font
+/// size (computed in MarkdownStyler from baseFont) since the hidden run's own .font attribute is
+/// shrunk to hiddenFont and can't be used to recover the intended drawing size.
+struct EmojiGlyphInfo: Equatable {
+    let emoji: String
+    let fontSize: CGFloat
 }
 
 /// Draws paragraph-level decorations that can't be expressed as ordinary run attributes: the
@@ -192,6 +201,19 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 topLine.line(to: NSPoint(x: left + totalWidth, y: top))
                 topLine.stroke()
             }
+        }
+
+        textStorage.enumerateAttribute(.marginalEmojiShortcode, in: fullRange) { value, range, _ in
+            guard let info = value as? EmojiGlyphInfo else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            // The whole ":shortcode:" run is hidden (tiny font) with a kern on its last character
+            // reserving exactly the emoji's own rendered width (see MarkdownStyler), so this
+            // first character's own position marks the left edge of that reserved space.
+            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let emojiAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: info.fontSize)]
+            let emojiSize = (info.emoji as NSString).size(withAttributes: emojiAttributes)
+            let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + charRect.midY - emojiSize.height / 2)
+            (info.emoji as NSString).draw(at: drawPoint, withAttributes: emojiAttributes)
         }
     }
 }
