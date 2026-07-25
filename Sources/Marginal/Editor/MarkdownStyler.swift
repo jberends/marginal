@@ -135,7 +135,7 @@ struct MarkdownStyler {
                 rowCellWidths.append(widths)
             }
 
-            let cellPadding: CGFloat = 10
+            let cellPadding: CGFloat = 14
             var columnWidths = [CGFloat](repeating: 0, count: columnCount)
             for widths in rowCellWidths {
                 for (c, w) in widths.enumerated() { columnWidths[c] = max(columnWidths[c], w) }
@@ -185,6 +185,15 @@ struct MarkdownStyler {
                     value: TableGridInfo(columnBoundaries: gridColumnBoundaries, isHeaderRow: isHeader),
                     range: NSRange(row.lineRange, in: text)
                 )
+
+                // Vertical breathing room within each row -- without this, a row's height is
+                // exactly the text's own line height, so content butts directly against the grid
+                // lines above and below it. The grid drawing (which reads this same laid-out
+                // line's bounding rect) automatically follows the increased height.
+                let rowParagraphStyle = NSMutableParagraphStyle()
+                rowParagraphStyle.minimumLineHeight = baseFont.pointSize * 1.9
+                rowParagraphStyle.maximumLineHeight = baseFont.pointSize * 1.9
+                result.addAttribute(.paragraphStyle, value: rowParagraphStyle, range: NSRange(row.lineRange, in: text))
             }
 
             result.addAttribute(.font, value: hiddenFont, range: NSRange(table.separatorRowRange, in: text))
@@ -261,7 +270,10 @@ struct MarkdownStyler {
 
         for codeBlock in model.codeBlocks {
             let contentNSRange = NSRange(codeBlock.contentRange, in: text)
-            let codeFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular)
+            // Monospaced fonts read visually smaller than proportional ones at the same nominal
+            // point size -- bumping by 1pt brings fenced code blocks back to a comparable visual
+            // weight against the surrounding body text.
+            let codeFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize + 1, weight: .regular)
             result.addAttribute(.font, value: codeFont, range: contentNSRange)
             result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentNSRange)
 
