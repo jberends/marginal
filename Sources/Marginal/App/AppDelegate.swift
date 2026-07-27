@@ -1,6 +1,6 @@
 import AppKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private var preferencesWindowController: NSWindowController?
 
@@ -22,6 +22,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)]
         )
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+    }
+
+    // iTerm2-style direct tab access: ⌘1…⌘9 jump straight to that tab in the key window's
+    // tab group (menu item tag carries the zero-based tab index).
+    @objc func selectTabAtIndex(_ sender: NSMenuItem) {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else { return }
+        let tabs = window.tabbedWindows ?? [window]
+        guard tabs.indices.contains(sender.tag) else { return }
+        tabs[sender.tag].makeKeyAndOrderFront(nil)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(selectTabAtIndex(_:)) {
+            let tabs = (NSApp.keyWindow ?? NSApp.mainWindow)?.tabbedWindows
+            return menuItem.tag < (tabs?.count ?? 1)
+        }
+        return true
     }
 
     @objc private func showPreferences(_ sender: Any?) {
@@ -97,6 +114,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
+
+        let windowMenuItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(NSMenuItem.separator())
+        windowMenu.addItem(withTitle: "Show Previous Tab", action: #selector(NSWindow.selectPreviousTab(_:)), keyEquivalent: "")
+        windowMenu.addItem(withTitle: "Show Next Tab", action: #selector(NSWindow.selectNextTab(_:)), keyEquivalent: "")
+        windowMenu.addItem(NSMenuItem.separator())
+        // iTerm2-style ⌘1…⌘9 direct tab access (tag carries the zero-based tab index).
+        for tabNumber in 1...9 {
+            let item = NSMenuItem(title: "Select Tab \(tabNumber)", action: #selector(AppDelegate.selectTabAtIndex(_:)), keyEquivalent: "\(tabNumber)")
+            item.tag = tabNumber - 1
+            item.target = target
+            windowMenu.addItem(item)
+        }
+        windowMenu.addItem(NSMenuItem.separator())
+        windowMenu.addItem(withTitle: "Move Tab to New Window", action: #selector(NSWindow.moveTabToNewWindow(_:)), keyEquivalent: "")
+        windowMenu.addItem(withTitle: "Merge All Windows", action: #selector(NSWindow.mergeAllWindows(_:)), keyEquivalent: "")
+        windowMenuItem.submenu = windowMenu
+        mainMenu.addItem(windowMenuItem)
+        NSApp.windowsMenu = windowMenu
 
         return mainMenu
     }
