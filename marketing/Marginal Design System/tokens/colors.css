@@ -1,0 +1,98 @@
+/* Marginal — color tokens.
+   Base palette is lifted from the app icon spec (assets/marginal-icon-spec.png):
+   Paper #F7F6F3 · Paper Highlight #FFFEFC · Margin Rule #E9E9E7 · Text Lines #D9D8D4
+   Ink #2C2C2B · Header #232323. Single accent: violet #8E1FCB — high-chroma and slightly
+   magenta-leaning so it pops off the cream paper, never a cool blue "tech purple". */
+:root{
+  /* ---- base palette ---- */
+  --paper-highlight:#FFFEFC;
+  --paper:#F7F6F3;
+  --paper-sunk:#F1F0EC;
+  --margin-rule:#E9E9E7;
+  --hairline:#E6E5E3;
+  --text-lines:#D9D8D4;
+  --ink:#2C2C2B;
+  --ink-header:#232323;
+  --ink-60:#6B6A67;
+  --ink-40:#9A9895;
+  --ink-24:#C4C2BE;
+  --violet:#8E1FCB;
+  --violet-press:#7617A9;
+  --violet-tint:#F7EAFD;
+  --green:#2F9E68;
+  --amber:#C98A16;
+
+  /* ---- semantic aliases ---- */
+  --surface-page:var(--paper-highlight);
+  --surface-panel:var(--paper);
+  --surface-card:var(--paper-highlight);
+  --surface-sunk:var(--paper-sunk);
+  --surface-code:var(--paper);
+  --surface-chrome:var(--paper);
+  --surface-inverse:var(--ink-header);
+
+  --text-body:var(--ink);
+  --text-heading:var(--ink-header);
+  --text-muted:var(--ink-60);
+  --text-subtle:var(--ink-40);
+  --text-inverse:var(--paper-highlight);
+  --text-accent:var(--violet);
+  --text-code:var(--violet);
+
+  --border-hairline:var(--hairline);
+  --border-strong:var(--text-lines);
+  --border-rule:var(--margin-rule);
+  --border-focus:var(--violet);
+
+  --accent:var(--violet);
+  --accent-press:var(--violet-press);
+  --accent-tint:var(--violet-tint);
+  --accent-on:var(--paper-highlight);
+
+  --selection-bg:#EDD5F9;
+  --overlay-scrim:rgba(35,35,35,.32);
+
+  /* syntax highlighting — matches the app's code cards */
+  --syn-keyword:#A626A4;
+  --syn-string:#2F9E68;
+  --syn-number:#C98A16;
+  --syn-comment:#9A9895;
+  --syn-func:#3D74C7;
+  --syn-punct:#6B6A67;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper-highlight:#1E1E1D;
+    --paper:#252524;
+    --paper-sunk:#191918;
+    --margin-rule:#343432;
+    --hairline:#33332F;
+    --text-lines:#3D3D3A;
+    --ink:#E8E7E3;
+    --ink-header:#F2F1EE;
+    --ink-60:#A6A49F;
+    --ink-40:#7C7A75;
+    --ink-24:#55534F;
+    --violet:#CB7DF7;
+    --violet-press:#B463E4;
+    --violet-tint:#33204A;
+    --green:#57C08A;
+    --amber:#E0AB4B;
+
+    --surface-inverse:#F2F1EE;
+    --text-inverse:#1E1E1D;
+    --accent-on:#1E1E1D;
+    --selection-bg:#472C63;
+    --overlay-scrim:rgba(0,0,0,.5);
+
+    --syn-keyword:#D07FCE;
+    --syn-string:#7FCFA0;
+    --syn-number:#E0AB4B;
+    --syn-comment:#7C7A75;
+    --syn-func:#7FADE8;
+    --syn-punct:#A6A49F;
+  }
+}
+/* Forced themes for specimen cards and previews */
+[data-theme="light"]{color-scheme:light;--paper-highlight:#FFFEFC;--paper:#F7F6F3;--paper-sunk:#F1F0EC;--margin-rule:#E9E9E7;--hairline:#E6E5E3;--text-lines:#D9D8D4;--ink:#2C2C2B;--ink-header:#232323;--ink-60:#6B6A67;--ink-40:#9A9895;--ink-24:#C4C2BE;--violet:#8E1FCB;--violet-press:#7617A9;--violet-tint:#F7EAFD;--selection-bg:#EDD5F9;--surface-page:var(--paper-highlight);--surface-panel:var(--paper);--surface-card:var(--paper-highlight);--surface-sunk:var(--paper-sunk);--surface-code:var(--paper);--surface-chrome:var(--paper);--surface-inverse:var(--ink-header);--text-body:var(--ink);--text-heading:var(--ink-header);--text-muted:var(--ink-60);--text-subtle:var(--ink-40);--text-inverse:var(--paper-highlight);--text-accent:var(--violet);--text-code:var(--violet);--border-hairline:var(--hairline);--border-strong:var(--text-lines);--border-rule:var(--margin-rule);--border-focus:var(--violet);--accent:var(--violet);--accent-press:var(--violet-press);--accent-tint:var(--violet-tint);--accent-on:var(--paper-highlight);--syn-keyword:#A626A4;--syn-string:#2F9E68;--syn-number:#C98A16;--syn-comment:#9A9895;--syn-func:#3D74C7;--syn-punct:#6B6A67}
+[data-theme="dark"]{color-scheme:dark;--paper-highlight:#1E1E1D;--paper:#252524;--paper-sunk:#191918;--margin-rule:#343432;--hairline:#33332F;--text-lines:#3D3D3A;--ink:#E8E7E3;--ink-header:#F2F1EE;--ink-60:#A6A49F;--ink-40:#7C7A75;--ink-24:#55534F;--violet:#CB7DF7;--violet-press:#B463E4;--violet-tint:#33204A;--selection-bg:#472C63;--surface-page:var(--paper-highlight);--surface-panel:var(--paper);--surface-card:var(--paper-highlight);--surface-sunk:var(--paper-sunk);--surface-code:var(--paper);--surface-chrome:var(--paper);--surface-inverse:var(--ink-header);--text-body:var(--ink);--text-heading:var(--ink-header);--text-muted:var(--ink-60);--text-subtle:var(--ink-40);--text-inverse:var(--paper-highlight);--text-accent:var(--violet);--text-code:var(--violet);--border-hairline:var(--hairline);--border-strong:var(--text-lines);--border-rule:var(--margin-rule);--border-focus:var(--violet);--accent:var(--violet);--accent-press:var(--violet-press);--accent-tint:var(--violet-tint);--accent-on:var(--paper-highlight);--surface-inverse:#F2F1EE;--text-inverse:#1E1E1D;--accent-on:#1E1E1D;--syn-keyword:#D07FCE;--syn-string:#7FCFA0;--syn-number:#E0AB4B;--syn-comment:#7C7A75;--syn-func:#7FADE8;--syn-punct:#A6A49F}

@@ -1,0 +1,17 @@
+/* Marginal — motion is a Mac app's motion: short, eased, never bouncy.
+   The signature transition is syntax markers fading in/out at the cursor (120ms). */
+:root{
+  --dur-instant:80ms; /* @kind other */
+  --dur-fast:120ms; /* @kind other */   /* marker reveal, hover */
+  --dur-base:180ms; /* @kind other */   /* buttons, chips */
+  --dur-slow:280ms; /* @kind other */   /* panels, sheets */
+  --ease-standard:cubic-bezier(.32,.72,0,1); /* @kind other */   /* macOS-like */
+  --ease-out:cubic-bezier(.22,1,.36,1); /* @kind other */
+  --ease-in-out:cubic-bezier(.65,0,.35,1); /* @kind other */
+}
+@media (prefers-reduced-motion:reduce){
+  :root{--dur-instant:0ms; /* @kind other */
+    --dur-fast:0ms; /* @kind other */
+    --dur-base:0ms; /* @kind other */
+    --dur-slow:0ms; /* @kind other */}
+}

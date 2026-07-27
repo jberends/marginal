@@ -1,0 +1,13 @@
+/* Marginal — minimal element defaults so specimens and kits share a baseline. */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{margin:0;background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);font-size:var(--text-base);line-height:var(--leading-normal);font-weight:var(--weight-regular);text-wrap:pretty}
+::selection{background:var(--selection-bg)}
+h1,h2,h3,h4{font-family:var(--font-heading);color:var(--text-heading);font-weight:var(--weight-semibold);letter-spacing:var(--tracking-snug);line-height:var(--leading-snug);margin:0}
+h1{font-size:var(--text-h1)}h2{font-size:var(--text-h2)}h3{font-size:var(--text-h3)}
+p{margin:0}
+a{color:var(--text-accent);text-decoration:none;text-underline-offset:2px;transition:color var(--dur-fast) var(--ease-standard)}
+a:hover{color:var(--accent-press);text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-code);font-size:.875em}
+:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-chip)}
+hr{border:0;border-top:1px solid var(--border-hairline);margin:var(--space-6) 0}

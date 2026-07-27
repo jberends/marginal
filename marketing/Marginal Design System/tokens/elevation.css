@@ -1,0 +1,19 @@
+/* Marginal — shadows are quiet and warm-neutral. Nothing floats far off the page. */
+:root{
+  --shadow-none:none;
+  --shadow-hairline:0 0 0 1px var(--border-hairline);
+  --shadow-card:0 1px 2px rgba(35,35,35,.05),0 0 0 1px var(--border-hairline);
+  --shadow-raised:0 2px 6px rgba(35,35,35,.07),0 0 0 1px var(--border-hairline);
+  --shadow-popover:0 8px 24px rgba(35,35,35,.12),0 0 0 1px var(--border-hairline);
+  --shadow-frame:0 18px 48px rgba(35,35,35,.14),0 2px 6px rgba(35,35,35,.06);
+  --shadow-key:0 1px 0 var(--border-strong);
+  --focus-ring:0 0 0 3px color-mix(in srgb,var(--accent) 28%,transparent);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --shadow-card:0 1px 2px rgba(0,0,0,.4),0 0 0 1px var(--border-hairline);
+    --shadow-raised:0 2px 6px rgba(0,0,0,.45),0 0 0 1px var(--border-hairline);
+    --shadow-popover:0 8px 24px rgba(0,0,0,.55),0 0 0 1px var(--border-hairline);
+    --shadow-frame:0 18px 48px rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.4);
+  }
+}
