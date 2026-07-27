@@ -225,6 +225,32 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(style?.headIndent ?? -1, markerWidth + MarkdownStyler.orderedMarkerContentGap(for: baseFont), accuracy: 0.01)
     }
 
+    // Regression (the "1.Document" mess): the literal marker text is transparent but was still
+    // laid out at its own natural width, so each item's content started at a different x (a
+    // "2. " item's content further left than a "10. " item's) while the drawn replacement
+    // digits right-aligned against the group's shared headIndent -- overlapping the content.
+    // The content itself must land exactly on the group's shared tab stop (headIndent).
+    func testOrderedListContentStartsExactlyAtSharedTabStopAcrossMarkerWidths() {
+        let text = (1...12).map { "\($0). item" }.joined(separator: "\n")
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+
+        var lineStart = 0
+        for number in 1...12 {
+            let marker = "\(number). "
+            let contentLocation = lineStart + marker.count
+            let style = attributed.attribute(.paragraphStyle, at: lineStart, effectiveRange: nil) as? NSParagraphStyle
+            let markerRenderedWidth = attributed
+                .attributedSubstring(from: NSRange(location: lineStart, length: marker.count))
+                .size().width
+            let contentX = (style?.firstLineHeadIndent ?? 0) + markerRenderedWidth
+            XCTAssertEqual(contentX, style?.headIndent ?? -1, accuracy: 0.5,
+                           "Item \(number)'s content must start exactly at the group's shared tab stop")
+            lineStart = contentLocation + "item\n".count
+        }
+    }
+
     // Nested unordered lists: each deeper level shifts both the marker and its content one
     // more indent slot to the right, and cycles the drawn shape (filled circle / hollow
     // circle / filled square) rather than repeating the same bullet at every depth.
@@ -375,7 +401,9 @@ final class MarkdownStylerTests: XCTestCase {
 
         let restLocation = text.distance(from: text.startIndex, to: text.range(of: "rest")!.lowerBound)
         let restFont = attributed.attribute(.font, at: restLocation, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(restFont?.fontDescriptor.symbolicTraits.contains(.italic) ?? false, "Non-bold blockquote content stays italic")
+        XCTAssertFalse(restFont?.fontDescriptor.symbolicTraits.contains(.italic) ?? true, "Notion quotes keep the regular weight -- not italic")
+        let restColor = attributed.attribute(.foregroundColor, at: restLocation, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(restColor, NSColor.labelColor, "Notion quotes keep the normal text color -- not gray")
     }
 
     func testHorizontalRuleLineIsHiddenWhenCursorIsElsewhereAndMarkedForLayoutManager() {
@@ -399,15 +427,25 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(font?.pointSize, 14)
     }
 
-    func testCodeBlockContentGetsMonospaceFontAndBackground() {
+    // Notion sizes code at ~85% of the body size; an earlier version rendered it LARGER than
+    // body text (pointSize + 1), which read as shouting. The background is no longer a
+    // per-glyph .backgroundColor slab -- the layout manager draws a rounded card behind the
+    // whole block, keyed off .marginalCodeBlockMarker spanning fences and content.
+    func testCodeBlockContentGetsSmallerMonospaceFontAndCardMarker() {
         let text = "```\nplain content\n```"
         let model = MarkdownDocumentModel(codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text))
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let contentLocation = text.distance(from: text.startIndex, to: text.range(of: "plain")!.lowerBound)
         let font = attributed.attribute(.font, at: contentLocation, effectiveRange: nil) as? NSFont
         XCTAssertTrue(font?.isFixedPitch ?? false)
-        let background = attributed.attribute(.backgroundColor, at: contentLocation, effectiveRange: nil) as? NSColor
-        XCTAssertNotNil(background)
+        XCTAssertEqual(font?.pointSize ?? 0, 14 * 0.85, accuracy: 0.01, "Code renders at ~85% of body size, matching Notion")
+        XCTAssertNotNil(attributed.attribute(.marginalCodeBlockMarker, at: contentLocation, effectiveRange: nil))
+        XCTAssertNotNil(attributed.attribute(.marginalCodeBlockMarker, at: 0, effectiveRange: nil), "The card must span the fences too, so they act as vertical padding bands")
+        XCTAssertNil(attributed.attribute(.backgroundColor, at: contentLocation, effectiveRange: nil), "No per-glyph background -- the layout manager draws the rounded card")
+
+        // Content is inset from the card's edge, Notion-style.
+        let style = attributed.attribute(.paragraphStyle, at: contentLocation, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.firstLineHeadIndent ?? 0, MarkdownStyler.codeBlockContentInset(for: .systemFont(ofSize: 14)), accuracy: 0.01)
     }
 
     func testCodeBlockFencesAreHiddenWhenCursorIsElsewhere() {
@@ -522,16 +560,17 @@ final class MarkdownStylerTableTests: XCTestCase {
         )
     }
 
-    func testTableHeaderRowGetsBoldFont() {
+    // Medium (500), not bold -- Notion's measured header row weight.
+    func testTableHeaderRowGetsMediumWeightFont() {
         let text = "| Feature | Notes |\n|---|---|\n| Headings | Levels 1-6 |"
         let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let location = text.distance(from: text.startIndex, to: text.range(of: "Feature")!.lowerBound)
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+        XCTAssertEqual(font, NSFont.systemFont(ofSize: 14, weight: .medium))
 
         let bodyLocation = text.distance(from: text.startIndex, to: text.range(of: "Headings")!.lowerBound)
         let bodyFont = attributed.attribute(.font, at: bodyLocation, effectiveRange: nil) as? NSFont
-        XCTAssertFalse(bodyFont?.fontDescriptor.symbolicTraits.contains(.bold) ?? true, "Body rows must not be bold")
+        XCTAssertEqual(bodyFont, NSFont.systemFont(ofSize: 14), "Body rows keep the regular base font")
     }
 
     func testTablePipesAreHiddenAndSeparatorRowIsFullyHidden() {
@@ -560,6 +599,37 @@ final class MarkdownStylerTableTests: XCTestCase {
         let bodyKern = attributed.attribute(.kern, at: bodyPipeLocation, effectiveRange: nil) as? CGFloat
         XCTAssertNotNil(headerKern)
         XCTAssertEqual(headerKern, bodyKern, "Column 0 always starts at the same x position, so its leading kern must be identical across rows")
+    }
+
+    // Regression (columns drifting right, content crossing grid lines): the kern math never
+    // accounted for the hidden pipes' own advance width, so every column's content drifted
+    // right by one more pipe-width than the last. Left-aligned cell content must land exactly
+    // at its column's grid boundary plus the shared cell padding -- measured from the actual
+    // attributed runs (fonts, kerns, hidden delimiters), not assumed.
+    func testCellContentStartsExactlyAtColumnBoundaryPlusPadding() {
+        let text = "| Feature | Supported | Notes |\n|---|---|---|\n| Headings | Yes | Levels 1-6 |\n| Tables | Yes | Extension in many parsers |"
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: baseFont, cursorLocation: nil)
+        let padding = MarkdownStyler.tableCellPadding(for: baseFont)
+        let ns = text as NSString
+
+        let probes: [(cellText: String, column: Int)] = [
+            ("Feature", 0), ("Supported", 1), ("Notes", 2),
+            ("Headings", 0), ("Levels 1-6", 2),
+            ("Extension in many parsers", 2)
+        ]
+        for probe in probes {
+            let cellLocation = ns.range(of: probe.cellText).location
+            let lineRange = ns.lineRange(for: NSRange(location: cellLocation, length: 0))
+            guard let gridInfo = attributed.attribute(.marginalTableGridMarker, at: lineRange.location, effectiveRange: nil) as? TableGridInfo else {
+                XCTFail("Missing grid info for row containing \(probe.cellText)"); continue
+            }
+            let renderedX = attributed
+                .attributedSubstring(from: NSRange(location: lineRange.location, length: cellLocation - lineRange.location))
+                .size().width
+            XCTAssertEqual(renderedX, gridInfo.columnBoundaries[probe.column] + padding, accuracy: 0.5,
+                           "\(probe.cellText) must start exactly at its column boundary plus padding")
+        }
     }
 
     // The user's exact reported case: an escaped pipe inside a cell must not become a hidden

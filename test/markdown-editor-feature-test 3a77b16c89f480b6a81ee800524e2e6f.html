@@ -1,0 +1,904 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>markdown-editor-feature-test</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+/* Override strong tags inside headings to maintain consistent weight */
+h1 strong,
+h2 strong,
+h3 strong {
+	font-weight: 600;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 10px;
+	padding: 1rem;
+}
+
+/* For default-background callouts, render the border outline. */
+.callout.block-color-default_background {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+figure,
+aside,
+details {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+
+	table.collection-content {
+		width: 100%;
+		table-layout: fixed;
+	}
+
+	table.collection-content th,
+	table.collection-content td {
+		overflow-wrap: anywhere;
+	}
+
+	table.collection-content td > .user,
+	table.collection-content td > time {
+		white-space: pre-wrap;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content-wrapper {
+	overflow-x: auto;
+}
+
+@media only print {
+	.collection-content-wrapper {
+		overflow-x: visible;
+	}
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.collection-content td {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.column-list {
+	display: flex;
+	gap: 46px;
+}
+
+.column {
+	min-width: 0;
+	overflow: hidden;
+}
+
+.column > *:first-child {
+	margin-top: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding-inline: 0.125rem;
+	padding-block: 0.375rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+table {
+	border-collapse: collapse;
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol.numbered-list.numbered-list-digits-2 {
+	padding-inline-start: 2em;
+}
+
+ol.numbered-list.numbered-list-digits-3plus {
+	padding-inline-start: 2.4em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+/*
+ * Render emoji icons using a ::before pseudo-element to keep the glyph
+ * out of the DOM textContent traversal. This avoids double-rendering icons
+ * in callouts and page titles.
+ * NOTE(slim/html-export-pseudo-icons): I can't tagref this because it will
+ * flag as a duplicate tag after codegen.
+ */
+.icon[data-emoji]::before {
+	content: attr(data-emoji);
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.callout img.notion-static-icon {
+	width: 1em;
+	height: 1em;
+}
+
+.callout p {
+	margin: 0;
+}
+
+.callout h1,
+.callout h2,
+.callout h3 {
+	margin: 0 0 0.6rem;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	margin-right: 0.4em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+blockquote.quote-large {
+	font-size: 1.25em;
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.tab {
+	margin: 1.25em 0;
+	padding-inline: 1rem;
+	border: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray {
+	color: rgba(125, 122, 117, 1);
+	fill: rgba(125, 122, 117, 1);
+}
+.highlight-brown {
+	color: rgba(159, 118, 90, 1);
+	fill: rgba(159, 118, 90, 1);
+}
+.highlight-orange {
+	color: rgba(210, 123, 45, 1);
+	fill: rgba(210, 123, 45, 1);
+}
+.highlight-yellow {
+	color: rgba(203, 148, 52, 1);
+	fill: rgba(203, 148, 52, 1);
+}
+.highlight-teal {
+	color: rgba(80, 148, 110, 1);
+	fill: rgba(80, 148, 110, 1);
+}
+.highlight-blue {
+	color: rgba(56, 125, 201, 1);
+	fill: rgba(56, 125, 201, 1);
+}
+.highlight-purple {
+	color: rgba(154, 107, 180, 1);
+	fill: rgba(154, 107, 180, 1);
+}
+.highlight-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.highlight-red {
+	color: rgba(207, 81, 72, 1);
+	fill: rgba(207, 81, 72, 1);
+}
+.highlight-default_background {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray_background {
+	background: rgba(42, 28, 0, 0.07);
+}
+.highlight-brown_background {
+	background: rgba(139, 46, 0, 0.086);
+}
+.highlight-orange_background {
+	background: rgba(224, 101, 1, 0.129);
+}
+.highlight-yellow_background {
+	background: rgba(211, 168, 0, 0.137);
+}
+.highlight-teal_background {
+	background: rgba(0, 100, 45, 0.09);
+}
+.highlight-blue_background {
+	background: rgba(0, 124, 215, 0.094);
+}
+.highlight-purple_background {
+	background: rgba(102, 0, 178, 0.078);
+}
+.highlight-pink_background {
+	background: rgba(197, 0, 93, 0.086);
+}
+.highlight-red_background {
+	background: rgba(223, 22, 0, 0.094);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(125, 122, 117, 1);
+	fill: rgba(125, 122, 117, 1);
+}
+.block-color-brown {
+	color: rgba(159, 118, 90, 1);
+	fill: rgba(159, 118, 90, 1);
+}
+.block-color-orange {
+	color: rgba(210, 123, 45, 1);
+	fill: rgba(210, 123, 45, 1);
+}
+.block-color-yellow {
+	color: rgba(203, 148, 52, 1);
+	fill: rgba(203, 148, 52, 1);
+}
+.block-color-teal {
+	color: rgba(80, 148, 110, 1);
+	fill: rgba(80, 148, 110, 1);
+}
+.block-color-blue {
+	color: rgba(56, 125, 201, 1);
+	fill: rgba(56, 125, 201, 1);
+}
+.block-color-purple {
+	color: rgba(154, 107, 180, 1);
+	fill: rgba(154, 107, 180, 1);
+}
+.block-color-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.block-color-red {
+	color: rgba(207, 81, 72, 1);
+	fill: rgba(207, 81, 72, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(240, 239, 237, 1);
+}
+.block-color-brown_background {
+	background: rgba(245, 237, 233, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 235, 222, 1);
+}
+.block-color-yellow_background {
+	background: rgba(249, 243, 220, 1);
+}
+.block-color-teal_background {
+	background: rgba(232, 241, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(229, 242, 252, 1);
+}
+.block-color-purple_background {
+	background: rgba(243, 235, 249, 1);
+}
+.block-color-pink_background {
+	background: rgba(250, 233, 241, 1);
+}
+.block-color-red_background {
+	background: rgba(252, 233, 231, 1);
+}
+.select-value-color-default { background-color: rgba(42, 28, 0, 0.07); }
+.select-value-color-gray { background-color: rgba(28, 19, 1, 0.11); }
+.select-value-color-brown { background-color: rgba(127, 51, 0, 0.156); }
+.select-value-color-orange { background-color: rgba(196, 88, 0, 0.203); }
+.select-value-color-yellow { background-color: rgba(209, 156, 0, 0.282); }
+.select-value-color-green { background-color: rgba(0, 96, 38, 0.156); }
+.select-value-color-blue { background-color: rgba(0, 118, 217, 0.203); }
+.select-value-color-purple { background-color: rgba(92, 0, 163, 0.141); }
+.select-value-color-pink { background-color: rgba(183, 0, 78, 0.152); }
+.select-value-color-red { background-color: rgba(206, 24, 0, 0.164); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style><style>@import url('https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex-swap.min.css')</style></head><body><article id="3a77b16c-89f4-80b6-a81e-e800524e2e6f" class="page sans"><header><h1 class="page-title" dir="auto">markdown-editor-feature-test</h1><p class="page-description" dir="auto"></p></header><div class="page-body"><h1 id="3a77b16c-89f4-81ed-8209-d27a79213ab8" class="" dir="auto">Markdown Editor Feature Test Suite</h1><blockquote id="3a77b16c-89f4-815e-bceb-edefd9983e97" class="" dir="auto"><strong>Purpose:</strong> This file is designed to test the features commonly expected in a modern Markdown editor.<p id="3a77b16c-89f4-81f4-a897-e20991ecb914" class="" dir="auto">It includes standard Markdown syntax, popular extensions, editor-specific features, rendering edge cases, and an explicit feature checklist.</p></blockquote><hr id="3a77b16c-89f4-8161-a571-c0fd6d86c445" dir="auto"/><h2 id="3a77b16c-89f4-81ad-ab02-e4bf6c80d228" class="" dir="auto">Explicit Feature List</h2><p id="3a77b16c-89f4-8199-88e4-fa914804e359" class="" dir="auto">This file tests the following features:</p><ol type="1" id="3a77b16c-89f4-8140-bc8a-d5f499e422f9" class="numbered-list" start="1" dir="auto"><li>Document headings from level 1 through level 6</li></ol><ol type="1" id="3a77b16c-89f4-817c-99a5-d34895ea84dc" class="numbered-list" start="2" dir="auto"><li>Paragraphs and line wrapping</li></ol><ol type="1" id="3a77b16c-89f4-8157-8218-f412421cf679" class="numbered-list" start="3" dir="auto"><li>Forced line breaks</li></ol><ol type="1" id="3a77b16c-89f4-8144-b2e4-f578fc2e7855" class="numbered-list" start="4" dir="auto"><li>Horizontal rules</li></ol><ol type="1" id="3a77b16c-89f4-814e-bd0f-d7a45e0b7bfc" class="numbered-list" start="5" dir="auto"><li>Bold text</li></ol><ol type="1" id="3a77b16c-89f4-81a6-aa7a-c0fb2b653b02" class="numbered-list" start="6" dir="auto"><li>Italic text</li></ol><ol type="1" id="3a77b16c-89f4-8123-afbe-f9ef98b3a7c9" class="numbered-list" start="7" dir="auto"><li>Bold and italic text combined</li></ol><ol type="1" id="3a77b16c-89f4-81b1-92eb-d0ac06b6cf54" class="numbered-list" start="8" dir="auto"><li>Strikethrough text</li></ol><ol type="1" id="3a77b16c-89f4-819f-a3d5-dddfd2214517" class="numbered-list" start="9" dir="auto"><li>Underlined text using HTML</li></ol><ol type="1" id="3a77b16c-89f4-81aa-b4a8-f34f252a687a" class="numbered-list numbered-list-digits-2" start="10" dir="auto"><li>Highlighted text using HTML</li></ol><ol type="1" id="3a77b16c-89f4-8188-a198-c5ebff71632e" class="numbered-list numbered-list-digits-2" start="11" dir="auto"><li>Superscript using HTML</li></ol><ol type="1" id="3a77b16c-89f4-816a-ae9e-d55ea509fc11" class="numbered-list numbered-list-digits-2" start="12" dir="auto"><li>Subscript using HTML</li></ol><ol type="1" id="3a77b16c-89f4-8127-ac7f-c477676dd0ee" class="numbered-list numbered-list-digits-2" start="13" dir="auto"><li>Inline code</li></ol><ol type="1" id="3a77b16c-89f4-8149-a7c9-f097e10c1b7b" class="numbered-list numbered-list-digits-2" start="14" dir="auto"><li>Escaped Markdown characters</li></ol><ol type="1" id="3a77b16c-89f4-81f3-aff1-efb153394b97" class="numbered-list numbered-list-digits-2" start="15" dir="auto"><li>HTML entities</li></ol><ol type="1" id="3a77b16c-89f4-8105-87e8-e6c0cc68cb15" class="numbered-list numbered-list-digits-2" start="16" dir="auto"><li>Unordered lists</li></ol><ol type="1" id="3a77b16c-89f4-8183-a65b-e5f8bbc2a790" class="numbered-list numbered-list-digits-2" start="17" dir="auto"><li>Ordered lists</li></ol><ol type="1" id="3a77b16c-89f4-811a-b7f6-e1e96d74524f" class="numbered-list numbered-list-digits-2" start="18" dir="auto"><li>Nested lists</li></ol><ol type="1" id="3a77b16c-89f4-81c2-b306-fb59890825a2" class="numbered-list numbered-list-digits-2" start="19" dir="auto"><li>Mixed ordered and unordered lists</li></ol><ol type="1" id="3a77b16c-89f4-819e-8549-c5a56ea2add3" class="numbered-list numbered-list-digits-2" start="20" dir="auto"><li>Task lists</li></ol><ol type="1" id="3a77b16c-89f4-8106-b81d-f4534c2e630a" class="numbered-list numbered-list-digits-2" start="21" dir="auto"><li>Blockquotes</li></ol><ol type="1" id="3a77b16c-89f4-8121-810d-d5b463674c6f" class="numbered-list numbered-list-digits-2" start="22" dir="auto"><li>Nested blockquotes</li></ol><ol type="1" id="3a77b16c-89f4-81be-8c67-f236dd5bd9a4" class="numbered-list numbered-list-digits-2" start="23" dir="auto"><li>Inline links</li></ol><ol type="1" id="3a77b16c-89f4-815c-9c1e-ca1e1e209563" class="numbered-list numbered-list-digits-2" start="24" dir="auto"><li>Reference-style links</li></ol><ol type="1" id="3a77b16c-89f4-8180-8ddc-d1b01574d6f0" class="numbered-list numbered-list-digits-2" start="25" dir="auto"><li>Automatic links</li></ol><ol type="1" id="3a77b16c-89f4-81b3-bdfa-f959424d1923" class="numbered-list numbered-list-digits-2" start="26" dir="auto"><li>Email links</li></ol><ol type="1" id="3a77b16c-89f4-8102-9b28-c5732b11accb" class="numbered-list numbered-list-digits-2" start="27" dir="auto"><li>Images</li></ol><ol type="1" id="3a77b16c-89f4-8141-83a7-e80aa7f3c0cb" class="numbered-list numbered-list-digits-2" start="28" dir="auto"><li>Linked images</li></ol><ol type="1" id="3a77b16c-89f4-815b-8e07-de5d18d0026d" class="numbered-list numbered-list-digits-2" start="29" dir="auto"><li>Image titles</li></ol><ol type="1" id="3a77b16c-89f4-8102-97aa-c7ad248addaf" class="numbered-list numbered-list-digits-2" start="30" dir="auto"><li>Image alt text</li></ol><ol type="1" id="3a77b16c-89f4-8169-b311-c6c4717364fd" class="numbered-list numbered-list-digits-2" start="31" dir="auto"><li>Inline code blocks</li></ol><ol type="1" id="3a77b16c-89f4-8191-b01f-f680a8335e24" class="numbered-list numbered-list-digits-2" start="32" dir="auto"><li>Fenced code blocks</li></ol><ol type="1" id="3a77b16c-89f4-8140-a28a-e59096bebd0f" class="numbered-list numbered-list-digits-2" start="33" dir="auto"><li>Syntax-highlighted code blocks</li></ol><ol type="1" id="3a77b16c-89f4-816d-8a68-fa3d501117c2" class="numbered-list numbered-list-digits-2" start="34" dir="auto"><li>Code blocks containing Markdown syntax</li></ol><ol type="1" id="3a77b16c-89f4-8166-973e-d003dbd40938" class="numbered-list numbered-list-digits-2" start="35" dir="auto"><li>Tables</li></ol><ol type="1" id="3a77b16c-89f4-81ca-8617-f45a1b42da20" class="numbered-list numbered-list-digits-2" start="36" dir="auto"><li>Table alignment</li></ol><ol type="1" id="3a77b16c-89f4-813c-b6c1-d44ae971bed7" class="numbered-list numbered-list-digits-2" start="37" dir="auto"><li>Escaped pipe characters inside tables</li></ol><ol type="1" id="3a77b16c-89f4-819b-8bcf-e3e33d85e9bd" class="numbered-list numbered-list-digits-2" start="38" dir="auto"><li>Footnotes</li></ol><ol type="1" id="3a77b16c-89f4-8128-ae57-e9bf9a8cbe0a" class="numbered-list numbered-list-digits-2" start="39" dir="auto"><li>Definition lists</li></ol><ol type="1" id="3a77b16c-89f4-81d2-ac27-d131700fe8a3" class="numbered-list numbered-list-digits-2" start="40" dir="auto"><li>Abbreviations</li></ol><ol type="1" id="3a77b16c-89f4-8181-9426-e7b69845d7d8" class="numbered-list numbered-list-digits-2" start="41" dir="auto"><li>Heading IDs</li></ol><ol type="1" id="3a77b16c-89f4-8103-b3aa-f950ddac2d61" class="numbered-list numbered-list-digits-2" start="42" dir="auto"><li>Internal anchor links</li></ol><ol type="1" id="3a77b16c-89f4-810d-be78-d262cda62d68" class="numbered-list numbered-list-digits-2" start="43" dir="auto"><li>Emoji shortcodes</li></ol><ol type="1" id="3a77b16c-89f4-81dc-aa25-c79cb0abc5fe" class="numbered-list numbered-list-digits-2" start="44" dir="auto"><li>Unicode emoji</li></ol><ol type="1" id="3a77b16c-89f4-8143-96b6-e864bb3a530d" class="numbered-list numbered-list-digits-2" start="45" dir="auto"><li>Mathematical notation</li></ol><ol type="1" id="3a77b16c-89f4-8173-93b3-f2ed871e93ce" class="numbered-list numbered-list-digits-2" start="46" dir="auto"><li>LaTeX-style inline math</li></ol><ol type="1" id="3a77b16c-89f4-8166-87a2-c26e185031e0" class="numbered-list numbered-list-digits-2" start="47" dir="auto"><li>LaTeX-style display math</li></ol><ol type="1" id="3a77b16c-89f4-812f-ad16-ff1623a5130c" class="numbered-list numbered-list-digits-2" start="48" dir="auto"><li>Mermaid diagrams</li></ol><ol type="1" id="3a77b16c-89f4-8162-b5f4-f2a561897e8f" class="numbered-list numbered-list-digits-2" start="49" dir="auto"><li>PlantUML-style diagram blocks</li></ol><ol type="1" id="3a77b16c-89f4-818f-b087-f5510778f6cc" class="numbered-list numbered-list-digits-2" start="50" dir="auto"><li>Admonitions or callouts</li></ol><ol type="1" id="3a77b16c-89f4-81eb-8392-f7e3de2399f7" class="numbered-list numbered-list-digits-2" start="51" dir="auto"><li>Collapsible sections using HTML</li></ol><ol type="1" id="3a77b16c-89f4-8152-a9c2-ea1bc2c55215" class="numbered-list numbered-list-digits-2" start="52" dir="auto"><li>Raw inline HTML</li></ol><ol type="1" id="3a77b16c-89f4-8118-9687-da69baed5e3f" class="numbered-list numbered-list-digits-2" start="53" dir="auto"><li>Raw HTML blocks</li></ol><ol type="1" id="3a77b16c-89f4-8166-a553-e5cb84c507d2" class="numbered-list numbered-list-digits-2" start="54" dir="auto"><li>Keyboard key notation</li></ol><ol type="1" id="3a77b16c-89f4-8183-9fad-cf150c5c19f5" class="numbered-list numbered-list-digits-2" start="55" dir="auto"><li>Marked or inserted text</li></ol><ol type="1" id="3a77b16c-89f4-8151-b9ba-d3ce84a31f51" class="numbered-list numbered-list-digits-2" start="56" dir="auto"><li>Deleted text</li></ol><ol type="1" id="3a77b16c-89f4-8138-b3be-e569226f62e0" class="numbered-list numbered-list-digits-2" start="57" dir="auto"><li>Comments hidden in rendered output</li></ol><ol type="1" id="3a77b16c-89f4-8169-848d-d205be93e4a0" class="numbered-list numbered-list-digits-2" start="58" dir="auto"><li>Front matter</li></ol><ol type="1" id="3a77b16c-89f4-81f1-93b5-c7c10504f3ef" class="numbered-list numbered-list-digits-2" start="59" dir="auto"><li>Metadata-like content</li></ol><ol type="1" id="3a77b16c-89f4-81dc-ad3f-ec6f089ba0fc" class="numbered-list numbered-list-digits-2" start="60" dir="auto"><li>Hard tabs and indentation behavior</li></ol><ol type="1" id="3a77b16c-89f4-8142-8937-f36d9986da3e" class="numbered-list numbered-list-digits-2" start="61" dir="auto"><li>Long lines and horizontal scrolling</li></ol><ol type="1" id="3a77b16c-89f4-81ab-8c53-e796939f05d3" class="numbered-list numbered-list-digits-2" start="62" dir="auto"><li>Unicode and multilingual text</li></ol><ol type="1" id="3a77b16c-89f4-81b7-8b8d-e89a74f71c24" class="numbered-list numbered-list-digits-2" start="63" dir="auto"><li>Right-to-left text</li></ol><ol type="1" id="3a77b16c-89f4-81c9-94d6-e8551b3dfd5e" class="numbered-list numbered-list-digits-2" start="64" dir="auto"><li>Special punctuation</li></ol><ol type="1" id="3a77b16c-89f4-8142-b625-e0dccfc5b399" class="numbered-list numbered-list-digits-2" start="65" dir="auto"><li>URLs containing query parameters</li></ol><ol type="1" id="3a77b16c-89f4-8106-903a-f947f1d9af4a" class="numbered-list numbered-list-digits-2" start="66" dir="auto"><li>Relative links</li></ol><ol type="1" id="3a77b16c-89f4-81e8-a9f9-d0d9788910dd" class="numbered-list numbered-list-digits-2" start="67" dir="auto"><li>File links</li></ol><ol type="1" id="3a77b16c-89f4-8186-8aa4-ea4abacaacd2" class="numbered-list numbered-list-digits-2" start="68" dir="auto"><li>Nested formatting</li></ol><ol type="1" id="3a77b16c-89f4-8162-b082-f406afef1a0a" class="numbered-list numbered-list-digits-2" start="69" dir="auto"><li>Formatting adjacent to punctuation</li></ol><ol type="1" id="3a77b16c-89f4-8175-8fa2-c8972b8c9cb3" class="numbered-list numbered-list-digits-2" start="70" dir="auto"><li>Empty list items</li></ol><ol type="1" id="3a77b16c-89f4-81e2-92c1-d90c623a46c8" class="numbered-list numbered-list-digits-2" start="71" dir="auto"><li>Deeply nested content</li></ol><ol type="1" id="3a77b16c-89f4-8119-8e08-cee1342a0166" class="numbered-list numbered-list-digits-2" start="72" dir="auto"><li>Consecutive blank lines</li></ol><ol type="1" id="3a77b16c-89f4-8144-8a0b-c1490a99c1bc" class="numbered-list numbered-list-digits-2" start="73" dir="auto"><li>Trailing whitespace</li></ol><ol type="1" id="3a77b16c-89f4-810c-91f2-c3326bdd0758" class="numbered-list numbered-list-digits-2" start="74" dir="auto"><li>Backslash escapes</li></ol><ol type="1" id="3a77b16c-89f4-8181-a5dc-ebfa10e1f4f3" class="numbered-list numbered-list-digits-2" start="75" dir="auto"><li>Character entity rendering</li></ol><ol type="1" id="3a77b16c-89f4-8113-ab0d-d980867a8397" class="numbered-list numbered-list-digits-2" start="76" dir="auto"><li>Typographic substitutions</li></ol><ol type="1" id="3a77b16c-89f4-8158-95e2-f5bbca436dab" class="numbered-list numbered-list-digits-2" start="77" dir="auto"><li>Automatic table of contents compatibility</li></ol><ol type="1" id="3a77b16c-89f4-811a-9cb7-d04c8cdd1e82" class="numbered-list numbered-list-digits-2" start="78" dir="auto"><li>Print and export rendering</li></ol><ol type="1" id="3a77b16c-89f4-8168-bc76-e5fa7c9b7b0e" class="numbered-list numbered-list-digits-2" start="79" dir="auto"><li>Source/rendered preview synchronization</li></ol><ol type="1" id="3a77b16c-89f4-81d5-b771-d585816a8301" class="numbered-list numbered-list-digits-2" start="80" dir="auto"><li>Cursor and selection behavior around syntax</li></ol><ol type="1" id="3a77b16c-89f4-8101-925a-c8942d7c27c5" class="numbered-list numbered-list-digits-2" start="81" dir="auto"><li>Find and replace compatibility</li></ol><ol type="1" id="3a77b16c-89f4-81da-b5dc-fae3f4bea6a9" class="numbered-list numbered-list-digits-2" start="82" dir="auto"><li>Spell-check behavior</li></ol><ol type="1" id="3a77b16c-89f4-81e3-8864-fdb772cb8779" class="numbered-list numbered-list-digits-2" start="83" dir="auto"><li>Copy and paste behavior</li></ol><ol type="1" id="3a77b16c-89f4-8129-9f10-ef205565e4b7" class="numbered-list numbered-list-digits-2" start="84" dir="auto"><li>Undo and redo behavior</li></ol><ol type="1" id="3a77b16c-89f4-81e7-bc17-d8af6f1eea37" class="numbered-list numbered-list-digits-2" start="85" dir="auto"><li>Drag-and-drop image handling</li></ol><ol type="1" id="3a77b16c-89f4-8154-ad06-e53195c88f89" class="numbered-list numbered-list-digits-2" start="86" dir="auto"><li>Markdown linting compatibility</li></ol><ol type="1" id="3a77b16c-89f4-8151-b64e-c3d729b34553" class="numbered-list numbered-list-digits-2" start="87" dir="auto"><li>CommonMark compatibility</li></ol><ol type="1" id="3a77b16c-89f4-8117-aad6-fdb79294a903" class="numbered-list numbered-list-digits-2" start="88" dir="auto"><li>GitHub Flavored Markdown compatibility</li></ol><ol type="1" id="3a77b16c-89f4-8142-bdc3-c26c0a69af72" class="numbered-list numbered-list-digits-2" start="89" dir="auto"><li>MultiMarkdown compatibility</li></ol><ol type="1" id="3a77b16c-89f4-81db-b2c6-e2c9a2213341" class="numbered-list numbered-list-digits-2" start="90" dir="auto"><li>Editor-specific extension fallback behavior</li></ol><hr id="3a77b16c-89f4-81fa-a053-c708c8fd83f0" dir="auto"/><h2 id="3a77b16c-89f4-818c-91b9-c3be99f16e06" class="" dir="auto">Front Matter</h2><p id="3a77b16c-89f4-816a-9f78-f257e8c7535b" class="" dir="auto">The block below is displayed as text because a document can normally have only one front matter block at its beginning.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js" integrity="sha512-6O/PZimM3TD1NN3yrazePA4AbZrPcwt1QCGJrVY7WoHDJROZFc9TlBvIKMe+QfqgcslW4lQeBzNJEJvIMC8WhA==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-8111-bdf4-d3626870d504" class="code code-wrap" data-notion-code-syntax="yaml"><code class="language-yaml" style="white-space:pre-wrap;word-break:break-all">---
+title: Markdown Editor Feature Test Suite
+author: Example Author
+date: 2026-07-24
+tags:
+- markdown
+- editor
+- testing
+draft:false
+---</code></pre><hr id="3a77b16c-89f4-81e4-9f12-c3de56fd4d1d" dir="auto"/><h1 id="3a77b16c-89f4-8170-b335-c7ce7a487b99" class="" dir="auto">Heading Level 1</h1><h2 id="3a77b16c-89f4-810a-a632-d52d32e972e8" class="" dir="auto">Heading Level 2</h2><h3 id="3a77b16c-89f4-817e-89c8-c4be40217668" class="" dir="auto">Heading Level 3</h3><h4 id="3a77b16c-89f4-81b1-a421-fa0cfc56612b" class="" dir="auto">Heading Level 4</h4><h4 id="3a77b16c-89f4-8112-ab60-e53d78d74add" class="" dir="auto">Heading Level 5</h4><h4 id="3a77b16c-89f4-81f5-af54-f83f2281c985" class="" dir="auto">Heading Level 6</h4><h1 id="3a77b16c-89f4-81ae-ac0b-f5e438962e79" class="" dir="auto">Alternative heading level 1</h1><h2 id="3a77b16c-89f4-8166-b50b-e1d4eeb6e3d7" class="" dir="auto">Alternative heading level 2</h2><hr id="3a77b16c-89f4-81f9-af58-d4d87d6a93b5" dir="auto"/><h2 id="3a77b16c-89f4-813a-8daf-df8df9483deb" class="" dir="auto">Paragraphs and Line Breaks</h2><p id="3a77b16c-89f4-8108-b28b-dfdc3c870c07" class="" dir="auto">This is a normal paragraph. It contains enough text to test visual line wrapping, margin width, text selection, and reflow behavior. A Markdown editor should preserve the source text while allowing the rendered preview to wrap naturally.</p><p id="3a77b16c-89f4-8151-912d-ce8ceb40fb9e" class="" dir="auto">This is a second paragraph separated by one blank line.</p><p id="3a77b16c-89f4-81ee-af6f-db7bd7642373" class="" dir="auto">This line ends with two spaces.</p><p id="3a77b16c-89f4-81ae-813c-c1ee0077a64a" class="" dir="auto">This text should appear on a new line without creating a new paragraph.</p><p id="3a77b16c-89f4-81c4-8ea5-f3071af46f0f" class="" dir="auto">This line uses an HTML break.</p><p id="3a77b16c-89f4-8178-8497-dd06df48d631" class="" dir="auto">This text should also appear on a new line.</p><hr id="3a77b16c-89f4-815a-a48d-c38454e68c08" dir="auto"/><h2 id="3a77b16c-89f4-81ed-a379-c8f643e45f38" class="" dir="auto">Text Formatting</h2><p id="3a77b16c-89f4-81fb-a2ac-fd3381335db0" class="" dir="auto">Plain text</p><p id="3a77b16c-89f4-8172-8d53-f63727954d1d" class="" dir="auto"><strong>Bold using asterisks</strong></p><p id="3a77b16c-89f4-8100-9dea-d36d5f3f2401" class="" dir="auto"><strong>Bold using underscores</strong></p><p id="3a77b16c-89f4-81c6-a12e-ddabfe48699d" class="" dir="auto"><em>Italic using asterisks</em></p><p id="3a77b16c-89f4-81cf-a6e6-c5511a6fe8ac" class="" dir="auto"><em>Italic using underscores</em></p><p id="3a77b16c-89f4-81d2-93f0-e0137d33eead" class="" dir="auto"><em><strong>Bold and italic using asterisks</strong></em></p><p id="3a77b16c-89f4-81a9-9c1f-d0b95de84ffb" class="" dir="auto"><em><strong>Bold and italic using underscores</strong></em></p><p id="3a77b16c-89f4-8181-8ffa-c52f654253e6" class="" dir="auto"><del>Strikethrough</del></p><p id="3a77b16c-89f4-815e-b758-c645abf11421" class="" dir="auto"><span style="border-bottom:0.05em solid">Underlined text using HTML</span></p><p id="3a77b16c-89f4-8147-b3e6-e92c79bb1cfa" class="" dir="auto">Highlighted text using HTML</p><p id="3a77b16c-89f4-817d-8522-cd81ba5fe42a" class="" dir="auto">Superscript: E = mc2</p><p id="3a77b16c-89f4-81c5-8a8e-ffe859c4c2f5" class="" dir="auto">Subscript: H2O</p><p id="3a77b16c-89f4-81ae-bfa9-e323d744d31c" class="" dir="auto">Inserted text: This text was inserted.</p><p id="3a77b16c-89f4-81de-ae33-cd74145bdbbf" class="" dir="auto">Deleted text: <del>This text was deleted.</del></p><p id="3a77b16c-89f4-814f-9b98-df2b9c52ee5f" class="" dir="auto">Keyboard input: Press Ctrl + S.</p><p id="3a77b16c-89f4-81f0-9342-c02a4f7a412d" class="" dir="auto">Sample output: Build completed successfully.</p><p id="3a77b16c-89f4-811f-85d4-edf5a50d45b4" class="" dir="auto">Variable: x + y</p><p id="3a77b16c-89f4-81a0-9b02-d83df3769889" class="" dir="auto">Nested formatting: <strong>bold with </strong><em><strong>italic</strong></em><strong>, </strong><code><strong>inline code</strong></code><strong>, and </strong><del><strong>strikethrough</strong></del><strong> inside</strong></p><p id="3a77b16c-89f4-812b-8109-e5c50ec7b157" class="" dir="auto">Formatting next to punctuation: <strong>bold</strong>, <em>italic</em>; <del>deleted</del>. <code>code</code>!</p><p id="3a77b16c-89f4-81ab-8364-d11a202e27d0" class="" dir="auto">Formatting inside parentheses: (<strong>bold</strong>) (<em>italic</em>) (<code>code</code>)</p><hr id="3a77b16c-89f4-818f-85e6-ed5be14eb3f5" dir="auto"/><h2 id="3a77b16c-89f4-8198-a1d9-e5a95f867ac8" class="" dir="auto">Escaping Markdown Characters</h2><ul id="3a77b16c-89f4-8189-86cb-cf186e82ab40" class="bulleted-list" dir="auto"><li style="list-style-type:disc">This should not be italic.*</li></ul><p id="3a77b16c-89f4-814a-9804-fb32326cefdc" class="" dir="auto">_This should not be italic._</p><p id="3a77b16c-89f4-810d-b6f4-e19e1fba171a" class="" dir="auto"># This should not be a heading.</p><ul id="3a77b16c-89f4-815c-a732-f9c42d82d8bc" class="bulleted-list" dir="auto"><li style="list-style-type:disc">This should not be a list item.</li></ul><p id="3a77b16c-89f4-81f0-8665-cdb574b9cd38" class="" dir="auto">&gt; This should not be a blockquote.</p><p id="3a77b16c-89f4-81e8-88d1-c11cf32e1b71" class="" dir="auto">`This should not be inline code.`</p><p id="3a77b16c-89f4-810a-814e-facef59933e9" class="" dir="auto">Escaped backslash: \</p><p id="3a77b16c-89f4-819a-ac40-f8ca22a4a0e3" class="" dir="auto">Literal braces: {example}</p><p id="3a77b16c-89f4-814f-9774-d08f9d849ede" class="" dir="auto">Literal brackets: [example]</p><p id="3a77b16c-89f4-8165-87d0-c53eb7997edb" class="" dir="auto">Literal parentheses: (example)</p><hr id="3a77b16c-89f4-81c9-8634-c10e03f94b62" dir="auto"/><h2 id="3a77b16c-89f4-8138-b8c7-e757ec697e99" class="" dir="auto">HTML Entities and Special Characters</h2><p id="3a77b16c-89f4-81a9-9242-d2f4f610e6c7" class="" dir="auto">Ampersand: &amp;</p><p id="3a77b16c-89f4-816f-b276-fb7e65828c7a" class="" dir="auto">Less than: &lt;</p><p id="3a77b16c-89f4-81f5-9dad-d1cb36ce9ade" class="" dir="auto">Greater than: &gt;</p><p id="3a77b16c-89f4-8165-bb5d-fd34ad740165" class="" dir="auto">Copyright: ©</p><p id="3a77b16c-89f4-81aa-b7ea-c457b8baa302" class="" dir="auto">Registered trademark: ®</p><p id="3a77b16c-89f4-81a8-a915-c006fc31c59d" class="" dir="auto">Non-breaking space between these words.</p><p id="3a77b16c-89f4-81d4-8ef5-debedd2c448b" class="" dir="auto">Em dash: —</p><p id="3a77b16c-89f4-819a-ba2f-f3967c6dbeba" class="" dir="auto">En dash: –</p><p id="3a77b16c-89f4-81e7-b61b-e74355df1ea2" class="" dir="auto">Ellipsis: …</p><p id="3a77b16c-89f4-819c-b73e-ef48aebf5756" class="" dir="auto">Curly quotes: “double” and ‘single’</p><p id="3a77b16c-89f4-8116-930c-cf131c7127a1" class="" dir="auto">Arrows: ← ↑ → ↓ ↔︎</p><p id="3a77b16c-89f4-81f0-b582-d13ef0004a3d" class="" dir="auto">Math symbols: ± × ÷ ≠ ≤ ≥ ∞ √ ∑ ∫</p><p id="3a77b16c-89f4-8113-abf2-d430deddbf6d" class="" dir="auto">Currency symbols: € $ £ ¥ ₹</p><hr id="3a77b16c-89f4-8155-8cfa-d3bafd3bc14e" dir="auto"/><h2 id="3a77b16c-89f4-81d0-802d-c6571732b529" class="" dir="auto">Inline Code</h2><p id="3a77b16c-89f4-815d-aec7-fcee474dc964" class="" dir="auto">Use <code>npm install</code> to install a package.</p><p id="3a77b16c-89f4-811a-a70e-cfe0a7e8c665" class="" dir="auto">A code span containing a backtick: <code>Use the ` character.</code></p><p id="3a77b16c-89f4-817b-908c-c51090a83500" class="" dir="auto">A code span with surrounding spaces: <code>code with spaces</code></p><p id="3a77b16c-89f4-813d-aa71-d65b3487d007" class="" dir="auto">Markdown inside inline code should not render: <code>**not bold** and *not italic*</code></p><hr id="3a77b16c-89f4-81a5-868c-c6a3634dec49" dir="auto"/><h2 id="3a77b16c-89f4-8125-89e9-e5bb97be9340" class="" dir="auto">Unordered Lists</h2><ul id="3a77b16c-89f4-8135-98da-fedee538fbfb" class="bulleted-list" dir="auto"><li style="list-style-type:disc">First item</li></ul><ul id="3a77b16c-89f4-8115-8166-dbbd7a1354f2" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Second item</li></ul><ul id="3a77b16c-89f4-81c9-980f-dcd6d6190662" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Third item</li></ul><ul id="3a77b16c-89f4-8171-87f5-cef372c9db14" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Item using an asterisk</li></ul><ul id="3a77b16c-89f4-8142-8e37-e493e744705b" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Another item</li></ul><ul id="3a77b16c-89f4-810d-983a-dec9d5e4d774" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Item using a plus sign</li></ul><ul id="3a77b16c-89f4-81b9-a42d-f5967bb9ba9b" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Another item</li></ul><h3 id="3a77b16c-89f4-8150-bc8b-e7003dcf5d6f" class="" dir="auto">Nested Unordered List</h3><ul id="3a77b16c-89f4-816e-959d-cac208d782d9" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Level 1<ul id="3a77b16c-89f4-818c-8603-d27f48c6ad4a" class="bulleted-list" dir="auto"><li style="list-style-type:circle">Level 2<ul id="3a77b16c-89f4-8119-b484-d0167abb731e" class="bulleted-list" dir="auto"><li style="list-style-type:square">Level 3<ul id="3a77b16c-89f4-8182-a4e4-d9bddb6e6aeb" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Level 4<ul id="3a77b16c-89f4-8149-84d9-d992b90e12de" class="bulleted-list" dir="auto"><li style="list-style-type:circle">Level 5</li></ul></li></ul></li></ul></li></ul></li></ul><h3 id="3a77b16c-89f4-8153-bba1-eab23d95752d" class="" dir="auto">Loose List</h3><ul id="3a77b16c-89f4-810d-bce0-e34b5a3fb23a" class="bulleted-list" dir="auto"><li style="list-style-type:disc">First item with a paragraph.<p id="3a77b16c-89f4-81a0-8b4e-e495349b022c" class="" dir="auto">This paragraph belongs to the first item.</p></li></ul><ul id="3a77b16c-89f4-8197-9989-e8e3caca46c2" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Second item with another paragraph.<p id="3a77b16c-89f4-8129-b772-d67dbd0b8720" class="" dir="auto">This paragraph belongs to the second item.</p></li></ul><h3 id="3a77b16c-89f4-818d-a05f-cf5ba0917721" class="" dir="auto">Empty List Item Test</h3><ul id="3a77b16c-89f4-8149-be3c-d92c0b25f6fe" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Item before</li></ul><ul id="3a77b16c-89f4-8178-a960-f1ec01890adc" class="bulleted-list" dir="auto"><li style="list-style-type:disc"></li></ul><ul id="3a77b16c-89f4-81ed-b759-d2fdd6b0a14f" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Item after</li></ul><hr id="3a77b16c-89f4-816e-a667-e1efd643a2a2" dir="auto"/><h2 id="3a77b16c-89f4-81ba-93e7-d2c7840e0e36" class="" dir="auto">Ordered Lists</h2><ol type="1" id="3a77b16c-89f4-8158-826d-cb5d032f6c14" class="numbered-list" start="1" dir="auto"><li>First item</li></ol><ol type="1" id="3a77b16c-89f4-8155-89f8-eeb491731e67" class="numbered-list" start="2" dir="auto"><li>Second item</li></ol><ol type="1" id="3a77b16c-89f4-813a-8109-f06d40e655dd" class="numbered-list" start="3" dir="auto"><li>Third item</li></ol><ol type="1" id="3a77b16c-89f4-8168-b003-d2b3c5ce3673" class="numbered-list" start="4" dir="auto"><li>The source number is one.</li></ol><ol type="1" id="3a77b16c-89f4-81e5-b98a-d31897a199c9" class="numbered-list" start="5" dir="auto"><li>This may render as two.</li></ol><ol type="1" id="3a77b16c-89f4-813c-8b8b-e2c067b062f0" class="numbered-list" start="6" dir="auto"><li>This may render as three.</li></ol><ol type="1" id="3a77b16c-89f4-8116-9208-f543ea3910bf" class="numbered-list" start="7" dir="auto"><li>List beginning at five</li></ol><ol type="1" id="3a77b16c-89f4-8122-809f-eb102eb43768" class="numbered-list" start="8" dir="auto"><li>Next item</li></ol><ol type="1" id="3a77b16c-89f4-81fe-a7e4-dff1deaf835c" class="numbered-list" start="9" dir="auto"><li>Final item</li></ol><h3 id="3a77b16c-89f4-81c8-8421-f8764ff80d18" class="" dir="auto">Nested Ordered List</h3><ol type="1" id="3a77b16c-89f4-8148-a704-ee1f8f17c7ba" class="numbered-list" start="1" dir="auto"><li>Level 1<ol type="a" id="3a77b16c-89f4-81bd-8442-fb3234713181" class="numbered-list" start="1" dir="auto"><li>Level 2<ol type="i" id="3a77b16c-89f4-817a-81b1-cd82e48af8bd" class="numbered-list" start="1" dir="auto"><li>Level 3<ol type="1" id="3a77b16c-89f4-81b3-a1b1-fb0d6dcd3793" class="numbered-list" start="1" dir="auto"><li>Level 4</li></ol></li></ol></li></ol></li></ol><h3 id="3a77b16c-89f4-81c2-89c9-edd9a42dba9d" class="" dir="auto">Mixed List</h3><ol type="1" id="3a77b16c-89f4-8190-afef-f424b4cbe44d" class="numbered-list" start="1" dir="auto"><li>Ordered item<ul id="3a77b16c-89f4-817c-b581-c3011a02d1be" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Unordered child</li></ul><ul id="3a77b16c-89f4-81c6-8c62-c659b6cafac4" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Another unordered child</li></ul></li></ol><ol type="1" id="3a77b16c-89f4-815a-8ef7-d3b13152ae47" class="numbered-list" start="2" dir="auto"><li>Ordered item<ol type="a" id="3a77b16c-89f4-810d-b014-e4fbc177ae1c" class="numbered-list" start="1" dir="auto"><li>Ordered child</li></ol><ol type="a" id="3a77b16c-89f4-81a4-9c5a-ec7a4f9d0c93" class="numbered-list" start="2" dir="auto"><li>Another ordered child</li></ol></li></ol><ol type="1" id="3a77b16c-89f4-8154-8358-f682e8fae886" class="numbered-list" start="3" dir="auto"><li>Final ordered item</li></ol><hr id="3a77b16c-89f4-8112-94ba-ff0f6336be5c" dir="auto"/><h2 id="3a77b16c-89f4-8149-9e96-d8a068130f80" class="" dir="auto">Task Lists</h2><ul id="3a77b16c-89f4-812b-bb45-e5dda6138e68" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Completed task</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817e-ae7c-d55e1c916e80" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Completed task using uppercase X</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8100-b8db-eb305c2648de" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Incomplete task</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-812e-9c7d-fa0efbc77bca" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Parent task</span><div class="indented"><ul id="3a77b16c-89f4-81b2-8282-e8998247e10a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Completed child task</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8149-9ca0-efb9c9bf176d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Incomplete child task</span><div class="indented"></div></li></ul></div></li></ul><hr id="3a77b16c-89f4-816c-9ae3-ce602175a9a8" dir="auto"/><h2 id="3a77b16c-89f4-812c-b026-d9de4ab33924" class="" dir="auto">Blockquotes</h2><blockquote id="3a77b16c-89f4-8171-af58-e77c58576ab6" class="" dir="auto">This is a blockquote.</blockquote><blockquote id="3a77b16c-89f4-81ce-b718-d60e7275a143" class="" dir="auto">This blockquote contains multiple lines.<p id="3a77b16c-89f4-81d8-840d-f2d076c34c00" class="" dir="auto">It also contains a second paragraph.</p></blockquote><blockquote id="3a77b16c-89f4-8173-9bed-ff8af4fa3d86" class="" dir="auto"><strong>Formatting works inside blockquotes.</strong><ul id="3a77b16c-89f4-81f9-a593-dab88a3ede7d" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Lists can appear inside blockquotes.</li></ul><ul id="3a77b16c-89f4-811c-831c-f0df39540b17" class="bulleted-list" dir="auto"><li style="list-style-type:disc">So can <code>inline code</code>.</li></ul></blockquote><h3 id="3a77b16c-89f4-8117-b4ab-f2f207199caf" class="" dir="auto">Nested Blockquotes</h3><blockquote id="3a77b16c-89f4-8168-b9f2-cc5f829e2386" class="" dir="auto">Level 1<blockquote id="3a77b16c-89f4-8143-88a3-eddc909120dd" class="" dir="auto">Level 2<blockquote id="3a77b16c-89f4-81f6-8df1-db3175f5e3cc" class="" dir="auto">Level 3</blockquote></blockquote></blockquote><h3 id="3a77b16c-89f4-811c-9439-fea722513fd1" class="" dir="auto">Blockquote Containing Code</h3><blockquote id="3a77b16c-89f4-8125-b526-c0a2acd1bbd1" class="" dir="auto">Example:<pre id="3a77b16c-89f4-8119-b674-d1e8918a7706" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">This is code inside a blockquote.</code></pre></blockquote><hr id="3a77b16c-89f4-813e-9b44-e305ed4b3cde" dir="auto"/><h2 id="3a77b16c-89f4-8139-94c9-e34cf6f015c8" class="" dir="auto">Horizontal Rules</h2><p id="3a77b16c-89f4-81eb-b031-d24132ef9747" class="" dir="auto">Three hyphens:</p><hr id="3a77b16c-89f4-81e3-a77e-e4de76c485b5" dir="auto"/><p id="3a77b16c-89f4-8175-a20a-cfb395058ddb" class="" dir="auto">Three asterisks:</p><hr id="3a77b16c-89f4-81fe-abd0-ed75dfe8cf9b" dir="auto"/><p id="3a77b16c-89f4-81e3-a580-f37c9a7d2cab" class="" dir="auto">Three underscores:</p><hr id="3a77b16c-89f4-8121-882f-f0b6fef7ade3" dir="auto"/><p id="3a77b16c-89f4-819c-81bd-fe357ff9f837" class="" dir="auto">Spaced asterisks:</p><hr id="3a77b16c-89f4-8123-bb00-e4f975dae3d5" dir="auto"/><hr id="3a77b16c-89f4-812e-a04c-d30e0ce8f215" dir="auto"/><h2 id="3a77b16c-89f4-81e0-9c92-ef4ff4b6678b" class="" dir="auto">Links</h2><h3 id="3a77b16c-89f4-8110-b2c9-c219273d70c1" class="" dir="auto">Inline Links</h3><p id="3a77b16c-89f4-8101-bfa7-f953cfc75a4b" class="" dir="auto"><a href="https://openai.com/">OpenAI</a></p><p id="3a77b16c-89f4-8140-b981-c6d7d3849014" class="" dir="auto"><a href="https://example.com/">Link with a title</a></p><p id="3a77b16c-89f4-8131-8b56-d7c8fd89359a" class="" dir="auto"><a href="https://example.com/search?q=markdown&amp;sort=recent#results">URL with query parameters</a></p><p id="3a77b16c-89f4-81f9-a15a-e0d02fcee04d" class="" dir="auto"><a href="https://app.notion.com./docs/example.md">Relative link</a></p><p id="3a77b16c-89f4-8160-95cf-d0aaa0eb51ad" class="" dir="auto"><a href="https://app.notion.com../README.md">Parent-directory link</a></p><p id="3a77b16c-89f4-8158-810d-fef1c5afaa26" class="" dir="auto"><a href="https://app.notion.comfile:///tmp/example.txt">File link</a></p><h3 id="3a77b16c-89f4-8188-a8ba-efbd284743fb" class="" dir="auto">Reference-Style Links</h3><p id="3a77b16c-89f4-81dd-9ce6-eae214a5f8fe" class="" dir="auto"><a href="https://example.com/">Reference link</a></p><p id="3a77b16c-89f4-8152-845b-e1c589a78d40" class="" dir="auto"><a href="https://example.org/">Collapsed reference link</a></p><p id="3a77b16c-89f4-81e2-bc10-c3845b415817" class="" dir="auto"><a href="https://example.net/">Shortcut reference</a></p><h3 id="3a77b16c-89f4-815e-ad8e-c4a7e184b886" class="" dir="auto">Automatic Links</h3><p id="3a77b16c-89f4-81b9-9563-fb4d86146231" class="" dir="auto"><a href="https://example.com/">https://example.com</a></p><p id="3a77b16c-89f4-818b-a5fa-edae5503f8f9" class="" dir="auto"><a href="mailto:user@example.com">user@example.com</a></p><p id="3a77b16c-89f4-818a-b17a-cd7c62e0a3fd" class="" dir="auto">Some editors also autolink bare URLs: <a href="https://example.com/path?value=1">https://example.com/path?value=1</a></p><h3 id="3a77b16c-89f4-81f6-93e8-ce5cb780baf3" class="" dir="auto">Email Link</h3><p id="3a77b16c-89f4-813e-8f7d-f814dbcc0c02" class="" dir="auto"><a href="mailto:user@example.com?subject=Markdown%20Test">Send an email</a></p><h3 id="3a77b16c-89f4-8186-99d1-e765d02d7266" class="" dir="auto">Internal Anchor Links</h3><p id="3a77b16c-89f4-816d-8b27-d0d970d095f2" class="" dir="auto"><a href="about:blank#tables">Jump to the tables section</a></p><p id="3a77b16c-89f4-81a3-a39a-d2fdb726e25e" class="" dir="auto"><a href="about:blank#custom-anchor">Jump to the custom heading ID</a></p><hr id="3a77b16c-89f4-81cc-ac08-f471724814b7" dir="auto"/><h2 id="3a77b16c-89f4-81ef-b795-f56609a54236" class="" dir="auto">Images</h2><h3 id="3a77b16c-89f4-816f-8957-c97b83e1f564" class="" dir="auto">Standard Image</h3><p id="3a77b16c-89f4-81c1-ad1a-c2bcb949fb87" class="" dir="auto">Placeholder image alt text</p><figure id="3a77b16c-89f4-8173-935b-f458e7bbfacc" class="image" data-notion-image="https://placehold.co/600x200" dir="ltr"><a href="https://placehold.co/600x200"><img src="https://placehold.co/600x200"/></a><figcaption>Placeholder image alt text</figcaption></figure><h3 id="3a77b16c-89f4-815c-8156-c82060e7c917" class="" dir="auto">Image Without Title</h3><p id="3a77b16c-89f4-811e-bf96-ea0268191ca5" class="" dir="auto">Alternative text</p><figure id="3a77b16c-89f4-8144-b461-d6d8fbc00cee" class="image" data-notion-image="https://placehold.co/300x100" dir="ltr"><a href="https://placehold.co/300x100"><img src="https://placehold.co/300x100"/></a><figcaption>Alternative text</figcaption></figure><h3 id="3a77b16c-89f4-81a7-868a-e52f2037304f" class="" dir="auto">Linked Image</h3><figure id="3a77b16c-89f4-81b8-b9cd-ff695a60b760" class="image" data-notion-image="https://placehold.co/240x80" dir="ltr"><a href="https://placehold.co/240x80"><img src="https://placehold.co/240x80"/></a></figure><h3 id="3a77b16c-89f4-81eb-a4bd-e6dbd46146f5" class="" dir="auto">Relative Image Path</h3><pre id="3a77b16c-89f4-810c-8f75-f57e54254bc6" class="code code-wrap" data-notion-code-syntax="markdown"><code class="language-markdown" style="white-space:pre-wrap;word-break:break-all">![Relative image](./images/example.png)</code></pre><h3 id="3a77b16c-89f4-81c0-a3cf-e4015d8e0e0b" class="" dir="auto">HTML Image With Dimensions</h3><figure id="3a77b16c-89f4-81b3-ab85-ea0e330fd02c" class="image" data-notion-image="https://placehold.co/320x120" dir="ltr"><a href="https://placehold.co/320x120"><img style="width:304px" src="https://placehold.co/320x120"/></a></figure><hr id="3a77b16c-89f4-819a-92fc-ecc5b4101ee0" dir="auto"/><h2 id="3a77b16c-89f4-813a-8826-e150e3c4e749" class="" dir="auto">Code Blocks</h2><h3 id="3a77b16c-89f4-8188-bdd5-e1cb68562f0f" class="" dir="auto">Indented Code Block</h3><pre id="3a77b16c-89f4-81a6-a3f7-cbf8423dcac5" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">This is an indented code block.
+Markdown such as **bold** should not render here.</code></pre><h3 id="3a77b16c-89f4-81ea-804c-cae21a28a99f" class="" dir="auto">Plain Fenced Code Block</h3><pre id="3a77b16c-89f4-81b0-8ef3-f51280e22931" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">This is a plain fenced code block.
+# This is not a heading.
+- This is not a list.</code></pre><h3 id="3a77b16c-89f4-81fb-9a17-e542998702a3" class="" dir="auto">JavaScript</h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-jsx.min.js" integrity="sha512-m3JYEI6gx5fh9jF10FjGoMzVKcV2N6nchcDcqPCdI1L3R2WQV7br2XVNR8iTLb2daOMRl3zldbcfT40xU2ntVw==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-8176-80f8-e07427abab7a" class="code code-wrap" data-notion-code-syntax="jsx"><code class="language-jsx" style="white-space:pre-wrap;word-break:break-all">function greet(name) {
+  if (typeof name !== &quot;string&quot; || name.trim() === &quot;&quot;) {
+    throw new TypeError(&quot;name must be a non-empty string&quot;);
+  }
+
+  return `Hello,${name}!`;
+}
+
+console.log(greet(&quot;Markdown&quot;));</code></pre><h3 id="3a77b16c-89f4-8193-9ef3-e9a542894409" class="" dir="auto">TypeScript</h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js" integrity="sha512-uOw7XYETzS/DPmmirpP5UCMihSDNMeyTS965J0/456OSPfxn9xEtHHjj5Q/5WefVdqyMfN/afmQnNpZd/tpkcA==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-tsx.min.js" integrity="sha512-xjGCJ9YxyZBfYTCHsEjkOZMoOse1W3cKMXv1szXrxs68myuXt0YTj3/xKPar6iDMlXzTUSEqwUxprWcyp+plaw==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-813e-860a-e7606d487533" class="code code-wrap" data-notion-code-syntax="tsx"><code class="language-tsx" style="white-space:pre-wrap;word-break:break-all">interface User {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
+const users: User[] = [
+  { id: 1, name: &quot;Ada&quot;, active: true },
+  { id: 2, name: &quot;Linus&quot;, active: false },
+];
+
+const activeUsers = users.filter((user) =&gt; user.active);</code></pre><h3 id="3a77b16c-89f4-8159-a701-d47004655a85" class="" dir="auto">Python</h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js" integrity="sha512-AKaNmg8COK0zEbjTdMHJAPJ0z6VeNqvRvH4/d5M4sHJbQQUToMBtodq4HaV4fa+WV2UTfoperElm66c9/8cKmQ==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-818c-9187-fa5f164c877d" class="code code-wrap" data-notion-code-syntax="python"><code class="language-python" style="white-space:pre-wrap;word-break:break-all">from dataclasses import dataclass
+
+@dataclass
+class Point:
+    x: float
+    y: float
+
+def distance_squared(a: Point, b: Point) -&gt; float:
+    return (a.x - b.x) ** 2 + (a.y - b.y) ** 2
+
+print(distance_squared(Point(0, 0), Point(3, 4)))</code></pre><h3 id="3a77b16c-89f4-8190-b81a-d0051a725026" class="" dir="auto">HTML</h3><pre id="3a77b16c-89f4-819f-b5b9-f69336f20ddf" class="code code-wrap" data-notion-code-syntax="html"><code class="language-html" style="white-space:pre-wrap;word-break:break-all">&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+  &lt;head&gt;
+    &lt;meta charset=&quot;utf-8&quot;&gt;
+    &lt;title&gt;Markdown Test&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;main&gt;
+      &lt;h1&gt;Hello&lt;/h1&gt;
+    &lt;/main&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre><h3 id="3a77b16c-89f4-81df-a32a-f0afed102b85" class="" dir="auto">CSS</h3><pre id="3a77b16c-89f4-81a1-9829-db8cc9d5f63c" class="code code-wrap" data-notion-code-syntax="css"><code class="language-css" style="white-space:pre-wrap;word-break:break-all">:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+.markdown-body {
+  max-width: 72ch;
+  margin-inline: auto;
+}</code></pre><h3 id="3a77b16c-89f4-810b-bd0b-e17efee47e08" class="" dir="auto">JSON</h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js" integrity="sha512-QXFMVAusM85vUYDaNgcYeU3rzSlc+bTV4JvkfJhjxSHlQEo+ig53BtnGkvFTiNJh8D+wv6uWAQ2vJaVmxe8d3w==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-814e-96d5-c919b71d82e0" class="code code-wrap" data-notion-code-syntax="json"><code class="language-json" style="white-space:pre-wrap;word-break:break-all">{
+  &quot;name&quot;: &quot;markdown-editor-test&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;features&quot;: [&quot;preview&quot;, &quot;syntax-highlighting&quot;, &quot;export&quot;]
+}</code></pre><h3 id="3a77b16c-89f4-811a-bc96-cfff561713cb" class="" dir="auto">YAML</h3><pre id="3a77b16c-89f4-819a-8d75-cc722c51b8db" class="code code-wrap" data-notion-code-syntax="yaml"><code class="language-yaml" style="white-space:pre-wrap;word-break:break-all">editor:
+preview:true
+line_numbers:true
+theme: system
+extensions:
+- tables
+- footnotes
+- task-lists</code></pre><h3 id="3a77b16c-89f4-8183-a9e2-e51bd409c617" class="" dir="auto">Shell</h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js" integrity="sha512-whYhDwtTmlC/NpZlCr6PSsAaLOrfjVg/iXAnC4H/dtiHawpShhT2SlIMbpIhT/IL/NrpdMm+Hq2C13+VKpHTYw==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-819e-84fd-d5a1dba9ea22" class="code code-wrap" data-notion-code-syntax="bash"><code class="language-bash" style="white-space:pre-wrap;word-break:break-all">set -euo pipefail
+
+printf &#x27;%s\n&#x27; &quot;Testing Markdown editor&quot;
+find . -type f -name &#x27;*.md&#x27; -print</code></pre><h3 id="3a77b16c-89f4-8185-8998-c3c6482e3166" class="" dir="auto">SQL</h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js" integrity="sha512-sijCOJblSCXYYmXdwvqV0tak8QJW5iy2yLB1wAbbLc3OOIueqymizRFWUS/mwKctnzPKpNdPJV3aK1zlDMJmXQ==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><pre id="3a77b16c-89f4-81d2-9624-d61a806e5b4e" class="code code-wrap" data-notion-code-syntax="sql"><code class="language-sql" style="white-space:pre-wrap;word-break:break-all">SELECT
+    feature_name,
+    supported
+FROM markdown_features
+WHERE category = &#x27;formatting&#x27;
+ORDER BY feature_name;</code></pre><h3 id="3a77b16c-89f4-8123-94f2-cf26b4dc742f" class="" dir="auto">Diff</h3><pre id="3a77b16c-89f4-812e-9a91-ddb61c142da0" class="code code-wrap" data-notion-code-syntax="diff"><code class="language-diff" style="white-space:pre-wrap;word-break:break-all">- Old line
++ New line
+  Unchanged line</code></pre><h3 id="3a77b16c-89f4-81f6-8b5f-e821ae79ae71" class="" dir="auto">Markdown Inside a Code Block</h3><pre id="3a77b16c-89f4-8166-934c-e8dab5271c22" class="code code-wrap" data-notion-code-syntax="markdown"><code class="language-markdown" style="white-space:pre-wrap;word-break:break-all"># This heading should remain source text
+
+-This list should not render.
+-**This text should not become bold.**
+
+[This link should not be clickable](https://example.com)</code></pre><h3 id="3a77b16c-89f4-8189-8924-d44fc4de319d" class="" dir="auto">Nested Fence Test</h3><pre id="3a77b16c-89f4-81ce-af14-dba562afe510" class="code code-wrap" data-notion-code-syntax="markdown"><code class="language-markdown" style="white-space:pre-wrap;word-break:break-all">```javascript
+console.log(&quot;A fenced block inside a longer fence.&quot;);
+```</code></pre><hr id="3a77b16c-89f4-81ce-b03b-d3705a5b776d" dir="auto"/><h2 id="3a77b16c-89f4-81da-ba95-f492b56dc129" class="" dir="auto">Tables</h2><h3 id="3a77b16c-89f4-8168-a98e-eb94a5b7c93a" class="" dir="auto">Basic Table</h3><table id="3a77b16c-89f4-81c5-b271-fc3d5f6d20aa" class="simple-table" dir="ltr"><thead class="simple-table-header"><tr id="3a77b16c-89f4-8166-bcc5-fc0e789f37fa" dir="ltr"><th id="Pguw" class="simple-table-header-color simple-table-header">Feature</th><th id="[AQo" class="simple-table-header-color simple-table-header">Supported</th><th id="pajz" class="simple-table-header-color simple-table-header">Notes</th></tr></thead><tbody><tr id="3a77b16c-89f4-81be-8189-da6be506a01d" dir="ltr"><td id="Pguw" class="">Headings</td><td id="[AQo" class="">Yes</td><td id="pajz" class="">Levels 1–6</td></tr><tr id="3a77b16c-89f4-81aa-aa97-fe91404b3067" dir="ltr"><td id="Pguw" class="">Tables</td><td id="[AQo" class="">Yes</td><td id="pajz" class="">Extension in many parsers</td></tr><tr id="3a77b16c-89f4-81ee-a545-ee70fbb09d76" dir="ltr"><td id="Pguw" class="">Footnotes</td><td id="[AQo" class="">Maybe</td><td id="pajz" class="">Depends on parser</td></tr></tbody></table><h3 id="3a77b16c-89f4-810d-912a-ce980a0a0a29" class="" dir="auto">Alignment</h3><table id="3a77b16c-89f4-8166-9313-e98c67530d79" class="simple-table" dir="ltr"><thead class="simple-table-header"><tr id="3a77b16c-89f4-81ea-a4cd-d52cc40883b7" dir="ltr"><th id="K_;K" class="simple-table-header-color simple-table-header">Left aligned</th><th id="]:M|" class="simple-table-header-color simple-table-header">Center aligned</th><th id="ysUA" class="simple-table-header-color simple-table-header">Right aligned</th></tr></thead><tbody><tr id="3a77b16c-89f4-81fa-bbf0-e88b619d03ca" dir="ltr"><td id="K_;K" class="">Left</td><td id="]:M|" class="">Center</td><td id="ysUA" class="">Right</td></tr><tr id="3a77b16c-89f4-817c-81a1-fb8af46ce4cc" dir="ltr"><td id="K_;K" class="">A longer value</td><td id="]:M|" class="">Medium</td><td id="ysUA" class="">123.45</td></tr></tbody></table><h3 id="3a77b16c-89f4-816b-8bc5-ee14e57f8d86" class="" dir="auto">Formatting Inside Tables</h3><table id="3a77b16c-89f4-81e2-8ddd-f2ffc4ad3255" class="simple-table" dir="ltr"><thead class="simple-table-header"><tr id="3a77b16c-89f4-8118-ad2a-d4ab624265ee" dir="ltr"><th id="[}tt" class="simple-table-header-color simple-table-header">Type</th><th id="yabL" class="simple-table-header-color simple-table-header">Example</th></tr></thead><tbody><tr id="3a77b16c-89f4-8139-8e0a-e200d874944f" dir="ltr"><td id="[}tt" class="">Bold</td><td id="yabL" class=""><strong>Bold text</strong></td></tr><tr id="3a77b16c-89f4-8102-a14e-dc5265e437c6" dir="ltr"><td id="[}tt" class="">Italic</td><td id="yabL" class=""><em>Italic text</em></td></tr><tr id="3a77b16c-89f4-81e4-a751-f965bcffa441" dir="ltr"><td id="[}tt" class="">Code</td><td id="yabL" class=""><code>inline code</code></td></tr><tr id="3a77b16c-89f4-817c-a86a-ccece706b4e4" dir="ltr"><td id="[}tt" class="">Link</td><td id="yabL" class=""><a href="https://example.com/">Example</a></td></tr><tr id="3a77b16c-89f4-81c1-aa01-db61697376f2" dir="ltr"><td id="[}tt" class="">Strike</td><td id="yabL" class=""><del>Removed</del></td></tr></tbody></table><h3 id="3a77b16c-89f4-819f-8c50-c80d0b17b238" class="" dir="auto">Escaped Pipe Character</h3><table id="3a77b16c-89f4-8180-af0f-d996796863c5" class="simple-table" dir="ltr"><thead class="simple-table-header"><tr id="3a77b16c-89f4-8144-9d94-d9cadb9c4f80" dir="ltr"><th id="vf_D" class="simple-table-header-color simple-table-header">Expression</th><th id="T{Vy" class="simple-table-header-color simple-table-header">Meaning</th></tr></thead><tbody><tr id="3a77b16c-89f4-81e1-8764-c94239c10c2e" dir="ltr"><td id="vf_D" class=""><code>A \| B</code></td><td id="T{Vy" class="">A literal pipe between A and B</td></tr><tr id="3a77b16c-89f4-81e5-a817-fea13826218b" dir="ltr"><td id="vf_D" class=""><code>x \|\| y</code></td><td id="T{Vy" class="">Logical OR in some languages</td></tr></tbody></table><h3 id="3a77b16c-89f4-81da-a80f-c898efc386d5" class="" dir="auto">Empty Cells</h3><table id="3a77b16c-89f4-818f-941d-dc9e45b4ff0d" class="simple-table" dir="ltr"><thead class="simple-table-header"><tr id="3a77b16c-89f4-8174-8292-f738dc768a30" dir="ltr"><th id="kr?M" class="simple-table-header-color simple-table-header">Column A</th><th id="xTqj" class="simple-table-header-color simple-table-header">Column B</th><th id="GqGW" class="simple-table-header-color simple-table-header">Column C</th></tr></thead><tbody><tr id="3a77b16c-89f4-8162-8fdb-c7d7182dbef2" dir="ltr"><td id="kr?M" class="">Value</td><td id="xTqj" class=""></td><td id="GqGW" class="">Value</td></tr><tr id="3a77b16c-89f4-81c5-804d-f3a781ebf3cb" dir="ltr"><td id="kr?M" class=""></td><td id="xTqj" class="">Value</td><td id="GqGW" class=""></td></tr><tr id="3a77b16c-89f4-8130-9d31-c5628a4ed7d7" dir="ltr"><td id="kr?M" class=""></td><td id="xTqj" class=""></td><td id="GqGW" class=""></td></tr></tbody></table><hr id="3a77b16c-89f4-814d-bcad-e778c94e3515" dir="auto"/><h2 id="3a77b16c-89f4-81f0-bb47-e204a7fca343" class="" dir="auto">Footnotes</h2><p id="3a77b16c-89f4-818b-978c-f5714689e45c" class="" dir="auto">This sentence contains a simple footnote.<a href="about:blank#fn1">1</a></p><p id="3a77b16c-89f4-81cc-b8dd-ee6fc53d1eae" class="" dir="auto">This sentence contains a longer named footnote.<a href="about:blank#fn2">2</a></p><p id="3a77b16c-89f4-81e8-9d43-f2a76b2eb8bc" class="" dir="auto">Some processors support inline footnotes.<a href="about:blank#fn3">3</a></p><hr id="3a77b16c-89f4-8167-b069-e996df85545f" dir="auto"/><h2 id="3a77b16c-89f4-8180-b650-eece1bf8276f" class="" dir="auto">Definition Lists</h2><p id="3a77b16c-89f4-81ab-a772-de5ce1453c1b" class="" dir="auto">Term 1<br/>Definition for term 1.<br/>Term 2<br/>First definition for term 2.<br/><br/>Second definition for term 2.<br/>Markdown<br/>A lightweight markup language.<br/><br/>A family of related syntax specifications.</p><hr id="3a77b16c-89f4-81a4-945b-d1fda2e9cc8d" dir="auto"/><h2 id="3a77b16c-89f4-81a0-b321-f9d5425de705" class="" dir="auto">Abbreviations</h2><p id="3a77b16c-89f4-8177-8513-ce7dbe4b0f3d" class="" dir="auto">The HTML specification is maintained by the WHATWG.</p><p id="3a77b16c-89f4-81ba-8954-d85788c30876" class="" dir="auto">Markdown files often use UTF-8.</p><p id="3a77b16c-89f4-81c4-b70e-c6de6ca812f9" class="" dir="auto"><em><a href="about:blank#html">HTML</a></em><em>: HyperText Markup Language<br/></em>[WHATWG]: Web Hypertext Application Technology Working Group<br/>*[UTF-8]: Unicode Transformation Format, 8-bit</p><hr id="3a77b16c-89f4-81dd-a619-d59a3de38f0e" dir="auto"/><h2 id="3a77b16c-89f4-81b0-ba01-cb94ffac5e4a" class="" dir="auto">Custom Heading IDs</h2><h3 id="3a77b16c-89f4-81d6-bc7b-f8c332b07930" class="" dir="auto">Heading With a Custom Anchor</h3><p id="3a77b16c-89f4-81eb-9b19-c32934520b2b" class="" dir="auto">The syntax above is supported by some Markdown processors, including several documentation systems.</p><hr id="3a77b16c-89f4-814a-b527-fcbbad59b314" dir="auto"/><h2 id="3a77b16c-89f4-816c-a2ce-c058ba863f42" class="" dir="auto">Emoji</h2><p id="3a77b16c-89f4-8131-98b4-ca19c80130ac" class="" dir="auto">Unicode emoji:</p><p id="3a77b16c-89f4-81fc-a14e-c1aeef75eba4" class="" dir="auto">😀 🚀 ✅ ⚠️ ❤️ 👍 🎉 🧪 📝</p><p id="3a77b16c-89f4-81b9-897d-f9a6d8e62b58" class="" dir="auto">Emoji shortcodes, when supported:</p><p id="3a77b16c-89f4-81fe-84f1-cf5c2364545b" class="" dir="auto">:smile: :rocket: :white_check_mark: :warning: :heart: :+1: :tada:</p><p id="3a77b16c-89f4-8128-a80e-dadaea364377" class="" dir="auto">Skin tone and combined emoji:</p><p id="3a77b16c-89f4-8160-a6cf-c71fa5670148" class="" dir="auto">👋🏽 👨‍💻 👩‍🔬 🏳️‍🌈</p><hr id="3a77b16c-89f4-81a1-99b7-cb2dad40cc05" dir="auto"/><h2 id="3a77b16c-89f4-813a-ad85-ec8a0a47d800" class="" dir="auto">Mathematics</h2><h3 id="3a77b16c-89f4-81c4-b73f-dce81af94a61" class="" dir="auto">Plain Mathematical Notation</h3><p id="3a77b16c-89f4-81a0-b23c-e0898283e032" class="" dir="auto"><code>f(x) = x² + 2x + 1</code></p><h3 id="3a77b16c-89f4-81ae-b2ce-d961640f801a" class="" dir="auto">Inline LaTeX-Style Math</h3><p id="3a77b16c-89f4-810d-b229-d8433c5a3865" class="" dir="auto">The quadratic formula is <span data-notion-inline-equation="x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}" class="notion-text-equation-token" contenteditable="false"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.3845em;vertical-align:-0.345em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.0395em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mord mathnormal mtight">a</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">b</span><span class="mbin mtight">±</span><span class="mord sqrt mtight"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9221em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mtight" style="padding-left:0.833em;"><span class="mord mtight"><span class="mord mathnormal mtight">b</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7463em;"><span style="top:-2.786em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mbin mtight">−</span><span class="mord mtight">4</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight">c</span></span></span><span style="top:-2.8821em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail mtight" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1179em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>.</p><h3 id="3a77b16c-89f4-81f0-879f-e71f78fb8fd0" class="" dir="auto">Display Math</h3><figure id="3a77b16c-89f4-81ab-b9ea-fdaeb80f4437" class="equation" data-notion-equation="\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}" dir="auto"><style>@import url('https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex-swap.min.css')</style><div class="equation-container"><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.3846em;vertical-align:-0.9703em;"></span><span class="mop"><span class="mop op-symbol large-op" style="margin-right:0.44445em;position:relative;top:-0.0011em;">∫</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4143em;"><span style="top:-1.7881em;margin-left:-0.4445em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">∞</span></span></span></span><span style="top:-3.8129em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∞</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9703em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:1.0369em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-2.931em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.04em;vertical-align:-0.1908em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8492em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span><span style="top:-2.8092em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1908em;"><span></span></span></span></span></span></span></span></span></span></div></figure><h3 id="3a77b16c-89f4-81cd-b3fb-c71ee190d2cd" class="" dir="auto">Alternative Display Math Fence</h3><pre id="3a77b16c-89f4-81bf-9bc8-d18fca4bf20d" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">E = mc^2</code></pre><hr id="3a77b16c-89f4-8104-a1d2-f9ef5cd22be3" dir="auto"/><h2 id="3a77b16c-89f4-817b-bb87-c03a6205010c" class="" dir="auto">Mermaid Diagram</h2><pre id="3a77b16c-89f4-8148-a243-fc19b782ceda" class="code code-wrap" data-notion-code-syntax="mermaid"><code class="language-mermaid" style="white-space:pre-wrap;word-break:break-all">flowchart TD
+    A[Open Markdown file] --&gt; B{Parser supports extension?}
+    B -- Yes --&gt; C[Render enhanced feature]
+    B -- No --&gt; D[Show source or fallback]
+    C --&gt; E[Verify output]
+    D --&gt; E</code></pre><h3 id="3a77b16c-89f4-8100-890b-faf3e2a2eb88" class="" dir="auto">Mermaid Sequence Diagram</h3><pre id="3a77b16c-89f4-81a5-928a-cddc6a6829fb" class="code code-wrap" data-notion-code-syntax="mermaid"><code class="language-mermaid" style="white-space:pre-wrap;word-break:break-all">sequenceDiagram
+    participant User
+    participant Editor
+    participant Preview
+
+    User-&gt;&gt;Editor: Edit Markdown
+    Editor-&gt;&gt;Preview: Send updated source
+    Preview--&gt;&gt;User: Render formatted output</code></pre><hr id="3a77b16c-89f4-814e-9d49-f1af27cf9f75" dir="auto"/><h2 id="3a77b16c-89f4-813a-a1c7-da4cb456234e" class="" dir="auto">PlantUML-Style Diagram</h2><pre id="3a77b16c-89f4-810e-8707-d1086178b3e8" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">@startuml
+actor User
+User -&gt; Editor: Open Markdown file
+Editor -&gt; Renderer: Parse source
+Renderer --&gt; User: Display preview
+@enduml</code></pre><hr id="3a77b16c-89f4-815e-b997-d4d4bca76d68" dir="auto"/><h2 id="3a77b16c-89f4-8146-bb79-ec8061d30438" class="" dir="auto">Admonitions and Callouts</h2><p id="3a77b16c-89f4-8127-9c58-e1786250c2b9" class="" dir="auto">Different editors use different syntaxes.</p><h3 id="3a77b16c-89f4-8165-aecd-f8498c89a8ba" class="" dir="auto">Blockquote Callout Style</h3><blockquote id="3a77b16c-89f4-81a4-a824-ecfae6ad1411" class="" dir="auto">[!NOTE]<br/>This is a note callout.</blockquote><blockquote id="3a77b16c-89f4-815d-9fd9-c3d12ca38520" class="" dir="auto">[!TIP]<br/>This is a tip callout.</blockquote><blockquote id="3a77b16c-89f4-81b6-98f4-c239f192d20a" class="" dir="auto">[!IMPORTANT]<br/>This is an important callout.</blockquote><blockquote id="3a77b16c-89f4-81f5-9a25-f7e85b66a48b" class="" dir="auto">[!WARNING]<br/>This is a warning callout.</blockquote><blockquote id="3a77b16c-89f4-814b-bc98-dff600acb45e" class="" dir="auto">[!CAUTION]<br/>This is a caution callout.</blockquote><h3 id="3a77b16c-89f4-812c-a975-dc1944249726" class="" dir="auto">Triple-Colon Style</h3><p id="3a77b16c-89f4-816f-9b51-d8ff47eb068c" class="" dir="auto">This is a note using triple-colon syntax.</p><p id="3a77b16c-89f4-8103-a59a-df2a236202e6" class="" dir="auto">This is a warning using triple-colon syntax.</p><h3 id="3a77b16c-89f4-811c-81d9-ce77911593bf" class="" dir="auto">Exclamation Style</h3><p id="3a77b16c-89f4-819f-8018-f498b57f523b" class="" dir="auto">!!! note<br/>This is an admonition used by some documentation engines.</p><hr id="3a77b16c-89f4-8147-892f-feff7b76014e" dir="auto"/><h2 id="3a77b16c-89f4-81c8-92c9-cc22f5c21ad8" class="" dir="auto">Collapsible Content</h2><details id="3a77b16c-89f4-81b2-bd9a-dc84d2e4203d" open="" class="toggle" dir="auto"><summary>Click to expand</summary><div class="indented"><p id="3a77b16c-89f4-8137-b46a-fe985640265f" class="" dir="auto">This content is hidden until the section is expanded.</p><ul id="3a77b16c-89f4-81fc-974f-d8b0a80ed955" class="bulleted-list" dir="auto"><li style="list-style-type:disc">It can contain lists.</li></ul><ul id="3a77b16c-89f4-81cf-8498-f4cf605b9702" class="bulleted-list" dir="auto"><li style="list-style-type:disc">It can contain <strong>formatted text</strong>.</li></ul><ul id="3a77b16c-89f4-81a4-bbb2-f32185172e3e" class="bulleted-list" dir="auto"><li style="list-style-type:disc">It can contain <code>inline code</code>.</li></ul><pre id="3a77b16c-89f4-819e-ac95-c9e818c797cb" class="code code-wrap" data-notion-code-syntax="jsx"><code class="language-jsx" style="white-space:pre-wrap;word-break:break-all">console.log(&quot;Code inside details&quot;);</code></pre></div></details><hr id="3a77b16c-89f4-8105-9192-d2f98ac7bb0c" dir="auto"/><h2 id="3a77b16c-89f4-81fc-b9fb-e6311b05591d" class="" dir="auto">Raw HTML</h2><h3 id="3a77b16c-89f4-81f4-ae5b-fac68bb21bfc" class="" dir="auto">Inline HTML</h3><p id="3a77b16c-89f4-8129-8302-ecae2006332d" class="" dir="auto">This sentence contains a span with a tooltip.</p><p id="3a77b16c-89f4-81e7-9f05-c058c02a489f" class="" dir="auto">Text with small text and <strong>HTML strong text</strong>.</p><h3 id="3a77b16c-89f4-8115-be47-e8b77a6e0dee" class="" dir="auto">HTML Block</h3><h3 id="3a77b16c-89f4-8194-8c08-ef774bede0c6" class="" dir="auto">HTML Block Heading</h3><p id="3a77b16c-89f4-814f-8cfa-e036917a5d57" class="" dir="auto">This block tests whether raw HTML is preserved or sanitized.</p><p id="3a77b16c-89f4-8127-b61c-d95c50d62b2b" class="" dir="auto">Example button</p><h3 id="3a77b16c-89f4-819d-8318-e1431b0d3084" class="" dir="auto">HTML Table</h3><table id="3a77b16c-89f4-8120-a831-f0b431bafd53" class="simple-table" dir="ltr"><thead class="simple-table-header"><tr id="3a77b16c-89f4-8133-92ac-e08aaf3a2ba6" dir="ltr"><th id="hR@_" class="simple-table-header-color simple-table-header">HTML Feature</th><th id="VRSR" class="simple-table-header-color simple-table-header">Expected Result</th></tr></thead><tbody><tr id="3a77b16c-89f4-81f0-8d3b-f6cca28eed31" dir="ltr"><td id="hR@_" class="">Raw HTML</td><td id="VRSR" class="">Rendered or sanitized</td></tr></tbody></table><hr id="3a77b16c-89f4-81b5-8180-fae1242c4177" dir="auto"/><h2 id="3a77b16c-89f4-81f6-903e-e6b475892739" class="" dir="auto">Comments</h2><p id="3a77b16c-89f4-81f5-aaa3-e6f44452df96" class="" dir="auto">The following HTML comment should normally be hidden in rendered output.</p><p id="3a77b16c-89f4-81f8-81c3-fbfa814d9335" class="" dir="auto">Visible text appears after the comment.</p><p id="3a77b16c-89f4-8124-8608-df1eb40dceca" class="" dir="auto">Some editors support comment-like syntax:</p><hr id="3a77b16c-89f4-817b-932b-d9cc196fb458" dir="auto"/><h2 id="3a77b16c-89f4-8131-95a2-ea926a712c0f" class="" dir="auto">Unicode and Multilingual Text</h2><p id="3a77b16c-89f4-810f-8af1-e605f1712585" class="" dir="auto">English: The quick brown fox jumps over the lazy dog.</p><p id="3a77b16c-89f4-8178-9aca-d7399be1ccf6" class="" dir="auto">Dutch: Paarsgekleurde koala’s eten graag verse eucalyptus.</p><p id="3a77b16c-89f4-81a3-b5e8-f74e51a5849c" class="" dir="auto">French: Voilà un exemple de texte français avec des accents.</p><p id="3a77b16c-89f4-816b-975b-d79336849ef7" class="" dir="auto">German: Füße, Größe, Straße, äußern.</p><p id="3a77b16c-89f4-8116-b8e0-f4555aa3a166" class="" dir="auto">Spanish: ¿Cómo está? El pingüino tomó café.</p><p id="3a77b16c-89f4-8126-91be-f012b67abcde" class="" dir="auto">Polish: Zażółć gęślą jaźń.</p><p id="3a77b16c-89f4-8160-bc1b-d527dbe93d26" class="" dir="auto">Czech: Příliš žluťoučký kůň úpěl ďábelské ódy.</p><p id="3a77b16c-89f4-81e6-abd7-da1301dbd40e" class="" dir="auto">Greek: Ταχίστη αλώπηξ βαφής ψημένη γη.</p><p id="3a77b16c-89f4-811e-8e54-fdf25cbcc6ab" class="" dir="auto">Russian: Съешь же ещё этих мягких французских булок.</p><p id="3a77b16c-89f4-8106-abf7-fd10e9e59915" class="" dir="auto">Arabic: مرحبًا بالعالم</p><p id="3a77b16c-89f4-8117-85b2-e11306432a4e" class="" dir="auto">Hebrew: שלום עולם</p><p id="3a77b16c-89f4-8181-a2ae-d97c5c2f2b1c" class="" dir="auto">Hindi: नमस्ते दुनिया</p><p id="3a77b16c-89f4-815b-9a89-cada274a0952" class="" dir="auto">Japanese: こんにちは世界</p><p id="3a77b16c-89f4-818d-ad8f-cec04793aec6" class="" dir="auto">Chinese: 你好，世界</p><p id="3a77b16c-89f4-81c5-a07e-e63f6bc682e6" class="" dir="auto">Korean: 안녕하세요 세계</p><p id="3a77b16c-89f4-818c-8705-ce10ea5e5eb0" class="" dir="auto">Emoji mixed with text: Markdown editing is useful 📝 and testable ✅.</p><h3 id="3a77b16c-89f4-814b-bc05-ca20e8fcf31b" class="" dir="auto">Right-to-Left HTML</h3><p id="3a77b16c-89f4-815b-8f49-c517b38ca6c0" class="" dir="auto">هذا نص عربي من اليمين إلى اليسار.</p><p id="3a77b16c-89f4-811a-ae79-c2e47917feec" class="" dir="auto">זהו טקסט בעברית מימין לשמאל.</p><hr id="3a77b16c-89f4-811b-8575-c88ca107fb35" dir="auto"/><h2 id="3a77b16c-89f4-819f-ac9d-d2b65092075d" class="" dir="auto">Long Line Test</h2><p id="3a77b16c-89f4-81d7-857a-f368ac3dfca7" class="" dir="auto">The following line is intentionally long to test horizontal scrolling, soft wrapping, minimaps, source-view behavior, and performance: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. <a href="https://example.com/a/very/long/path/that/continues/without/many/natural/breakpoints?parameter_one=abcdefghijklmnopqrstuvwxyz&amp;parameter_two=0123456789&amp;parameter_three=markdown-editor-testing">https://example.com/a/very/long/path/that/continues/without/many/natural/breakpoints?parameter_one=abcdefghijklmnopqrstuvwxyz&amp;parameter_two=0123456789&amp;parameter_three=markdown-editor-testing</a></p><hr id="3a77b16c-89f4-81b3-9257-dc19df3e9ac3" dir="auto"/><h2 id="3a77b16c-89f4-817a-a11a-fe3255584d48" class="" dir="auto">Indentation and Tabs</h2><p id="3a77b16c-89f4-81df-92e4-c6ca02e085ec" class="" dir="auto">The lines below test indentation. Some use spaces; editors may visually normalize tabs.</p><pre id="3a77b16c-89f4-81a2-a92c-cd591ad754e8" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">No indentation
+    Four spaces
+        Eight spaces
+    One tab
+        Two tabs</code></pre><p id="3a77b16c-89f4-8195-82c7-cf5619f8f37c" class="" dir="auto">Nested structure:</p><ul id="3a77b16c-89f4-81d1-971f-dccf8190d8d2" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Item<ul id="3a77b16c-89f4-8148-a2de-d98d9c213049" class="bulleted-list" dir="auto"><li style="list-style-type:circle">Four-space nested item</li></ul><ul id="3a77b16c-89f4-810d-8a30-fca7b8384651" class="bulleted-list" dir="auto"><li style="list-style-type:circle">Tab-indented nested item</li></ul></li></ul><hr id="3a77b16c-89f4-8182-8aae-e808f1740f3d" dir="auto"/><h2 id="3a77b16c-89f4-81f7-a469-d91545a51a4f" class="" dir="auto">Deep Nesting</h2><blockquote id="3a77b16c-89f4-81ee-bdbf-d915d473bc74" class="" dir="auto">Blockquote level 1<ol type="1" id="3a77b16c-89f4-8155-b608-d1366ad5b95c" class="numbered-list" start="1" dir="auto"><li>Ordered list inside blockquote<ul id="3a77b16c-89f4-8149-9226-ed729bc570e3" class="bulleted-list" dir="auto"><li style="list-style-type:disc">Unordered list<ul id="3a77b16c-89f4-8124-aa54-f347bb326dc2" class="bulleted-list" dir="auto"><li style="list-style-type:circle">Nested unordered list</li></ul><pre id="3a77b16c-89f4-8176-bbcf-d2a9bc5a6dc3" class="code code-wrap" data-notion-code-syntax="json"><code class="language-json" style="white-space:pre-wrap;word-break:break-all">{
+  &quot;deeply&quot;: {
+    &quot;nested&quot;: true
+  }
+}</code></pre></li></ul></li></ol></blockquote><hr id="3a77b16c-89f4-815a-b506-cefb87904acf" dir="auto"/><h2 id="3a77b16c-89f4-81e2-88a6-d738d432fb7a" class="" dir="auto">Consecutive Blank Lines</h2><p id="3a77b16c-89f4-8177-829c-c7883320a092" class="" dir="auto">There are multiple blank lines below this sentence.</p><p id="3a77b16c-89f4-812d-bfb7-d623e83dcdfb" class="" dir="auto">There are three blank lines above this sentence.</p><hr id="3a77b16c-89f4-813c-a27d-eb16f75e290a" dir="auto"/><h2 id="3a77b16c-89f4-81aa-84ca-ea0240605356" class="" dir="auto">Trailing Whitespace</h2><p id="3a77b16c-89f4-8195-a1bc-d9df0fa88e4e" class="" dir="auto">The first line below ends with two spaces and should create a hard break.</p><p id="3a77b16c-89f4-8135-a4a0-f481b42b01a0" class="" dir="auto">This line follows the hard break.</p><p id="3a77b16c-89f4-8198-930e-fc07f159f887" class="" dir="auto">The next source line may contain trailing spaces that a formatter or linter could remove.</p><p id="3a77b16c-89f4-813f-befc-ecda797d0ad5" class="" dir="auto">Trailing-space test.</p><hr id="3a77b16c-89f4-815d-91e9-d1b6e4505088" dir="auto"/><h2 id="3a77b16c-89f4-81f7-b499-f7bd4c55efce" class="" dir="auto">Autolink and Punctuation Edge Cases</h2><p id="3a77b16c-89f4-8125-bbf3-dc4af6c7f266" class="" dir="auto">URL followed by punctuation: <a href="https://example.com/">https://example.com</a>.</p><p id="3a77b16c-89f4-8134-bdb6-ed626537439e" class="" dir="auto">URL in parentheses: (<a href="https://example.com/path">https://example.com/path</a>).</p><p id="3a77b16c-89f4-8136-a58f-c6b760185ae1" class="" dir="auto">URL with underscore: <a href="https://example.com/some_path/file_name">https://example.com/some_path/file_name</a></p><p id="3a77b16c-89f4-81bc-afc6-d725ea051df6" class="" dir="auto">URL with parentheses: <a href="https://en.wikipedia.org/wiki/Markdown_(markup_language)">https://en.wikipedia.org/wiki/Markdown_(markup_language)</a></p><p id="3a77b16c-89f4-8130-b89c-f38a116f46bb" class="" dir="auto">Email: <a href="mailto:editor.test+markdown@example.com">editor.test+markdown@example.com</a></p><hr id="3a77b16c-89f4-813b-b816-e93f478164f1" dir="auto"/><h2 id="3a77b16c-89f4-818e-95cb-c949ad50a196" class="" dir="auto">Formatting Edge Cases</h2><p id="3a77b16c-89f4-81f3-9e36-e1ca9a9cde42" class="" dir="auto">Asterisks inside a word: un<em>believ</em>able</p><p id="3a77b16c-89f4-8141-9df6-d7eda3498969" class="" dir="auto">Underscores inside a word: snake_case_identifier</p><p id="3a77b16c-89f4-8187-8405-cf612949e681" class="" dir="auto">Bold containing punctuation: <strong>Hello, world!</strong></p><p id="3a77b16c-89f4-8113-9bda-e474ab5faec8" class="" dir="auto">Italic adjacent to text: before<em>italic</em>after</p><p id="3a77b16c-89f4-8145-af77-f10f2f5b8c97" class="" dir="auto">Strikethrough and bold: <del><strong>bold deleted text</strong></del></p><p id="3a77b16c-89f4-8141-ae9a-e4161cc79264" class="" dir="auto">Code inside bold markers may vary: <code><strong>code</strong></code></p><p id="3a77b16c-89f4-81a6-97b5-fa9461dc3a04" class="" dir="auto">Link with formatting: <strong><a href="https://example.com/">Bold link text</a></strong></p><p id="3a77b16c-89f4-8129-bea1-c1174243a460" class="" dir="auto">Formatting inside link title source:</p><p id="3a77b16c-89f4-818d-b949-e1b976fc900f" class="" dir="auto"><a href="https://example.com/">Example</a></p><hr id="3a77b16c-89f4-81d5-be75-dbdf7f894c6d" dir="auto"/><h2 id="3a77b16c-89f4-8166-9d15-f912e388d59e" class="" dir="auto">Typographic Substitution Tests</h2><p id="3a77b16c-89f4-8110-a216-e478a71d0c9c" class="" dir="auto">Depending on editor settings, these may be transformed automatically:</p><p id="3a77b16c-89f4-81a3-b692-e6bc7015cb9a" class="" dir="auto">“Straight double quotes”</p><p id="3a77b16c-89f4-8175-9521-efbb011b0c1f" class="" dir="auto">‘Straight single quotes’</p><p id="3a77b16c-89f4-8173-8499-ed531cad2857" class="" dir="auto">Three periods…</p><p id="3a77b16c-89f4-8154-8673-eddc49d74720" class="" dir="auto">Two hyphens –</p><p id="3a77b16c-89f4-811b-bb1d-f14560262a4b" class="" dir="auto">Three hyphens —</p><ol type="1" id="3a77b16c-89f4-81e4-9a1e-e5ddf54c90a5" class="numbered-list" start="1" dir="auto"><li><ol type="a" id="3a77b16c-89f4-814c-99a1-dc42d5d8e1b9" class="numbered-list" start="1" dir="auto"><li>(tm)</li></ol></li></ol><p id="3a77b16c-89f4-8162-bdb2-d039e08d3cca" class="" dir="auto">1/2 1/4 3/4</p><hr id="3a77b16c-89f4-816e-87aa-ecee5dc57e04" dir="auto"/><h2 id="3a77b16c-89f4-8166-91ae-c641fc44bdd4" class="" dir="auto">Table of Contents Compatibility</h2><p id="3a77b16c-89f4-81bb-ae2c-d8e3d5040ca4" class="" dir="auto">Some editors generate a table of contents from headings.</p><pre id="3a77b16c-89f4-8192-91f4-d434cc59ebdd" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">[TOC]</code></pre><p id="3a77b16c-89f4-818b-bbdd-c519ccded67f" class="" dir="auto">Alternative syntax:</p><pre id="3a77b16c-89f4-8112-b3ba-e303358a7072" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">[[toc]]</code></pre><p id="3a77b16c-89f4-813d-a9d6-e84ca6ae7777" class="" dir="auto">Manual table of contents:</p><ul id="3a77b16c-89f4-8185-9eb1-e7fdf1aa4605" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#heading-level-1">Heading Level 1</a></li></ul><ul id="3a77b16c-89f4-81ba-b78e-f625b94efcd5" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#text-formatting">Text Formatting</a></li></ul><ul id="3a77b16c-89f4-81a0-8eba-fbd79561100b" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#unordered-lists">Lists</a></li></ul><ul id="3a77b16c-89f4-814d-890e-ccb007036513" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#links">Links</a></li></ul><ul id="3a77b16c-89f4-811d-8408-ee3220a65dbf" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#images">Images</a></li></ul><ul id="3a77b16c-89f4-8176-9d82-fa7b7734f5de" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#code-blocks">Code Blocks</a></li></ul><ul id="3a77b16c-89f4-81ce-8c1c-d5d4221baa73" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#tables">Tables</a></li></ul><ul id="3a77b16c-89f4-810f-8b9a-e3ff82399c6d" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#footnotes">Footnotes</a></li></ul><ul id="3a77b16c-89f4-8184-9f78-cfaf28b742a2" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#mathematics">Mathematics</a></li></ul><ul id="3a77b16c-89f4-8156-8d2a-f791b8b8d49b" class="bulleted-list" dir="auto"><li style="list-style-type:disc"><a href="about:blank#editor-behavior-checklist">Editor Behavior Checklist</a></li></ul><hr id="3a77b16c-89f4-815e-b796-db777a7fee34" dir="auto"/><h2 id="3a77b16c-89f4-81b1-aefe-f85419bf521f" class="" dir="auto">CommonMark Compatibility Checks</h2><h3 id="3a77b16c-89f4-8172-a56a-f31b85e80cbf" class="" dir="auto">List Interruption</h3><p id="3a77b16c-89f4-8153-978f-c900f3e6db36" class="" dir="auto">A paragraph before a list.</p><ol type="1" id="3a77b16c-89f4-81f6-ae20-cdf1fd8df732" class="numbered-list" start="1" dir="auto"><li>Ordered list item</li></ol><p id="3a77b16c-89f4-8128-adaa-f0249b4ecd41" class="" dir="auto">A paragraph after the list.</p><h3 id="3a77b16c-89f4-81ba-8710-da023e3be3ee" class="" dir="auto">Thematic Break Ambiguity</h3><hr id="3a77b16c-89f4-8117-8ae0-f1d528fcd9f1" dir="auto"/><h3 id="3a77b16c-89f4-8172-b70d-d3449d715d58" class="" dir="auto">Emphasis Ambiguity</h3><p id="3a77b16c-89f4-81c2-9397-d08af1555e9b" class="" dir="auto"><em><strong>Strong and emphasis</strong></em></p><p id="3a77b16c-89f4-8178-832b-d46d60110b99" class="" dir="auto"><em><strong>Strong and emphasis</strong></em></p><h3 id="3a77b16c-89f4-81ea-850a-efa4859f779a" class="" dir="auto">Code Span Normalization</h3><p id="3a77b16c-89f4-81f6-863c-f8a92533b69d" class="" dir="auto"><code>single-spaced code</code></p><p id="3a77b16c-89f4-8107-a7e1-f442ddbcbdf7" class="" dir="auto"><code>code containing ` backtick</code></p><h3 id="3a77b16c-89f4-8180-9dd6-e3347a858795" class="" dir="auto">Entity Decoding</h3><p id="3a77b16c-89f4-81ba-9d41-d22e6cc72e45" class="" dir="auto">© &amp; © ©</p><hr id="3a77b16c-89f4-816b-8f9a-c96b1e89e9ba" dir="auto"/><h2 id="3a77b16c-89f4-8182-a672-e11f2e8bbadd" class="" dir="auto">GitHub Flavored Markdown Checks</h2><ul id="3a77b16c-89f4-81bb-bc47-f55f8812be3a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Task lists</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8133-b4e8-ebfa61f644ba" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Tables</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81f0-9e66-ed790dd4c82e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Strikethrough</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8130-8204-deba4dd21df3" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Autolinks</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-815f-b724-c589249ed92c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-on" disabled="" checked=""/> <span class="to-do-children-checked">Fenced code blocks</span><div class="indented"></div></li></ul><p id="3a77b16c-89f4-81c5-b6a1-f0675855d469" class="" dir="auto">Issue-like references that a hosting platform may link automatically:</p><p id="3a77b16c-89f4-81b3-9fe1-cf52b1aa056e" class="" dir="auto">#123</p><p id="3a77b16c-89f4-811b-9496-ec7d7530e70b" class="" dir="auto">GH-123</p><p id="3a77b16c-89f4-815c-9066-f29b01e6c117" class="" dir="auto">Commit-like hash:</p><p id="3a77b16c-89f4-8124-a9f8-e3ac85f065a7" class="" dir="auto"><code>0123456789abcdef0123456789abcdef01234567</code></p><p id="3a77b16c-89f4-812d-bab0-fd4a19820e3b" class="" dir="auto">Username-like mention:</p><p id="3a77b16c-89f4-81ce-a955-f40e8a70d94c" class="" dir="auto">@example-user</p><hr id="3a77b16c-89f4-81ad-a07a-e7410fa5f086" dir="auto"/><h2 id="3a77b16c-89f4-8132-9ac4-ec69666e0108" class="" dir="auto">Editor Behavior Checklist</h2><p id="3a77b16c-89f4-811a-838d-ede3fa275ad0" class="" dir="auto">Use this section to manually verify editor functionality.</p><h3 id="3a77b16c-89f4-810c-8727-d3223a8d9a0c" class="" dir="auto">Editing</h3><ul id="3a77b16c-89f4-8130-92b6-d893673af4e3" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Typing is responsive</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-810d-9fd6-fe6245fd7a8f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Cursor movement works correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c7-8957-cb8691f52fb7" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Text selection works correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-816c-815b-f84143143213" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Multi-line selection works correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817b-8225-f2c2731e080f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Undo works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8127-8ad6-d58449782ec0" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Redo works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81de-936f-f6ab27dad95f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Cut works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81e0-a71e-e4416598a72d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Copy works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-811e-8442-f8a88aceab96" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Paste works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817b-848a-f19dc7cb624b" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Paste as plain text works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8105-9dd9-e6f7320a10eb" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Drag-and-drop text works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81bb-b424-c527d2410e0a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Drag-and-drop images works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8113-b449-db280520c754" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Auto-indent works in lists</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-812a-9ab9-c4da8d5330c7" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Pressing Enter continues a list</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8111-98a3-ee0808f8dff5" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Pressing Enter twice exits a list</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8185-b83a-fe8444160100" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Tab indents list items</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81e8-9ed0-da85177fd170" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Shift+Tab outdents list items</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817c-b938-cb2d3e8f528e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Paired characters are inserted automatically</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817e-9ab6-c1c9fa57e9ec" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Matching brackets are highlighted</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8110-a8fc-fbcfd79363b9" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Current line is highlighted</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8118-94ad-da65aeed02e7" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Line numbers display correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8162-bb28-f4395096dbf9" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Soft wrapping can be toggled</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81cb-a824-fb2eaa347c12" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Long lines remain editable</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8119-8315-dc8109739081" class="" dir="auto">Formatting Commands</h3><ul id="3a77b16c-89f4-8151-a43c-ca45353ed61e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Bold shortcut works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81f6-8e23-d879ae3221ae" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Italic shortcut works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8101-ab53-ddbffc50fc5e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Strikethrough shortcut works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8193-8551-d8bb8ddb13da" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Inline code shortcut works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8178-8219-fac2941adf73" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Link insertion command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-813d-bf51-ebc2befc083f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Image insertion command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8151-ba23-c7e338718a84" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Heading commands work</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8160-834a-c34ddbe91f55" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Blockquote command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81d0-8802-f2c27acfb097" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Ordered list command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8199-bacf-d953e1f63bb1" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Unordered list command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8196-8c58-f5b6385af6b8" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Task list command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8104-871e-e2464d193f13" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Code block command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8138-bfb6-c67aa7cbec27" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Table insertion command works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817d-82c1-ff2148f39e72" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Horizontal rule command works</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-81fa-92ff-f6dea4e102d5" class="" dir="auto">Preview</h3><ul id="3a77b16c-89f4-81d5-8d4d-ca0e2e3f0f34" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Live preview updates while typing</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-818e-8fe2-f61f3ac769b1" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Split preview updates while typing</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81dd-8389-c2bf89c8032b" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Source and preview scroll positions stay synchronized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81be-a5aa-c4072dd5e657" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview correctly renders standard Markdown</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-811c-90c6-cba892723d24" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview correctly renders tables</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81a3-ba05-dd2661310b28" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview correctly renders task lists</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81da-87bf-cc3f90bd745d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview correctly renders footnotes</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81dd-a574-e316ff634b0c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview correctly renders mathematics</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c2-983e-e928f6a97b2f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview correctly renders diagrams</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8122-8f7d-d46cb477e03a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview handles raw HTML according to settings</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8164-83d7-f6ed3e70d04f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview sanitizes unsafe HTML when required</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8111-acfe-c9ae6f46dbe5" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview supports custom CSS</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c1-a15a-ff986644b41b" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview respects light and dark themes</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8168-854e-d772e13b1bb1" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview prints correctly</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8173-8fd0-d03a9bb4c4c6" class="" dir="auto">Navigation</h3><ul id="3a77b16c-89f4-8135-989f-e914e2770db2" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Document outline lists headings</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81a7-8d48-f03f430a6508" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Clicking an outline item navigates to the heading</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8168-a05b-e2f727010a76" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Internal anchor links work</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81a0-a89f-d9e7d73f9748" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">External links open correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8189-b04a-ef04cf14137d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Back and forward navigation work</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-810f-a813-d3a0a2f5bbb7" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Go to line works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-813b-af65-ec1f2886de3d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Symbol or heading search works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81e0-ba05-f9c4c26f0ce0" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Breadcrumbs work, when supported</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-814c-b255-dddf81cde62e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Minimap works, when supported</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8110-b7eb-c43425715896" class="" dir="auto">Search and Replace</h3><ul id="3a77b16c-89f4-8182-9e63-e1751ed6c152" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Find works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81e2-87c8-ccb27e56c01c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Replace works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81ef-b115-c38704012e51" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Replace all works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-812c-adce-dba0f5be9db4" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Case-sensitive search works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8131-9259-fc6ee0b9d504" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Whole-word search works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81f7-bb21-fde7287fa5b8" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Regular-expression search works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8132-b17d-e7983fb36b27" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Search highlights all matches</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8115-994a-e6ec376677d1" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Search works across long documents</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8169-a684-ee2f2d7eabcb" class="" dir="auto">File Operations</h3><ul id="3a77b16c-89f4-819c-857b-d788503cfbe9" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">New file works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-815d-ac84-d04505ec78c3" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Open file works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-816d-af36-dd43bd33c7ee" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Save works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8111-b5c0-f6834ce8c056" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Save As works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c4-8d6e-e81d06bfb28f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Auto-save works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81f6-8245-ca4288bf9cdd" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Unsaved-change warning works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-814a-b4b8-ff17156252a5" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">External file changes are detected</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81e9-a2c8-f9849bb3c1d0" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">UTF-8 encoding is preserved</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8114-b691-cccc6e3ab80c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Line-ending selection works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8148-82e5-ff0b60e901b1" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Recently opened files are listed</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8156-80d2-f0d9b8ca4b13" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">File recovery works after a crash</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81d7-99ac-dfdd45b49c2a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Relative links remain valid after saving</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8137-acd9-e01038e3a255" class="" dir="auto">Export</h3><ul id="3a77b16c-89f4-815b-97a2-f86d69bfd227" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Export to HTML works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81de-b456-c1328633e45d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Export to PDF works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8176-84ff-caa826582bdd" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Export to DOCX works, when supported</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-813e-b2ca-ed33814fa3c2" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported headings are preserved</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-811c-abb7-ee308a843ef5" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported links are clickable</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8114-962d-eed414fe3e2e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported images are included</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8171-a8a7-ceba6cf0471a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported code blocks preserve formatting</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-817d-80a4-f542d93d9735" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported tables fit the page</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81a0-aef4-ee1e4e60668d" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported footnotes are included</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8177-a7ab-c43b1febebca" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported math is rendered</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81e4-b50e-f2ebf30bfdeb" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Exported diagrams are rendered</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81dd-8771-f0b617e80d1c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Page breaks work as expected</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-81bb-b766-e5a2993cef5c" class="" dir="auto">Accessibility</h3><ul id="3a77b16c-89f4-81aa-9d05-f3dd8f88ca54" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Editor is keyboard navigable</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81b6-b5e2-c1aa730bd23a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Focus indicators are visible</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81f1-9943-cc66a0341dbd" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Screen-reader labels are meaningful</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8191-a958-e59426041fcd" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Heading hierarchy is exposed correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8113-8b57-fc811148a28e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Links have accessible names</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c1-bf8c-c2aca6b1599b" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Images use alt text</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81a1-a5c2-e7587ebf6522" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Contrast is sufficient</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c6-9537-d51ab1f3352e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Zooming does not break the layout</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81ce-bd84-e327a969b980" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Reduced-motion settings are respected</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81cf-8826-dc8aec7c34fe" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">High-contrast mode is usable</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8138-9a22-fb8a84109f16" class="" dir="auto">Performance</h3><ul id="3a77b16c-89f4-8176-87b2-d0ccfb21e3b0" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">File opens quickly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81d9-8305-c56be08acab7" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Editing remains responsive in a long document</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8133-a8e1-f1d69ccdfda5" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Preview rendering is debounced appropriately</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-816e-a71a-f8e8dbc7e69e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Large code blocks render correctly</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8142-8bce-e5d4a78375fa" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Large tables remain usable</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8129-8641-fe64101ad775" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Memory use remains reasonable</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81a2-a64a-df274dbfa4e9" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Search remains responsive</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8169-b091-ef800bcdc5e6" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Scrolling remains smooth</span><div class="indented"></div></li></ul><h3 id="3a77b16c-89f4-8183-8842-cd713b5c42fd" class="" dir="auto">Extensions and Compatibility</h3><ul id="3a77b16c-89f4-8169-abac-e83f8b483738" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">CommonMark mode works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8133-82da-c339a73af15a" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">GitHub Flavored Markdown mode works</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-812e-9bcb-ed8e2e392e84" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Front matter is recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81ba-9a18-c2304fcee7b6" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Footnotes are recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8126-abc4-d6294a7a9423" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Definition lists are recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81d2-b7c3-cecb6b1223e5" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Abbreviations are recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8132-bddc-f2be4ef6e809" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Custom heading IDs are recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8188-92d0-cbf5006b3e78" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Emoji shortcodes are recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8129-9c3f-e343c4fe07fe" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Mathematics is recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8103-95df-ce71624b7026" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Mermaid is recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8104-90df-f405703c1e3f" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">PlantUML is recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81c5-8d1d-edffaed42a87" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Admonitions are recognized</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-815b-b40c-e05f2443293e" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Unsupported extensions fail gracefully</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8186-beb8-c1984c4a45e0" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Markdown linting reports useful warnings</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-819a-8c9a-ea073f5d7761" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Formatter preserves intended meaning</span><div class="indented"></div></li></ul><hr id="3a77b16c-89f4-81b8-ae00-c24aa2f4a943" dir="auto"/><h2 id="3a77b16c-89f4-8107-a1e3-e7576643a322" class="" dir="auto">Security and Sanitization Tests</h2><p id="3a77b16c-89f4-81fc-b367-d64fb69e7c7e" class="" dir="auto">A secure preview should handle potentially unsafe HTML according to its security policy.</p><p id="3a77b16c-89f4-8168-884c-d668f4532eed" class="" dir="auto">The following examples are intentionally inert text inside code fences and should not be executed:</p><pre id="3a77b16c-89f4-8155-8c3d-edaa54e12c4a" class="code code-wrap" data-notion-code-syntax="html"><code class="language-html" style="white-space:pre-wrap;word-break:break-all">&lt;script&gt;alert(&quot;This should never execute in a secure preview.&quot;);&lt;/script&gt;</code></pre><pre id="3a77b16c-89f4-810d-9e48-c8fb957c6835" class="code code-wrap" data-notion-code-syntax="html"><code class="language-html" style="white-space:pre-wrap;word-break:break-all">&lt;img src=&quot;invalid&quot; onerror=&quot;alert(&#x27;unsafe&#x27;)&quot;&gt;</code></pre><pre id="3a77b16c-89f4-81d6-befd-f1bf1ed67df9" class="code code-wrap" data-notion-code-syntax="markdown"><code class="language-markdown" style="white-space:pre-wrap;word-break:break-all">[Potentially unsafe scheme](javascript:alert(&#x27;unsafe&#x27;))</code></pre><p id="3a77b16c-89f4-81d1-ad07-d129797c05c1" class="" dir="auto">Verify:</p><ul id="3a77b16c-89f4-81b8-a423-f5a4c9a93263" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Script tags are removed or escaped</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-813a-866e-c7176b76bb80" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Event-handler attributes are removed</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-81f9-9875-c989f5113aef" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Unsafe URL schemes are blocked</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-819c-888f-e8eb1c043d7c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Embedded content follows editor security settings</span><div class="indented"></div></li></ul><ul id="3a77b16c-89f4-8140-95b0-ebb07d32f56c" class="to-do-list" dir="auto"><li><input type="checkbox" class="checkbox checkbox-off" disabled=""/> <span class="to-do-children-unchecked">Local file access is restricted appropriately</span><div class="indented"></div></li></ul><hr id="3a77b16c-89f4-811c-8228-d79156a07341" dir="auto"/><h2 id="3a77b16c-89f4-81d9-a4a7-c7df079f7f6e" class="" dir="auto">Print and Page Break Tests</h2><p id="3a77b16c-89f4-81c5-868a-f712ae501cb0" class="" dir="auto">Some renderers support page breaks through HTML or CSS.</p><p id="3a77b16c-89f4-81e6-8c26-f7f27f740cda" class="" dir="auto">Content after a possible page break.</p><hr id="3a77b16c-89f4-815b-ac44-fd82650fcc46" dir="auto"/><h2 id="3a77b16c-89f4-81ce-8761-cbae6cc8d26b" class="" dir="auto">Final Rendering Test</h2><blockquote id="3a77b16c-89f4-8146-99e2-e8a82f07e846" class="" dir="auto">A complete Markdown editor should preserve the source, render supported features consistently, clearly handle unsupported extensions, remain responsive in large documents, and avoid executing unsafe content.</blockquote><p id="3a77b16c-89f4-81a4-a402-f5329f3a6740" class="" dir="auto"><strong>End of Markdown Editor Feature Test Suite.</strong></p><hr id="3a77b16c-89f4-815e-a4dc-db78a90923f8" dir="auto"/><ol type="1" id="3a77b16c-89f4-81fa-acf9-e3700e4dd051" class="numbered-list" start="1" dir="auto"><li>This is the first footnote.<a href="about:blank#fnref1">↩︎</a></li></ol><ol type="1" id="3a77b16c-89f4-81ee-9954-f6836c8d0b6e" class="numbered-list" start="2" dir="auto"><li>This is a longer footnote.<a href="about:blank#fnref2">↩︎</a><p id="3a77b16c-89f4-81a1-9dbb-ee1ddbfe18fb" class="" dir="auto">It contains a second paragraph and an indented code example.</p><pre id="3a77b16c-89f4-813e-8331-f73e8390285e" class="code code-wrap"><code style="white-space:pre-wrap;word-break:break-all">Footnotes may contain rich Markdown content.</code></pre></li></ol><ol type="1" id="3a77b16c-89f4-81a7-b4f0-fb1850d816cc" class="numbered-list" start="3" dir="auto"><li>This is an inline footnote.<a href="about:blank#fnref3">↩︎</a></li></ol><p id="3a77b16c-89f4-8035-a2d1-d100781ebbb5" class="" dir="auto">
+</p><hr id="3a77b16c-89f4-8092-b611-ea79ffebf1db" dir="auto"/><ul id="3a77b16c-89f4-80c8-bd01-d3effda84f23" class="bulleted-list" dir="auto"><li style="list-style-type:disc">This is a long list item that should wrap across more than one visual line to confirm the hanging indent<br/>Normal paragraph after the list item, unrelated content here.?</li></ul><p id="3a77b16c-89f4-8019-af59-c1eb46256438" class="" dir="auto">
+</p></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>

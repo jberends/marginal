@@ -7,6 +7,7 @@ extension NSAttributedString.Key {
     static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
     static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
     static let marginalTableGridMarker = NSAttributedString.Key("marginalTableGridMarker")
+    static let marginalCodeBlockMarker = NSAttributedString.Key("marginalCodeBlockMarker")
     static let marginalEmojiShortcode = NSAttributedString.Key("marginalEmojiShortcode")
 }
 
@@ -55,10 +56,36 @@ final class MarkdownLayoutManager: NSLayoutManager {
         guard let textStorage, let textContainer = textContainers.first else { return }
         let fullRange = NSRange(location: 0, length: textStorage.length)
 
+        // Drawn first so every other decoration (blockquote bar, bullets, grid lines) layers on
+        // top of the card, never underneath it.
+        textStorage.enumerateAttribute(.marginalCodeBlockMarker, in: fullRange) { value, range, _ in
+            guard value != nil else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            // boundingRect only returns ONE line fragment's rect (see the type doc comment) --
+            // the card's vertical extent must be unioned from every fragment, including the
+            // fixed-height hidden fence lines that act as top/bottom padding bands.
+            var top = CGFloat.greatestFiniteMagnitude
+            var bottom = -CGFloat.greatestFiniteMagnitude
+            enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, _, _ in
+                top = min(top, lineRect.minY)
+                bottom = max(bottom, lineRect.maxY)
+            }
+            guard top < bottom else { return }
+            let cardRect = NSRect(
+                x: origin.x + textContainer.lineFragmentPadding,
+                y: origin.y + top,
+                width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2),
+                height: bottom - top
+            )
+            NSColor.textBackgroundColor.blended(withFraction: 0.04, of: .labelColor)?.setFill()
+            NSBezierPath(roundedRect: cardRect, xRadius: 10, yRadius: 10).fill()
+        }
+
         textStorage.enumerateAttribute(.marginalBlockquoteMarker, in: fullRange) { value, range, _ in
             guard value != nil else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            NSColor.secondaryLabelColor.withAlphaComponent(0.5).setFill()
+            // Solid text color, matching Notion's quote bar (border-left: 3px solid currentColor).
+            NSColor.labelColor.setFill()
             enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, _, _ in
                 let barRect = NSRect(x: origin.x + lineRect.minX, y: origin.y + lineRect.minY, width: 3, height: lineRect.height)
                 barRect.fill()
@@ -129,7 +156,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // version) is not guaranteed by NSString measurement and read as the number nearly
             // colliding with the following text.
             let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
-            let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
+            let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
             let markerSize = (displayText as NSString).size(withAttributes: markerAttributes)
             let rightEdge = origin.x + paragraphStyle.headIndent - MarkdownStyler.orderedMarkerContentGap(for: font)
             let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + charRect.midY - markerSize.height / 2)
@@ -177,7 +204,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let bottom = origin.y + rowRect.maxY
 
             if gridInfo.isHeaderRow {
-                NSColor.textBackgroundColor.blended(withFraction: 0.06, of: .labelColor)?.setFill()
+                NSColor.textBackgroundColor.blended(withFraction: 0.04, of: .labelColor)?.setFill()
                 NSRect(x: left, y: top, width: totalWidth, height: rowRect.height).fill()
             }
 

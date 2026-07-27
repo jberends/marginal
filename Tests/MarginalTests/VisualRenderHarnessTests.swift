@@ -67,22 +67,56 @@ final class VisualRenderHarnessTests: XCTestCase {
     @MainActor
     func testRenderSampleForVisualInspection() throws {
         let text = """
-        1. First item
-        1. Second item
-        1. Third item
+        # Heading 1
+        ## Heading 2
+        ### Heading 3
+
+        > A quoted line of text in Notion style
+
+        - First bullet
+        - Second bullet
+
+        This file tests the following features:
+
+        1. Document headings from level 1 through level 6
+        2. Paragraphs and line wrapping
+        3. Forced line breaks
+        4. Horizontal rules
+        5. Bold text
+        6. Italic text
+        7. Bold and italic text combined
+        8. Strikethrough text
+        9. Underlined text using HTML
+        10. Highlighted text using HTML
+        11. Superscript using HTML
+        12. Subscript using HTML
 
         | Feature | Supported | Notes |
-        |---|:---:|---:|
+        | --- | --- | --- |
         | Headings | Yes | Levels 1-6 |
         | Tables | Yes | Extension in many parsers |
+        | Footnotes | Maybe | Depends on parser |
 
-        Some body text for comparison.
+        | Left aligned | Center aligned | Right aligned |
+        | :--- | :---: | ---: |
+        | Left | Center | Right |
+        | A longer value | Medium | 123.45 |
 
-        ```swift
-        let x = 1
+        Some body text with `inline code` for comparison.
+
+        ```yaml
+        ---
+        title: Markdown Editor Feature Test Suite
+        author: Example Author
+        date: 2026-07-24
+        tags:
+          - markdown
+          - editor
+        draft: false
+        ---
         ```
 
-        Great job :white_check_mark: :rocket: :+1: :smile:
+        Text after the code block.
         """
         // App Sandbox restricts writes to arbitrary paths -- the container's own home directory
         // is always writable regardless of entitlements.

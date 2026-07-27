@@ -68,9 +68,10 @@ struct MarkdownStyler {
         }
 
         for header in headers {
-            let headerFont = NSFontManager.shared.convert(
-                NSFont.systemFont(ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize)),
-                toHaveTrait: .boldFontMask
+            // Semibold, not full bold -- Notion's heading weight (600).
+            let headerFont = NSFont.systemFont(
+                ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize),
+                weight: .semibold
             )
             result.addAttribute(.font, value: headerFont, range: NSRange(header.contentRange, in: text))
 
@@ -78,24 +79,17 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: revealedHeaders.contains(header) ? headerFont : hiddenFont, range: markerRange)
         }
 
-        // Blockquotes style their whole content range with a blanket italic font/color before
-        // inlineStyles and links run, so those narrower, nested spans (e.g. bold or a link inside
-        // a quoted line) layer their own font/color on top afterward instead of being clobbered by
-        // this loop's blanket range if it ran later.
         let revealedBlockquotes = cursorLocation.map {
             CursorRevealController.revealedBlockquoteSpans(in: model, cursorLocation: $0)
         } ?? []
 
-        // Gap between the drawn left bar and the quoted text -- scales with type size (per Apple's
-        // HIG guidance to size spacing relative to text rather than a fixed pixel value) rather
-        // than a marker-derived width, since there's no marker character to align content under.
-        let blockquoteContentIndent = baseFont.pointSize * 0.75
+        // Gap between the drawn left bar and the quoted text -- Notion's quote padding-left is
+        // 14px at its 16px body size. Notion quotes keep the regular weight and the normal text
+        // color (they are NOT italic or gray -- an earlier version did both).
+        let blockquoteContentIndent = baseFont.pointSize * 0.875
 
         for blockquote in blockquotes {
             let markerRange = NSRange(blockquote.markerRange, in: text)
-            let contentRange = NSRange(blockquote.contentRange, in: text)
-            result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask), range: contentRange)
-            result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: contentRange)
             result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
 
             let quoteParagraphStyle = NSMutableParagraphStyle()
@@ -122,6 +116,21 @@ struct MarkdownStyler {
         // that column's shared target x-position -- the same shared position on every row, so the
         // columns line up into a real grid despite each row's content having a different natural
         // width. The separator ("|---|") row is pure syntax and stays fully hidden.
+        // This early pass applies only the table's fonts and row chrome. The kern/grid geometry
+        // is deferred to a second pass at the end of this function (see pendingTables below):
+        // cell widths must be measured from the finished attributed runs -- a bold/code span or
+        // emoji inside a cell renders wider/narrower than the same characters at plain baseFont,
+        // and the hidden pipes/padding still advance the line by their own (tiny) widths -- so
+        // measuring before inlineStyles/links/emoji have layered their fonts produced columns
+        // that drifted right of their own grid lines by one pipe-width per column.
+        struct PendingTableLayout {
+            let allRows: [TableRowSpan]
+            let columnCount: Int
+            let alignments: [TableAlignment]
+            let rowCellRanges: [[Range<String.Index>]]
+        }
+        var pendingTables: [PendingTableLayout] = []
+
         for table in tables {
             let columnCount = table.headerRow.pipeRanges.count - 1
             guard columnCount > 0 else { continue }
@@ -138,51 +147,21 @@ struct MarkdownStyler {
                 return start..<end
             }
 
-            // Pass 1: gather each row's trimmed cell ranges/widths so column widths (the max
-            // across every row) can be computed before any row is actually styled.
             var rowCellRanges: [[Range<String.Index>]] = []
-            var rowCellWidths: [[CGFloat]] = []
-            for row in allRows {
-                let cols = min(columnCount, row.pipeRanges.count - 1)
-                var ranges: [Range<String.Index>] = []
-                var widths: [CGFloat] = []
-                for c in 0..<cols {
-                    let range = trimmedCellRange(row.pipeRanges[c], row.pipeRanges[c + 1])
-                    ranges.append(range)
-                    widths.append((String(text[range]) as NSString).size(withAttributes: [.font: baseFont]).width)
-                }
-                rowCellRanges.append(ranges)
-                rowCellWidths.append(widths)
-            }
-
-            let cellPadding: CGFloat = 14
-            var columnWidths = [CGFloat](repeating: 0, count: columnCount)
-            for widths in rowCellWidths {
-                for (c, w) in widths.enumerated() { columnWidths[c] = max(columnWidths[c], w) }
-            }
-            var slotStarts: [CGFloat] = [0]
-            for c in 0..<columnCount { slotStarts.append(slotStarts[c] + columnWidths[c] + cellPadding * 2) }
-            let gridColumnBoundaries = slotStarts
-
             for (rowIndex, row) in allRows.enumerated() {
                 let isHeader = rowIndex == 0
                 let cols = min(columnCount, row.pipeRanges.count - 1)
-                var flowPosition: CGFloat = 0
+                var ranges: [Range<String.Index>] = []
                 for c in 0..<cols {
-                    let cellRange = rowCellRanges[rowIndex][c]
-                    let rawWidth = rowCellWidths[rowIndex][c]
-                    let slotStart = slotStarts[c]
-                    let slotWidth = columnWidths[c] + cellPadding * 2
-                    let desiredContentStart: CGFloat
-                    switch alignments[c] {
-                    case .left: desiredContentStart = slotStart + cellPadding
-                    case .right: desiredContentStart = slotStart + slotWidth - cellPadding - rawWidth
-                    case .center: desiredContentStart = slotStart + (slotWidth - rawWidth) / 2
-                    }
+                    let cellRange = trimmedCellRange(row.pipeRanges[c], row.pipeRanges[c + 1])
+                    ranges.append(cellRange)
 
+                    // Pipes are shrunk to the hidden font, not just cleared: at full size their
+                    // advance width pushed every column right of its own grid line, one more
+                    // pipe-width per column.
                     let pipeNSRange = NSRange(row.pipeRanges[c], in: text)
+                    result.addAttribute(.font, value: hiddenFont, range: pipeNSRange)
                     result.addAttribute(.foregroundColor, value: NSColor.clear, range: pipeNSRange)
-                    result.addAttribute(.kern, value: desiredContentStart - flowPosition, range: pipeNSRange)
 
                     if row.pipeRanges[c].upperBound < cellRange.lowerBound {
                         result.addAttribute(.font, value: hiddenFont, range: NSRange(row.pipeRanges[c].upperBound..<cellRange.lowerBound, in: text))
@@ -191,32 +170,43 @@ struct MarkdownStyler {
                         result.addAttribute(.font, value: hiddenFont, range: NSRange(cellRange.upperBound..<row.pipeRanges[c + 1].lowerBound, in: text))
                     }
                     if isHeader {
-                        result.addAttribute(.font, value: NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask), range: NSRange(cellRange, in: text))
+                        // Medium (500), not bold -- Notion's measured header row weight. A
+                        // **bold** span nested in a header cell still layers real bold on top
+                        // (inlineStyles runs after this).
+                        result.addAttribute(.font, value: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .medium), range: NSRange(cellRange, in: text))
                     }
-
-                    flowPosition = desiredContentStart + rawWidth
                 }
                 if let lastPipe = row.pipeRanges.last {
-                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: NSRange(lastPipe, in: text))
+                    let lastPipeNSRange = NSRange(lastPipe, in: text)
+                    result.addAttribute(.font, value: hiddenFont, range: lastPipeNSRange)
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: lastPipeNSRange)
                 }
-
-                result.addAttribute(
-                    .marginalTableGridMarker,
-                    value: TableGridInfo(columnBoundaries: gridColumnBoundaries, isHeaderRow: isHeader),
-                    range: NSRange(row.lineRange, in: text)
-                )
+                rowCellRanges.append(ranges)
 
                 // Vertical breathing room within each row -- without this, a row's height is
                 // exactly the text's own line height, so content butts directly against the grid
                 // lines above and below it. The grid drawing (which reads this same laid-out
-                // line's bounding rect) automatically follows the increased height.
+                // line's bounding rect) automatically follows the increased height. TextKit
+                // anchors a fixed-height line's baseline low (all the extra height lands above
+                // the glyphs), which read as text glued to the bottom grid line -- the baseline
+                // offset re-centers it vertically, matching Notion.
+                let rowHeight = baseFont.pointSize * 2.2
                 let rowParagraphStyle = NSMutableParagraphStyle()
-                rowParagraphStyle.minimumLineHeight = baseFont.pointSize * 1.9
-                rowParagraphStyle.maximumLineHeight = baseFont.pointSize * 1.9
-                result.addAttribute(.paragraphStyle, value: rowParagraphStyle, range: NSRange(row.lineRange, in: text))
+                rowParagraphStyle.minimumLineHeight = rowHeight
+                rowParagraphStyle.maximumLineHeight = rowHeight
+                let rowNSRange = NSRange(row.lineRange, in: text)
+                result.addAttribute(.paragraphStyle, value: rowParagraphStyle, range: rowNSRange)
+                let naturalLineHeight = baseFont.ascender - baseFont.descender + baseFont.leading
+                result.addAttribute(.baselineOffset, value: (rowHeight - naturalLineHeight) / 2, range: rowNSRange)
             }
 
             result.addAttribute(.font, value: hiddenFont, range: NSRange(table.separatorRowRange, in: text))
+            pendingTables.append(PendingTableLayout(
+                allRows: allRows,
+                columnCount: columnCount,
+                alignments: alignments,
+                rowCellRanges: rowCellRanges
+            ))
         }
 
         for span in inlineStyles {
@@ -242,8 +232,11 @@ struct MarkdownStyler {
             case .underline:
                 result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .code:
-                result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: spanBaseFont.pointSize, weight: .regular), range: contentRange)
+                // ~85% mono in Notion's inline-code red on a subtle chip -- matching Notion's
+                // inline code styling, and consistent with fenced blocks' 85% sizing.
+                result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: spanBaseFont.pointSize * 0.85, weight: .regular), range: contentRange)
                 result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentRange)
+                result.addAttribute(.foregroundColor, value: NSColor(red: 0.92, green: 0.34, blue: 0.34, alpha: 1), range: contentRange)
             }
 
             let delimiterFont = revealedStyles.contains(span) ? spanBaseFont : hiddenFont
@@ -290,12 +283,34 @@ struct MarkdownStyler {
 
         for codeBlock in model.codeBlocks {
             let contentNSRange = NSRange(codeBlock.contentRange, in: text)
-            // Monospaced fonts read visually smaller than proportional ones at the same nominal
-            // point size -- bumping by 1pt brings fenced code blocks back to a comparable visual
-            // weight against the surrounding body text.
-            let codeFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize + 1, weight: .regular)
+            // ~85% of body size, matching Notion -- an earlier version bumped code UP by 1pt,
+            // which read as code shouting over the surrounding prose.
+            let codeFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.85, weight: .regular)
             result.addAttribute(.font, value: codeFont, range: contentNSRange)
-            result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentNSRange)
+
+            // The background is not a per-glyph .backgroundColor (a ragged slab hugging each
+            // line's own text) -- the layout manager draws one rounded card behind the whole
+            // block, Notion-style. The marker spans the fences too: the hidden fence lines are
+            // given a fixed line height below, so they render as the card's top/bottom padding
+            // bands, and the content is inset from the card's left edge via paragraph indent.
+            let blockNSRange = NSRange(codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound, in: text)
+            result.addAttribute(.marginalCodeBlockMarker, value: true, range: blockNSRange)
+
+            let contentInset = codeBlockContentInset(for: baseFont)
+            let contentStyle = NSMutableParagraphStyle()
+            contentStyle.firstLineHeadIndent = contentInset
+            contentStyle.headIndent = contentInset
+            // Notion code lines run at 1.5 line height (20.4px for 13.6px code), airier than
+            // the mono font's own default.
+            contentStyle.minimumLineHeight = codeFont.pointSize * 1.5
+            result.addAttribute(.paragraphStyle, value: contentStyle, range: contentNSRange)
+
+            let fenceStyle = NSMutableParagraphStyle()
+            fenceStyle.minimumLineHeight = baseFont.pointSize * 1.5
+            fenceStyle.firstLineHeadIndent = contentInset
+            fenceStyle.headIndent = contentInset
+            result.addAttribute(.paragraphStyle, value: fenceStyle, range: NSRange(codeBlock.openingFenceRange, in: text))
+            result.addAttribute(.paragraphStyle, value: fenceStyle, range: NSRange(codeBlock.closingFenceRange, in: text))
 
             let codeText = String(text[codeBlock.contentRange])
             for token in MarkdownParser.parseCodeHighlightTokens(in: codeText) {
@@ -315,6 +330,66 @@ struct MarkdownStyler {
             let fenceFont = revealedCodeBlocks.contains(codeBlock) ? baseFont : hiddenFont
             result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.openingFenceRange, in: text))
             result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.closingFenceRange, in: text))
+        }
+
+        // Table geometry (deferred from the early table pass above): every font that can affect
+        // a cell's rendered width has been applied by now, so widths are measured from the real
+        // attributed runs. Column alignment is achieved without restructuring the text into real
+        // per-cell paragraphs (which NSTextTable would require -- a real mutation of the
+        // underlying markdown): a precisely computed .kern on each hidden pipe pushes the
+        // FOLLOWING cell's visible content to land exactly at that column's shared target
+        // x-position, the same position on every row, so columns line up into a real grid.
+        for pending in pendingTables {
+            let cellPadding = tableCellPadding(for: baseFont)
+
+            func measuredWidth(_ range: Range<String.Index>) -> CGFloat {
+                guard !range.isEmpty else { return 0 }
+                return result.attributedSubstring(from: NSRange(range, in: text)).size().width
+            }
+
+            let rowCellWidths = pending.rowCellRanges.map { $0.map(measuredWidth) }
+            var columnWidths = [CGFloat](repeating: 0, count: pending.columnCount)
+            for widths in rowCellWidths {
+                for (c, w) in widths.enumerated() { columnWidths[c] = max(columnWidths[c], w) }
+            }
+            var slotStarts: [CGFloat] = [0]
+            for c in 0..<pending.columnCount { slotStarts.append(slotStarts[c] + columnWidths[c] + cellPadding * 2) }
+
+            for (rowIndex, row) in pending.allRows.enumerated() {
+                let cols = min(pending.columnCount, row.pipeRanges.count - 1)
+                var flowPosition: CGFloat = 0
+                for c in 0..<cols {
+                    let cellRange = pending.rowCellRanges[rowIndex][c]
+                    let rawWidth = rowCellWidths[rowIndex][c]
+                    let slotStart = slotStarts[c]
+                    let slotWidth = columnWidths[c] + cellPadding * 2
+                    let desiredContentStart: CGFloat
+                    switch pending.alignments[c] {
+                    case .left: desiredContentStart = slotStart + cellPadding
+                    case .right: desiredContentStart = slotStart + slotWidth - cellPadding - rawWidth
+                    case .center: desiredContentStart = slotStart + (slotWidth - rawWidth) / 2
+                    }
+
+                    // The hidden pipe and padding glyphs still advance the line by their own
+                    // (tiny) measured widths -- folded into the kern so the content position
+                    // is exact, not just close.
+                    let pipeWidth = measuredWidth(row.pipeRanges[c])
+                    let leadingPadWidth = measuredWidth(row.pipeRanges[c].upperBound..<cellRange.lowerBound)
+                    let trailingPadWidth = measuredWidth(cellRange.upperBound..<row.pipeRanges[c + 1].lowerBound)
+                    result.addAttribute(
+                        .kern,
+                        value: desiredContentStart - flowPosition - pipeWidth - leadingPadWidth,
+                        range: NSRange(row.pipeRanges[c], in: text)
+                    )
+                    flowPosition = desiredContentStart + rawWidth + trailingPadWidth
+                }
+
+                result.addAttribute(
+                    .marginalTableGridMarker,
+                    value: TableGridInfo(columnBoundaries: slotStarts, isHeaderRow: rowIndex == 0),
+                    range: NSRange(row.lineRange, in: text)
+                )
+            }
         }
 
         func sameListKind(_ a: ListMarkerKind, _ b: ListMarkerKind) -> Bool {
@@ -425,6 +500,19 @@ struct MarkdownStyler {
                             value: displayTexts[index],
                             range: NSRange(location: markerRange.location, length: 1)
                         )
+                        // The transparent literal marker still advances the line by its own
+                        // natural width, which differs per item ("2. " vs "10. ") -- without
+                        // correction each item's content starts at a different x while the drawn
+                        // digits right-align against the group's shared headIndent, overlapping
+                        // the content. A kern on the marker's last character stretches (or
+                        // tightens) its advance to exactly the shared indentWidth, so every
+                        // item's content lands on the same tab stop the digits align against.
+                        let naturalMarkerWidth = (String(text[item.markerRange]) as NSString).size(withAttributes: [.font: baseFont]).width
+                        result.addAttribute(
+                            .kern,
+                            value: indentWidth - naturalMarkerWidth,
+                            range: NSRange(location: markerRange.location + markerRange.length - 1, length: 1)
+                        )
                     }
                 }
 
@@ -461,15 +549,23 @@ struct MarkdownStyler {
                 // fully indented from its own first character to read as belonging to the same
                 // item, not a new flush-left paragraph.
                 let markerLineEnd = text[item.lineRange].firstIndex(of: "\n") ?? item.lineRange.upperBound
+                // Breathing room between consecutive items (Notion: ~7px at 16px body).
+                // Applied to the paragraph that ENDS the item, so an item's own lazy
+                // continuation lines are never pushed away from their marker line.
+                let itemSpacing = baseFont.pointSize * 0.4375
+                let hasContinuation = markerLineEnd < item.lineRange.upperBound
+
                 let markerLineStyle = NSMutableParagraphStyle()
                 markerLineStyle.firstLineHeadIndent = levelOffset
                 markerLineStyle.headIndent = levelOffset + indentWidth
+                if !hasContinuation { markerLineStyle.paragraphSpacing = itemSpacing }
                 result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
 
-                if markerLineEnd < item.lineRange.upperBound {
+                if hasContinuation {
                     let continuationStyle = NSMutableParagraphStyle()
                     continuationStyle.firstLineHeadIndent = levelOffset + indentWidth
                     continuationStyle.headIndent = levelOffset + indentWidth
+                    continuationStyle.paragraphSpacing = itemSpacing
                     let continuationStart = text.index(after: markerLineEnd)
                     result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
                 }
@@ -487,7 +583,9 @@ struct MarkdownStyler {
     }
 
     private static func headerPointSize(for level: Int, baseSize: CGFloat) -> CGFloat {
-        let scale: [Int: CGFloat] = [1: 2.0, 2: 1.6, 3: 1.35, 4: 1.15, 5: 1.0, 6: 0.9]
+        // Notion's heading scale: 30/24/20/18px at 16px body (h5/h6 have no Notion equivalent
+        // and extrapolate the same curve downward).
+        let scale: [Int: CGFloat] = [1: 1.875, 2: 1.5, 3: 1.25, 4: 1.125, 5: 1.0, 6: 0.875]
         return baseSize * (scale[level] ?? 1.0)
     }
 
@@ -497,5 +595,20 @@ struct MarkdownStyler {
     /// always agree.
     static func orderedMarkerContentGap(for font: NSFont) -> CGFloat {
         font.pointSize * 0.35
+    }
+
+    /// Horizontal padding between a column's grid line and the cell content inside it. Scales
+    /// with type size; the ratio matches Notion's table cell padding (~10px at Notion's 16px
+    /// body size). Shared with tests so the reserved slot math and assertions always agree.
+    static func tableCellPadding(for font: NSFont) -> CGFloat {
+        font.pointSize * 0.5625
+    }
+
+    /// Horizontal inset between a fenced code block's rounded card edge and the code inside it.
+    /// Scales with type size; the ratio matches Notion's code block padding (~22px at Notion's
+    /// 16px body size). Shared with MarkdownLayoutManager/tests so the paragraph indent and the
+    /// drawn card always agree.
+    static func codeBlockContentInset(for font: NSFont) -> CGFloat {
+        font.pointSize * 1.375
     }
 }
