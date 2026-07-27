@@ -74,9 +74,9 @@ Written in the brand voice (sentence case, short declaratives, no exclamation ma
 - **Keywords**: `markdown,editor,wysiwyg,notes,writing,plain text,md,notion`
 - **Support URL**: `https://github.com/jberends/marginal`
 - **Marketing URL**: the landing page, once hosted.
-- **Privacy policy URL**: required, even for an app that collects nothing. Add a page
-  to the site stating: Marginal collects no data, has no analytics, no network access;
-  documents never leave the Mac.
+- **Privacy policy URL**: `https://jberends.github.io/marginal/privacy` — already
+  live (states: no data collected, no analytics, no network access; documents never
+  leave the Mac).
 - **App privacy** questionnaire: "Data not collected" — truthful, and it renders as the
   best possible privacy label.
 - **Pricing**: free (paid requires the Paid Applications agreement + banking/tax forms first).

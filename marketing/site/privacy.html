@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marginal — privacy policy</title>
+<meta name="description" content="Marginal collects no data. Documents never leave your Mac.">
+<meta name="theme-color" content="#FFFEFC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1E1E1D" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icon.png">
+<style>
+  :root{
+    --paper-highlight:#FFFEFC; --paper:#F7F6F3; --hairline:#E6E5E3;
+    --ink:#2C2C2B; --ink-header:#232323; --ink-60:#6B6A67;
+    --violet:#8E1FCB;
+    --font-ui:-apple-system,BlinkMacSystemFont,system-ui,"Segoe UI","Helvetica Neue",sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper-highlight:#1E1E1D; --paper:#252524; --hairline:#33332F;
+      --ink:#E8E7E3; --ink-header:#F2F1EE; --ink-60:#A6A49F;
+      --violet:#CB7DF7;
+    }
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    font-family:var(--font-ui); font-size:16px; line-height:1.5;
+    color:var(--ink); background:var(--paper-highlight);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:720px; margin:0 auto; padding:24px; }
+  header{ border-bottom:1px solid var(--hairline); }
+  .nav-inner{ display:flex; align-items:center; height:56px; gap:10px; }
+  .wordmark{ display:flex; align-items:center; gap:10px; font-weight:600; color:var(--ink-header); text-decoration:none; }
+  .wordmark img{ width:28px; height:28px; }
+  main{ padding-block:64px 96px; }
+  h1{ color:var(--ink-header); font-size:30px; font-weight:600; letter-spacing:-.02em; margin-bottom:8px; }
+  .updated{ color:var(--ink-60); font-size:13px; margin-bottom:48px; }
+  h2{ color:var(--ink-header); font-size:20px; font-weight:600; letter-spacing:-.02em; margin:32px 0 8px; }
+  p{ margin-bottom:16px; max-width:68ch; }
+  a{ color:var(--violet); text-decoration:none; }
+  a:hover{ text-decoration:underline; }
+  footer{ border-top:1px solid var(--hairline); background:var(--paper); padding-block:32px; color:var(--ink-60); font-size:14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="./"><img src="icon.png" alt="">Marginal</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Privacy policy</h1>
+  <p class="updated">Effective 27 July 2026</p>
+
+  <p>Marginal is a markdown editor for macOS. This policy is short because there is little to say: Marginal collects no data.</p>
+
+  <h2>What Marginal collects</h2>
+  <p>Nothing. Marginal has no analytics, no telemetry, no crash reporting, no accounts, and no advertising. It makes no network connections of its own.</p>
+
+  <h2>Your documents</h2>
+  <p>Documents are plain markdown files on your Mac. They are read and written only where you choose to open and save them, and they never leave your machine. Marginal runs inside the macOS App Sandbox, which limits its file access to exactly the files you select.</p>
+
+  <h2>App Store distribution</h2>
+  <p>If you install Marginal through the Mac App Store, Apple processes the download and any associated receipt under its own <a href="https://www.apple.com/legal/privacy/">privacy policy</a>. None of that information reaches the developer.</p>
+
+  <h2>Changes</h2>
+  <p>If a future version of Marginal ever changes any of the above — for example, an optional feature that talks to a service you configure — this policy will be updated first, and the feature will be off by default.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Open an issue at <a href="https://github.com/jberends/marginal/issues">github.com/jberends/marginal</a>.</p>
+</main>
+
+<footer>
+  <div class="wrap">© 2026 Jochem Berends · <a href="./">marginal</a> · <a href="https://github.com/jberends/marginal/blob/main/LICENSE">Apache 2.0</a></div>
+</footer>
+
+</body>
+</html>
