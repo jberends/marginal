@@ -222,21 +222,24 @@ struct MarkdownStyler {
             }
             switch span.kind {
             case .bold:
-                result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .boldFontMask), range: contentRange)
+                // Semibold (600), not full bold -- 600 is the heaviest weight in the product
+                // (same rule as headings; the design system never uses 700).
+                result.addAttribute(.font, value: NSFont.systemFont(ofSize: spanBaseFont.pointSize, weight: .semibold), range: contentRange)
             case .italic:
                 result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .italicFontMask), range: contentRange)
             case .boldItalic:
-                result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: [.boldFontMask, .italicFontMask]), range: contentRange)
+                let semibold = NSFont.systemFont(ofSize: spanBaseFont.pointSize, weight: .semibold)
+                result.addAttribute(.font, value: NSFontManager.shared.convert(semibold, toHaveTrait: .italicFontMask), range: contentRange)
             case .strikethrough:
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .underline:
                 result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
             case .code:
-                // ~85% mono in Notion's inline-code red on a subtle chip -- matching Notion's
-                // inline code styling, and consistent with fenced blocks' 85% sizing.
+                // ~85% mono on a warm panel chip, in the brand's single accent (violet) --
+                // consistent with fenced blocks' 85% sizing.
                 result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: spanBaseFont.pointSize * 0.85, weight: .regular), range: contentRange)
-                result.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: contentRange)
-                result.addAttribute(.foregroundColor, value: NSColor(red: 0.92, green: 0.34, blue: 0.34, alpha: 1), range: contentRange)
+                result.addAttribute(.backgroundColor, value: DesignPalette.surfaceCode, range: contentRange)
+                result.addAttribute(.foregroundColor, value: DesignPalette.accent, range: contentRange)
             }
 
             let delimiterFont = revealedStyles.contains(span) ? spanBaseFont : hiddenFont
@@ -250,7 +253,7 @@ struct MarkdownStyler {
 
         for link in links {
             let textRange = NSRange(link.textRange, in: text)
-            result.addAttribute(.foregroundColor, value: NSColor.linkColor, range: textRange)
+            result.addAttribute(.foregroundColor, value: DesignPalette.accent, range: textRange)
             result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: textRange)
             result.addAttribute(.link, value: link.url, range: textRange)
 
@@ -320,9 +323,9 @@ struct MarkdownStyler {
                       let tokenEnd = text.index(codeBlock.contentRange.lowerBound, offsetBy: endOffset, limitedBy: text.endIndex) else { continue }
                 let tokenColor: NSColor
                 switch token.kind {
-                case .string: tokenColor = NSColor.systemGreen
-                case .comment: tokenColor = NSColor.secondaryLabelColor
-                case .number: tokenColor = NSColor.systemPurple
+                case .string: tokenColor = DesignPalette.synString
+                case .comment: tokenColor = DesignPalette.synComment
+                case .number: tokenColor = DesignPalette.synNumber
                 }
                 result.addAttribute(.foregroundColor, value: tokenColor, range: NSRange(tokenStart..<tokenEnd, in: text))
             }

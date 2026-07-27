@@ -77,7 +77,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2),
                 height: bottom - top
             )
-            NSColor.textBackgroundColor.blended(withFraction: 0.04, of: .labelColor)?.setFill()
+            DesignPalette.surfaceCode.setFill()
             NSBezierPath(roundedRect: cardRect, xRadius: 10, yRadius: 10).fill()
         }
 
@@ -102,7 +102,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2),
                 height: 1
             )
-            NSColor.separatorColor.setFill()
+            DesignPalette.hairline.setFill()
             lineRect.fill()
         }
 
@@ -177,7 +177,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let boxPath = NSBezierPath(roundedRect: boxRect, xRadius: 3, yRadius: 3)
 
             if isComplete {
-                NSColor.controlAccentColor.setFill()
+                DesignPalette.accent.setFill()
                 boxPath.fill()
                 let check = NSBezierPath()
                 check.lineCapStyle = .round
@@ -186,7 +186,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 check.move(to: NSPoint(x: boxRect.minX + side * 0.22, y: boxRect.minY + side * 0.52))
                 check.line(to: NSPoint(x: boxRect.minX + side * 0.42, y: boxRect.minY + side * 0.70))
                 check.line(to: NSPoint(x: boxRect.minX + side * 0.78, y: boxRect.minY + side * 0.28))
-                NSColor.white.setStroke()
+                DesignPalette.accentOn.setStroke()
                 check.stroke()
             } else {
                 NSColor.tertiaryLabelColor.setStroke()
@@ -204,11 +204,11 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let bottom = origin.y + rowRect.maxY
 
             if gridInfo.isHeaderRow {
-                NSColor.textBackgroundColor.blended(withFraction: 0.04, of: .labelColor)?.setFill()
+                DesignPalette.surfaceCode.setFill()
                 NSRect(x: left, y: top, width: totalWidth, height: rowRect.height).fill()
             }
 
-            NSColor.separatorColor.setStroke()
+            DesignPalette.hairline.setStroke()
             for x in gridInfo.columnBoundaries {
                 let line = NSBezierPath()
                 line.lineWidth = 1

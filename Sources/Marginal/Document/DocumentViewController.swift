@@ -12,7 +12,8 @@ final class DocumentViewController: NSViewController {
     // MarkdownStyler.hiddenDelimiterFontSize) — so it must never be read back as "the base
     // font"; this property is the only thing restyle()/toggleShowSource()/font-size
     // adjustment consult or mutate.
-    private var editorFontSize: CGFloat = 15
+    // 16px body -- the design system's base size (headings scale 1.25/1.5/1.875 from it).
+    private var editorFontSize: CGFloat = 16
 
     weak var document: MarkdownDocument?
 
@@ -41,15 +42,19 @@ final class DocumentViewController: NSViewController {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
-        textView.font = NSFont.systemFont(ofSize: 15)
+        textView.font = NSFont.systemFont(ofSize: 16)
         textView.textContainerInset = NSSize(width: 40, height: 24)
+        // Paper, not white -- the design system's page surface, with the violet-tinted
+        // selection from the same token sheet. Both are dynamic (light/dark).
+        textView.backgroundColor = DesignPalette.surfacePage
+        textView.selectedTextAttributes = [.backgroundColor: DesignPalette.selection]
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = self
         textView.shortcutDelegate = self
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
-        editorFontSize = savedSize > 0 ? savedSize : 15
+        editorFontSize = savedSize > 0 ? savedSize : 16
         textView.font = NSFont.systemFont(ofSize: editorFontSize)
 
         scrollView.documentView = textView

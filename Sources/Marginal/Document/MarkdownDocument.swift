@@ -3,7 +3,11 @@ import AppKit
 @objc(MarkdownDocument)
 final class MarkdownDocument: NSDocument {
 
-    var text: String = ""
+    // NSDocument calls read(from:ofType:) / data(ofType:) off the main actor (background
+    // file reads and asynchronous autosave), so this can't be main-actor-isolated storage.
+    // NSDocument itself serializes those calls against each other and against UI access
+    // (it snapshots state before an async save), so unsynchronized access is safe here.
+    nonisolated(unsafe) var text: String = ""
 
     override class var autosavesInPlace: Bool { true }
 

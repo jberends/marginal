@@ -1,5 +1,8 @@
 import AppKit
 
+// All of this is UI work (menus, windows, NSApp) -- pin the whole delegate to the
+// main actor so Swift 6 strict concurrency knows every member runs there.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private var preferencesWindowController: NSWindowController?
@@ -109,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         editMenu.addItem(withTitle: "Copy", action: #selector(DocumentViewController.copySelectionAsMarkdown(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Copy as HTML", action: #selector(DocumentViewController.copySelectionAsHTML(_:)), keyEquivalent: "C")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Delete", action: Selector(("delete:")), keyEquivalent: "")
+        editMenu.addItem(withTitle: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
         editMenu.addItem(NSMenuItem.separator())
         editMenu.addItem(withTitle: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu

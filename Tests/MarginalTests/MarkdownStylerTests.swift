@@ -4,13 +4,19 @@ import AppKit
 
 final class MarkdownStylerTests: XCTestCase {
 
-    func testBoldContentGetsBoldFont() {
+    func testBoldContentGetsSemiboldFont() {
         let text = "Hello **world**"
         let model = MarkdownDocumentModel(inlineStyles: MarkdownParser.parseInlineStyles(in: text))
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let location = text.distance(from: text.startIndex, to: text.range(of: "world")!.lowerBound)
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+        // Semibold (600), not full bold -- 600 is the heaviest weight in the product.
+        XCTAssertEqual(fontWeight(of: font), NSFont.Weight.semibold.rawValue, accuracy: 0.01)
+    }
+
+    private func fontWeight(of font: NSFont?) -> CGFloat {
+        let traits = font?.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any]
+        return traits?[.weight] as? CGFloat ?? 0
     }
 
     func testHiddenDelimiterUsesTinyFont() {
@@ -53,7 +59,7 @@ final class MarkdownStylerTests: XCTestCase {
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let location = text.distance(from: text.startIndex, to: text.range(of: "Bold")!.lowerBound)
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+        XCTAssertEqual(fontWeight(of: font), NSFont.Weight.semibold.rawValue, accuracy: 0.01)
         XCTAssertGreaterThan(font?.pointSize ?? 0, 14, "Bold text nested inside a header must keep the header's larger font size")
     }
 
@@ -333,7 +339,7 @@ final class MarkdownStylerTests: XCTestCase {
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let location = text.distance(from: text.startIndex, to: text.range(of: "Completed")!.lowerBound)
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false, "Nested bold must survive the completed-task color/strikethrough pass, which only touches color and strikethrough, not font")
+        XCTAssertEqual(fontWeight(of: font), NSFont.Weight.semibold.rawValue, accuracy: 0.01, "Nested bold must survive the completed-task color/strikethrough pass, which only touches color and strikethrough, not font")
     }
 
     func testInlineCodeGetsMonospaceFontAndBackground() {
@@ -393,7 +399,7 @@ final class MarkdownStylerTests: XCTestCase {
 
         let boldContentLocation = text.distance(from: text.startIndex, to: text.range(of: "Bold")!.lowerBound)
         let boldFont = attributed.attribute(.font, at: boldContentLocation, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(boldFont?.fontDescriptor.symbolicTraits.contains(.bold) ?? false, "Bold inside a blockquote must stay bold")
+        XCTAssertEqual(fontWeight(of: boldFont), NSFont.Weight.semibold.rawValue, accuracy: 0.01, "Bold inside a blockquote must stay bold (semibold -- the product's heaviest weight)")
 
         let openingDelimiterLocation = text.distance(from: text.startIndex, to: text.range(of: "**Bold")!.lowerBound)
         let delimiterFont = attributed.attribute(.font, at: openingDelimiterLocation, effectiveRange: nil) as? NSFont

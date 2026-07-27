@@ -2,6 +2,7 @@ import XCTest
 import AppKit
 @testable import Marginal
 
+@MainActor
 final class DocumentViewControllerTests: XCTestCase {
 
     func testCopyCurrentSelectionAsMarkdownPutsRawTextOnPasteboard() {
@@ -52,7 +53,7 @@ final class DocumentViewControllerTests: XCTestCase {
         // the real editor font size, not left at the near-invisible hidden-delimiter size a
         // prior bug could leak into the restored render.
         let contentFont = viewController.textView.textStorage?.attribute(.font, at: 2, effectiveRange: nil) as? NSFont
-        XCTAssertEqual(contentFont?.pointSize, 15)
+        XCTAssertEqual(contentFont?.pointSize, 16)
     }
 
     func testShowSourceSurvivesSelectionChange() {
