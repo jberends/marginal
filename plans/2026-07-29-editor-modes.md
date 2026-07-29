@@ -2426,6 +2426,19 @@ In `updateCursorChrome()`, replace the single-line gutter assignment (`gutterVie
             lines.append(.init(number: number, centerY: gutterY(for: fragmentRect), isCurrent: number == currentLine))
             index = max(NSMaxRange(lineRange), index + 1)
         }
+
+        // A trailing "\n" leaves one more blank visual line that has no character index of its
+        // own -- TextKit represents it only as `extraLineFragmentRect`, so the loop above never
+        // reaches it and the common case of a trailing-newline document loses its last line's
+        // number. Number it too when it's actually visible, the same way
+        // `lineFragmentRectForCaret` already handles this for the caret-at-the-end case below.
+        if nsText.length > 0, nsText.hasSuffix("\n") {
+            let extraRect = layoutManager.extraLineFragmentRect
+            if !extraRect.isEmpty, visibleRect.intersects(extraRect) {
+                let number = nsText.components(separatedBy: "\n").count
+                lines.append(.init(number: number, centerY: gutterY(for: extraRect), isCurrent: number == currentLine))
+            }
+        }
         gutterView.lines = lines
     }
 
