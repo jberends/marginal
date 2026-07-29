@@ -15,6 +15,12 @@
   <a href="https://github.com/jberends/marginal/releases/latest"><img src="https://img.shields.io/github/v/release/jberends/marginal?label=download" alt="Latest release"></a>
 </p>
 
+<p align="center">
+  <a href="https://jberends.github.io/marginal/"><strong>Website</strong></a> ·
+  <a href="https://github.com/jberends/marginal/releases/latest">Download</a> ·
+  <a href="https://jberends.github.io/marginal/privacy">Privacy</a>
+</p>
+
 ---
 
 Open a `.md` file, write, and see it rendered beautifully as you type — bold, italic, headers, links, tables, code blocks, and images all render inline, with markdown syntax revealing itself only where your cursor is. No projects, no folders, no sidebar. Good at one job: being your default markdown editor.
@@ -56,10 +62,10 @@ follow the app's own 1.25/1.5/1.875 scale.
   ramp and markdown rendering rules, as a self-contained page.
 - **[Landing page](marketing/site/index.html)** — a one-page site built on the same
   tokens, with product shots rendered by the app's real text engine in both light and
-  dark. Deployed with GitHub Pages via
-  [`.github/workflows/deploy-site.yml`](.github/workflows/deploy-site.yml): enable it
-  once under *Settings → Pages → Source: GitHub Actions*, and the site publishes to
-  `https://jberends.github.io/marginal/` on every push that touches `marketing/site/`.
+  dark. Live at **[jberends.github.io/marginal](https://jberends.github.io/marginal/)**
+  (with the [privacy policy](https://jberends.github.io/marginal/privacy) at `/privacy`),
+  republished by [`deploy-site.yml`](.github/workflows/deploy-site.yml) on every push
+  that touches `marketing/site/`.
 - **[App icon](assets/icon/)** — the long-tail serif "m" mark and its
   [design sheet](assets/icon/marginal-icon-design-system.png).
 
