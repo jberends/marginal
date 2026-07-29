@@ -424,6 +424,10 @@ struct MarkdownStyler {
             }
         }
 
+        let revealedTasks = cursorLocation.map {
+            CursorRevealController.revealedTaskListSpans(in: model, cursorLocation: $0)
+        } ?? []
+
         for group in listItemGroups {
             guard let first = group.first else { continue }
 
@@ -469,8 +473,12 @@ struct MarkdownStyler {
 
                 switch item.kind {
                 case .unordered where item.taskState != nil:
-                    // A task item shows only its checkbox, not the usual bullet shape.
-                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
+                    // A task item shows only its checkbox, not the usual bullet shape --
+                    // unless the cursor is on its line, which reveals the literal "- [ ]"
+                    // source, matching every other marker's reveal-at-cursor behavior.
+                    if !revealedTasks.contains(item) {
+                        result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
+                    }
                 case .unordered:
                     result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: markerRange)
                     if markerRange.length > 0 {
@@ -524,9 +532,12 @@ struct MarkdownStyler {
                     // it reserves the correct space and stays selectable/copyable), and
                     // MarkdownLayoutManager draws an actual checkbox square (+ checkmark when
                     // complete) into that same reserved space, the same technique as the bullet.
+                    // When the cursor is on this line the literal source stays visible instead.
                     let taskMarkerNSRange = NSRange(taskMarkerRange, in: text)
-                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: taskMarkerNSRange)
-                    result.addAttribute(.marginalTaskCheckboxMarker, value: taskState == .complete, range: taskMarkerNSRange)
+                    if !revealedTasks.contains(item) {
+                        result.addAttribute(.foregroundColor, value: NSColor.clear, range: taskMarkerNSRange)
+                        result.addAttribute(.marginalTaskCheckboxMarker, value: taskState == .complete, range: taskMarkerNSRange)
+                    }
 
                     if taskState == .complete {
                         // Completed tasks read as done: struck through and de-emphasized, matching

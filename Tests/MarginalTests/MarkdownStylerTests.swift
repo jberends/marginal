@@ -314,6 +314,32 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertNil(strikethrough, "Incomplete task text must not be struck through")
     }
 
+    func testCursorOnTaskLineRevealsLiteralCheckboxSource() {
+        let text = "- [ ] Incomplete task\nOther line"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let cursor = text.range(of: "Incomplete")!.lowerBound
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: cursor)
+
+        let checkboxLocation = text.distance(from: text.startIndex, to: text.range(of: "[ ]")!.lowerBound)
+        XCTAssertNil(attributed.attribute(.marginalTaskCheckboxMarker, at: checkboxLocation, effectiveRange: nil), "No checkbox is drawn while the cursor is on the line")
+        let markerColor = attributed.attribute(.foregroundColor, at: checkboxLocation, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(markerColor, NSColor.clear, "The literal [ ] source is visible while editing the line")
+        let bulletColor = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        XCTAssertNotEqual(bulletColor, NSColor.clear, "The literal - marker is visible while editing the line")
+    }
+
+    func testCursorOnOtherLineKeepsTaskCheckboxHidden() {
+        // The blank line matters: a directly-following line would be a lazy continuation
+        // of the list item, making the cursor count as on the item's own line.
+        let text = "- [ ] Incomplete task\n\nOther line"
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let cursor = text.range(of: "Other")!.lowerBound
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 14), cursorLocation: cursor)
+
+        let checkboxLocation = text.distance(from: text.startIndex, to: text.range(of: "[ ]")!.lowerBound)
+        XCTAssertEqual(attributed.attribute(.marginalTaskCheckboxMarker, at: checkboxLocation, effectiveRange: nil) as? Bool, false)
+    }
+
     func testCompletedTaskGetsCheckedMarkerAndStrikethroughText() {
         let text = "- [x] Completed task"
         let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))

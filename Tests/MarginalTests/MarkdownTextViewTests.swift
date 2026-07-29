@@ -29,6 +29,43 @@ final class MarkdownTextViewTests: XCTestCase {
     }
 
     @MainActor
+    private func makeStyledTaskTextView(_ text: String) -> MarkdownTextView {
+        let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 16), cursorLocation: nil)
+        textView.textStorage?.setAttributedString(attributed)
+        return textView
+    }
+
+    @MainActor
+    func testToggleTaskCheckboxChecksAnIncompleteTask() {
+        let text = "- [ ] Unsupported extensions fail gracefully"
+        let textView = makeStyledTaskTextView(text)
+        let checkboxIndex = (text as NSString).range(of: "[ ]").location
+
+        XCTAssertTrue(textView.toggleTaskCheckbox(atCharacterIndex: checkboxIndex))
+        XCTAssertEqual(textView.string, "- [x] Unsupported extensions fail gracefully")
+    }
+
+    @MainActor
+    func testToggleTaskCheckboxUnchecksACompletedTask() {
+        let text = "- [x] Ship it"
+        let textView = makeStyledTaskTextView(text)
+        let checkboxIndex = (text as NSString).range(of: "[x]").location
+
+        XCTAssertTrue(textView.toggleTaskCheckbox(atCharacterIndex: checkboxIndex))
+        XCTAssertEqual(textView.string, "- [ ] Ship it")
+    }
+
+    @MainActor
+    func testToggleTaskCheckboxIgnoresPlainText() {
+        let textView = makeStyledTaskTextView("- [ ] A task")
+        let taskTextIndex = ("- [ ] A task" as NSString).range(of: "task").location
+        XCTAssertFalse(textView.toggleTaskCheckbox(atCharacterIndex: taskTextIndex), "Only the checkbox marker itself toggles")
+        XCTAssertEqual(textView.string, "- [ ] A task")
+    }
+
+    @MainActor
     func testCommandPlusIncreasesFontSizeSameAsCommandEquals() {
         let textView = MarkdownTextView()
         let delegate = RecordingShortcutDelegate()

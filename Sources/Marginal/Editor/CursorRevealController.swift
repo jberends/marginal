@@ -33,6 +33,15 @@ struct CursorRevealController {
         }
     }
 
+    /// Task items whose line contains the cursor: their checkbox renders as the literal
+    /// "[ ]"/"[x]" source while editing that line, matching every other marker's behavior.
+    static func revealedTaskListSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [ListItemSpan] {
+        model.listItems.filter { item in
+            item.taskState != nil
+                && cursorLocation >= item.lineRange.lowerBound && cursorLocation <= item.lineRange.upperBound
+        }
+    }
+
     static func revealedBlockquoteSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [BlockquoteSpan] {
         model.blockquotes.filter { blockquote in
             cursorLocation >= blockquote.lineRange.lowerBound && cursorLocation <= blockquote.lineRange.upperBound
