@@ -1438,9 +1438,16 @@ Append to `Tests/MarginalTests/DocumentViewControllerTests.swift`:
 ```swift
     // MARK: - Editor modes
 
+    /// A controller whose starting mode is always `.live`, whatever mode this Mac's real
+    /// UserDefaults happens to hold — otherwise every assertion below depends on what the
+    /// developer last clicked.
     private func loadedController(_ markdown: String = "# Title\n\nbody text\n") -> DocumentViewController {
         let controller = DocumentViewController()
         _ = controller.view          // force loadView()
+        let suite = "DocumentViewControllerTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        controller.editorModeDefaults = defaults
         controller.loadInitialText(markdown)
         return controller
     }
@@ -1547,7 +1554,12 @@ Replace the stored property `private var isShowingSource = false` (line 11) with
 ```swift
     private var previewWebView: PreviewWebView?
     private var scrollView: NSScrollView!
-    private lazy var modeController = EditorModeController(host: self)
+
+    /// Where the mode controller reads and persists the mode. Tests point this at a throwaway
+    /// suite so a developer's own last-used mode can never change what a test observes; it must
+    /// be set before `loadInitialText`, which is what first touches `modeController`.
+    var editorModeDefaults: UserDefaults = .standard
+    private lazy var modeController = EditorModeController(host: self, defaults: editorModeDefaults)
 
     /// The active rendering mode.
     var editorMode: EditorMode { modeController.mode }
@@ -1665,10 +1677,9 @@ extension DocumentViewController: EditorModeHost {
         previewWebView?.isHidden = !isPreview
         scrollView.isHidden = isPreview
         gutterView.isHidden = isPreview
-        statusBar.isShowingDocumentStatistics = isPreview
-        if isPreview {
-            statusBar.update(with: DocumentStatistics.statistics(for: textView.string))
-        }
+        // NOTE: the status bar's Preview readout (word count / reading time) and its segmented
+        // control are wired in Task 10, which is where those StatusBarView members are added.
+        // Do not reference them here — they do not exist yet and this task must compile.
         if !isPreview {
             // Editing surfaces take focus back when Preview yields it.
             view.window?.makeFirstResponder(textView)
@@ -1756,7 +1767,7 @@ Then replace all four duplicated `isShowingSource ? … : restyle(…)` branches
 `modeController.render()`:
 
 - In `loadInitialText(_:)`: replace `restyle(cursorLocation: nil)` with `modeController.activate()`.
-- In `textDidChange(_:)`: replace the `if isShowingSource { … } else { … }` block with `modeController.render()`, and when in Preview also refresh the statistics — the body becomes:
+- In `textDidChange(_:)`: replace the `if isShowingSource { … } else { … }` block with `modeController.render()` — the body becomes:
 
 ```swift
     func textDidChange(_ notification: Notification) {
@@ -1764,9 +1775,6 @@ Then replace all four duplicated `isShowingSource ? … : restyle(…)` branches
         document?.text = textView.string
         document?.updateChangeCount(.changeDone)
         modeController.render()
-        if editorMode == .preview {
-            statusBar.update(with: DocumentStatistics.statistics(for: textView.string))
-        }
         updateCursorChrome()
     }
 ```
@@ -2024,7 +2032,7 @@ final class EditorChromeViewsTests: XCTestCase {
 
     func testPreviewVariantShowsStatisticsAndHidesTheCaretReadouts() {
         let bar = StatusBarView(frame: .zero)
-        bar.update(with: CursorStatus(path: ["h1", "bold"], line: 24, column: 13))
+        bar.update(with: CursorStatus(line: 24, column: 13, path: ["h1", "bold"]))
         bar.isShowingDocumentStatistics = true
         bar.update(with: DocumentStatistics.statistics(for: "one two three"))
         XCTAssertEqual(bar.breadcrumbTextForTesting, "3 words · 1 min read")
@@ -2036,7 +2044,7 @@ final class EditorChromeViewsTests: XCTestCase {
         bar.isShowingDocumentStatistics = true
         bar.update(with: DocumentStatistics.statistics(for: "one"))
         bar.isShowingDocumentStatistics = false
-        bar.update(with: CursorStatus(path: ["h2"], line: 7, column: 3))
+        bar.update(with: CursorStatus(line: 7, column: 3, path: ["h2"]))
         XCTAssertEqual(bar.breadcrumbTextForTesting, "h2")
         XCTAssertEqual(bar.positionTextForTesting, "L 7 · C 3")
     }
@@ -2281,10 +2289,25 @@ In `updateCursorChrome()`, replace the single-line gutter assignment (`gutterVie
 
 Then in `updateCursorChrome()`, use it: the no-cursor path becomes `updateGutterLines(currentLine: nil)` plus `statusBar.update(with: nil)`, and the normal path ends with `updateGutterLines(currentLine: status.line)`. Keep the existing `guard editorMode != .preview else { return }` from Task 8.
 
-In `applyChrome(for:)`, keep the status bar's control in sync so menu and keyboard switches move it too — add before `updateCursorChrome()`:
+In `applyChrome(for:)`, replace the Task 8 note about the status bar being wired later with the
+actual wiring — keeping the control in sync so menu and keyboard switches move it too, and
+switching the readout to statistics in Preview:
 
 ```swift
         statusBar.selectedMode = mode
+        statusBar.isShowingDocumentStatistics = isPreview
+        if isPreview {
+            statusBar.update(with: DocumentStatistics.statistics(for: textView.string))
+        }
+```
+
+And in `textDidChange(_:)`, keep the statistics live while the reader edits in another window's
+tab and comes back — add after `modeController.render()`:
+
+```swift
+        if editorMode == .preview {
+            statusBar.update(with: DocumentStatistics.statistics(for: textView.string))
+        }
 ```
 
 - [ ] **Step 6: Run the suite**
