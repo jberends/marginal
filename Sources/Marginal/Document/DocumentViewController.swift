@@ -109,6 +109,29 @@ final class DocumentViewController: NSViewController {
         copyCurrentSelectionAsHTML()
     }
 
+    /// File -> Export as PDF: renders the whole document through the HTML renderer and
+    /// prints it to a paginated PDF at a user-chosen location.
+    @objc func exportAsPDF(_ sender: Any?) {
+        guard let window = view.window else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = (document?.displayName ?? "Document") + ".pdf"
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            PDFExporter.shared.export(
+                markdown: self.textView.string,
+                title: self.document?.displayName ?? "Document",
+                to: url
+            ) { error in
+                guard let error else { return }
+                let alert = NSAlert()
+                alert.messageText = "Could not export the PDF."
+                alert.informativeText = error.localizedDescription
+                alert.beginSheetModal(for: window)
+            }
+        }
+    }
+
     func toggleShowSource() {
         isShowingSource.toggle()
         if isShowingSource {

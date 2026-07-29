@@ -27,6 +27,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
 
+    /// App menu -> Check for Updates: compares the running version against the newest
+    /// GitHub release. Network access happens only here, on the user's explicit request.
+    @objc private func checkForUpdates(_ sender: Any?) {
+        UpdateChecker.check { result in
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                switch result {
+                case .upToDate(let current):
+                    alert.messageText = "Marginal is up to date."
+                    alert.informativeText = "Version \(current) is the latest release."
+                    alert.addButton(withTitle: "OK")
+                case .updateAvailable(let current, let latest):
+                    alert.messageText = "A newer version is available."
+                    alert.informativeText = "You have \(current); the latest release is \(latest)."
+                    alert.addButton(withTitle: "View Release")
+                    alert.addButton(withTitle: "Later")
+                case .failed(let reason):
+                    alert.messageText = "Could not check for updates."
+                    alert.informativeText = reason
+                    alert.addButton(withTitle: "OK")
+                }
+                let response = alert.runModal()
+                if case .updateAvailable = result, response == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                }
+            }
+        }
+    }
+
     // iTerm2-style direct tab access: ⌘1…⌘9 jump straight to that tab in the key window's
     // tab group (menu item tag carries the zero-based tab index).
     @objc func selectTabAtIndex(_ sender: NSMenuItem) {
@@ -78,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Marginal", action: #selector(AppDelegate.showAboutPanel(_:)), keyEquivalent: "")
         appMenu.items.last?.target = target
+        appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")
+        appMenu.items.last?.target = target
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Preferences…", action: #selector(AppDelegate.showPreferences(_:)), keyEquivalent: ",")
         appMenu.items.last?.target = target
@@ -96,6 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         fileMenu.addItem(withTitle: "Save…", action: #selector(NSDocument.save(_:)), keyEquivalent: "s")
         fileMenu.addItem(withTitle: "Save As…", action: #selector(NSDocument.saveAs(_:)), keyEquivalent: "S")
         fileMenu.addItem(withTitle: "Revert to Saved", action: #selector(NSDocument.revertToSaved(_:)), keyEquivalent: "")
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(withTitle: "Export as PDF…", action: #selector(DocumentViewController.exportAsPDF(_:)), keyEquivalent: "E")
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
