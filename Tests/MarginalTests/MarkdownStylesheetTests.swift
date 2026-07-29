@@ -18,6 +18,14 @@ final class MarkdownStylesheetTests: XCTestCase {
         XCTAssertFalse(light.contains("#1E1E1D"), "light variant must not carry dark surfaces")
     }
 
+    // Every token is re-typed as a hex literal here rather than derived from the canonical
+    // token sheet, so each one needs pinning or a one-digit drift goes unnoticed. These are
+    // marketing/Marginal Design System/tokens/colors.css --ink-header for each appearance.
+    func testHeadingTokenMatchesTheDesignSystemInBothAppearances() {
+        XCTAssertTrue(MarkdownStylesheet.screenCSS(appearance: .light, bodyPointSize: 16).contains("#232323"))
+        XCTAssertTrue(MarkdownStylesheet.screenCSS(appearance: .dark, bodyPointSize: 16).contains("#F2F1EE"))
+    }
+
     // Print is always on white paper, so it never follows the window's appearance.
     func testPrintCSSIsLightAndCarriesPageBreakRules() {
         XCTAssertTrue(MarkdownStylesheet.printCSS.contains("#2C2C2B"))

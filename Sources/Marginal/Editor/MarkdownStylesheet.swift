@@ -25,7 +25,7 @@ enum MarkdownStylesheet {
         )
 
         static let dark = Tokens(
-            paper: "#1E1E1D", ink: "#E8E7E3", heading: "#F2F1ED", panel: "#252524",
+            paper: "#1E1E1D", ink: "#E8E7E3", heading: "#F2F1EE", panel: "#252524",
             hairline: "#33332F", accent: "#CB7DF7", muted: "#A6A49F"
         )
     }
