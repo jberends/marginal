@@ -26,7 +26,6 @@ targets:
         PRODUCT_NAME: Marginal
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
-        INFOPLIST_KEY_CFBundleDisplayName: "Marginal - Markdown Editor"
         INFOPLIST_FILE: Sources/Marginal/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Marginal/App/Marginal.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
