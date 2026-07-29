@@ -47,44 +47,11 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
 
     /// Wraps the rendered markdown body in a printable page styled on the design tokens.
     static func pageHTML(markdown: String, title: String) -> String {
-        let body = MarkdownHTMLRenderer.html(fromMarkdown: markdown)
-        let escapedTitle = title
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-        return """
-        <!doctype html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <title>\(escapedTitle)</title>
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-            font-size: 12pt; line-height: 1.5; color: #2C2C2B; margin: 0;
-          }
-          h1, h2, h3, h4, h5, h6 { color: #232323; font-weight: 600; line-height: 1.25; }
-          h1 { font-size: 1.875em; } h2 { font-size: 1.5em; } h3 { font-size: 1.25em; }
-          blockquote {
-            margin: 0; padding-left: 14px; border-left: 3px solid #2C2C2B;
-          }
-          code {
-            font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 0.85em;
-            color: #8E1FCB; background: #F7F6F3; border-radius: 4px; padding: 1px 4px;
-          }
-          pre {
-            background: #F7F6F3; border-radius: 10px; padding: 16px 22px;
-            overflow-x: auto; page-break-inside: avoid;
-          }
-          pre code { color: #2C2C2B; background: none; padding: 0; }
-          a { color: #8E1FCB; }
-          hr { border: 0; border-top: 1px solid #E6E5E3; }
-          li { margin-bottom: 6px; }
-          h1, h2, h3 { page-break-after: avoid; }
-        </style>
-        </head>
-        <body>\(body)</body>
-        </html>
-        """
+        MarkdownStylesheet.document(
+            body: MarkdownHTMLRenderer.html(fromMarkdown: markdown),
+            title: title,
+            css: MarkdownStylesheet.printCSS
+        )
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
