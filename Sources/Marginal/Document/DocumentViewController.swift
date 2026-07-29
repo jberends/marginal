@@ -284,6 +284,19 @@ final class DocumentViewController: NSViewController {
         setEditorMode(EditorMode.allCases[sender.tag])
     }
 
+    @objc func zoomIn(_ sender: Any?) {
+        setFontSize(FontSizing.increased(from: editorFontSize))
+    }
+
+    @objc func zoomOut(_ sender: Any?) {
+        setFontSize(FontSizing.decreased(from: editorFontSize))
+    }
+
+    /// Back to the design system's 16px body size.
+    @objc func actualSize(_ sender: Any?) {
+        setFontSize(16)
+    }
+
     /// The 1-based line the caret sits on, via the same status computation the status bar uses.
     private func currentCaretLine() -> Int {
         guard let cursor = currentCursorIndex() else { return 1 }
@@ -342,6 +355,13 @@ final class DocumentViewController: NSViewController {
         // event forces a full redraw. The layout itself is always correct; only the drawn
         // pixels go stale. Forcing a full-view redraw after every render fixes it.
         textView.needsDisplay = true
+    }
+
+    func setFontSize(_ size: CGFloat) {
+        editorFontSize = size
+        textView.font = NSFont.systemFont(ofSize: size)
+        UserDefaults.standard.set(size, forKey: "editorFontPointSize")
+        modeController.render()
     }
 
     private func restyle(cursorLocation: String.Index?) {
@@ -497,12 +517,5 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
             }
             windowToCloseIfOpenSucceeds?.close()
         }
-    }
-
-    private func setFontSize(_ size: CGFloat) {
-        editorFontSize = size
-        textView.font = NSFont.systemFont(ofSize: size)
-        UserDefaults.standard.set(size, forKey: "editorFontPointSize")
-        modeController.render()
     }
 }
