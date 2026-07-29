@@ -1,6 +1,10 @@
 import XCTest
 @testable import Marginal
 
+// @MainActor because NSDocument's initializer (and, on older SDKs, data(ofType:)/read)
+// are main-actor-isolated -- older CI toolchains reject nonisolated calls that the
+// newest SDK happens to allow.
+@MainActor
 final class MarkdownDocumentTests: XCTestCase {
 
     func testWriteThenReadRoundTrip() throws {
