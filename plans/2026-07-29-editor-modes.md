@@ -2342,7 +2342,17 @@ In the same file, replace `LineNumberGutterView`'s `lineNumber` and `lineCenterY
     }
 ```
 
-and replace the body of `draw(_:)` after the hairline fill with:
+Add a guard at the very top of `draw(_:)`, before the existing hairline fill:
+
+```swift
+        // AppKit always has a current graphics context during a real drawing pass; calling
+        // draw(_:) directly (as a unit test does, with no backing window) does not, and every
+        // NSColor.setFill()/NSRect.fill() below traps on a null CGContext. Guarding here keeps
+        // that path a harmless no-op instead of a crash, with no effect on real on-screen drawing.
+        guard NSGraphicsContext.current != nil else { return }
+```
+
+Then replace the body of `draw(_:)` after the hairline fill with:
 
 ```swift
         guard !lines.isEmpty else { return }
