@@ -292,6 +292,32 @@ final class DocumentViewController: NSViewController {
 }
 
 extension DocumentViewController: NSTextViewDelegate {
+    // Return inside a list item continues the list ("- ", "4. ", "- [ ] " on the new
+    // line); Return on an empty item outdents one level, then leaves the list.
+    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard commandSelector == #selector(NSResponder.insertNewline(_:)), !isShowingSource else { return false }
+        let nsText = textView.string as NSString
+        let selection = textView.selectedRange()
+        guard selection.location != NSNotFound else { return false }
+
+        let lineRange = nsText.lineRange(for: NSRange(location: selection.location, length: 0))
+        var line = nsText.substring(with: lineRange)
+        if line.hasSuffix("\n") { line.removeLast() }
+        guard let action = ListContinuation.action(forLine: line) else { return false }
+
+        switch action {
+        case .continueList(let insertion):
+            textView.insertText("\n" + insertion, replacementRange: selection)
+        case .replaceLine(let newLine):
+            let contentRange = NSRange(location: lineRange.location, length: (line as NSString).length)
+            guard textView.shouldChangeText(in: contentRange, replacementString: newLine) else { return false }
+            textView.textStorage?.replaceCharacters(in: contentRange, with: newLine)
+            textView.didChangeText()
+            textView.setSelectedRange(NSRange(location: contentRange.location + (newLine as NSString).length, length: 0))
+        }
+        return true
+    }
+
     func textDidChange(_ notification: Notification) {
         guard !isApplyingProgrammaticEdit else { return }
         document?.text = textView.string
