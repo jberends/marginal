@@ -1,0 +1,47 @@
+name: Release binary
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and attach the binary to"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-attach:
+    name: Build app and attach to release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build Release
+        run: |
+          xcodebuild -project Marginal.xcodeproj -scheme Marginal \
+            -configuration Release -destination 'platform=macOS' \
+            SYMROOT="$PWD/build" build
+      - name: Zip app
+        id: zip
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          APP=$(ls -d build/Release/*.app | head -1)
+          ZIP="Marginal-${TAG#v}.zip"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --verify-tag --title "Marginal ${TAG#v}" --generate-notes
+          gh release upload "$TAG" "${{ steps.zip.outputs.zip }}#Marginal ${TAG#v} (macOS 14+, ad-hoc signed)" --clobber

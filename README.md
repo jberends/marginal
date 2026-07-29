@@ -10,6 +10,11 @@
   A native, lightweight markdown editor and beautiful viewer for macOS.
 </p>
 
+<p align="center">
+  <a href="https://github.com/jberends/marginal/actions/workflows/ci.yml"><img src="https://github.com/jberends/marginal/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/jberends/marginal/releases/latest"><img src="https://img.shields.io/github/v/release/jberends/marginal?label=download" alt="Latest release"></a>
+</p>
+
 ---
 
 Open a `.md` file, write, and see it rendered beautifully as you type — bold, italic, headers, links, tables, code blocks, and images all render inline, with markdown syntax revealing itself only where your cursor is. No projects, no folders, no sidebar. Good at one job: being your default markdown editor.
