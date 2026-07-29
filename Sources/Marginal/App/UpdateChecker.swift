@@ -8,24 +8,48 @@ struct UpdateChecker {
     static let latestReleaseAPI = URL(string: "https://api.github.com/repos/jberends/marginal/releases/latest")!
     static let releasesPage = URL(string: "https://github.com/jberends/marginal/releases/latest")!
 
-    struct Release: Decodable {
+    struct Release: Decodable, Sendable {
+        struct Asset: Decodable, Sendable {
+            let name: String
+            let browserDownloadUrl: String
+
+            enum CodingKeys: String, CodingKey {
+                case name
+                case browserDownloadUrl = "browser_download_url"
+            }
+        }
+
         let tagName: String
         let htmlUrl: String
+        var assets: [Asset] = []
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case htmlUrl = "html_url"
+            case assets
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            tagName = try container.decode(String.self, forKey: .tagName)
+            htmlUrl = try container.decode(String.self, forKey: .htmlUrl)
+            assets = try container.decodeIfPresent([Asset].self, forKey: .assets) ?? []
         }
 
         /// "v0.1.0" -> "0.1.0"
         var version: String {
             tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
         }
+
+        /// The downloadable app archive, if the release carries one.
+        var appZipAsset: Asset? {
+            assets.first { $0.name.hasSuffix(".zip") }
+        }
     }
 
     enum Result {
         case upToDate(current: String)
-        case updateAvailable(current: String, latest: String)
+        case updateAvailable(current: String, release: Release)
         case failed(String)
     }
 
@@ -61,7 +85,7 @@ struct UpdateChecker {
                 return
             }
             if isVersion(release.version, newerThan: current) {
-                completion(.updateAvailable(current: current, latest: release.version))
+                completion(.updateAvailable(current: current, release: release))
             } else {
                 completion(.upToDate(current: current))
             }

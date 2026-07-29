@@ -38,9 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     alert.messageText = "Marginal is up to date."
                     alert.informativeText = "Version \(current) is the latest release."
                     alert.addButton(withTitle: "OK")
-                case .updateAvailable(let current, let latest):
-                    alert.messageText = "A newer version is available."
-                    alert.informativeText = "You have \(current); the latest release is \(latest)."
+                case .updateAvailable(let current, let release):
+                    alert.messageText = "Marginal \(release.version) is available."
+                    alert.informativeText = "You have \(current). Marginal can download the update, quit, install it, and relaunch."
+                    alert.addButton(withTitle: "Download & Install")
                     alert.addButton(withTitle: "View Release")
                     alert.addButton(withTitle: "Later")
                 case .failed(let reason):
@@ -49,8 +50,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     alert.addButton(withTitle: "OK")
                 }
                 let response = alert.runModal()
-                if case .updateAvailable = result, response == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                if case .updateAvailable(_, let release) = result {
+                    switch response {
+                    case .alertFirstButtonReturn:
+                        UpdateInstaller.downloadAndInstall(release) { error in
+                            let failure = NSAlert()
+                            failure.messageText = "Could not install the update."
+                            failure.informativeText = error.localizedDescription
+                            failure.runModal()
+                        }
+                    case .alertSecondButtonReturn:
+                        NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                    default:
+                        break
+                    }
                 }
             }
         }
