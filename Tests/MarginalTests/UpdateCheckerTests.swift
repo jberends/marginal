@@ -72,7 +72,7 @@ final class PDFExporterHTMLTests: XCTestCase {
     @MainActor
     func testPageHTMLContainsRenderedBodyAndEscapedTitle() {
         let html = PDFExporter.pageHTML(markdown: "# Hi\n\nSome **bold** text.", title: "a<b & c")
-        XCTAssertTrue(html.contains("<h1>Hi</h1>"))
+        XCTAssertTrue(html.contains("<h1 data-line=\"1\">Hi</h1>"))
         XCTAssertTrue(html.contains("<strong>bold</strong>"))
         XCTAssertTrue(html.contains("<title>a&lt;b &amp; c</title>"))
     }

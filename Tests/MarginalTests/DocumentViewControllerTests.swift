@@ -24,7 +24,7 @@ final class DocumentViewControllerTests: XCTestCase {
 
         viewController.copyCurrentSelectionAsHTML()
 
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "<p>Hello <strong>world</strong></p>")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "<p data-line=\"1\">Hello <strong>world</strong></p>")
     }
 
     func testToggleShowSourceRendersPlainMonospaceText() {

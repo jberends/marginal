@@ -7,31 +7,53 @@ import Foundation
 struct MarkdownHTMLRenderer {
 
     static func html(fromMarkdown text: String) -> String {
-        guard !text.isEmpty else { return "" }
+        blocks(fromMarkdown: text).map(\.html).joined(separator: "\n")
+    }
+
+    /// The 1-based source line each emitted block starts at, in document order. Paired with the
+    /// `data-line` attributes in the HTML, this lets the editor map a caret line to a rendered
+    /// block and back.
+    static func blockSourceLines(fromMarkdown text: String) -> [Int] {
+        blocks(fromMarkdown: text).map(\.line)
+    }
+
+    /// The greatest block line not exceeding `caretLine` -- i.e. the block the caret sits in.
+    /// Falls back to the first block when the caret precedes all of them, and to nil when the
+    /// document renders no blocks at all.
+    static func blockLine(nearestAtOrBefore caretLine: Int, in blockLines: [Int]) -> Int? {
+        guard let first = blockLines.first else { return nil }
+        return blockLines.last { $0 <= caretLine } ?? first
+    }
+
+    private static func blocks(fromMarkdown text: String) -> [(line: Int, html: String)] {
+        guard !text.isEmpty else { return [] }
 
         let headers = MarkdownParser.parseHeaders(in: text)
         let listItems = MarkdownParser.parseListItems(in: text)
         let blockquotes = MarkdownParser.parseBlockquotes(in: text)
         let horizontalRules = MarkdownParser.parseHorizontalRules(in: text)
         let codeBlocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        let starts = lineStarts(in: text)
 
-        var blocks: [String] = []
+        var blocks: [(line: Int, html: String)] = []
         var index = text.startIndex
 
         while index < text.endIndex {
+            let line = lineNumber(at: index, lineStarts: starts)
+
             if let codeBlock = codeBlocks.first(where: { $0.openingFenceRange.lowerBound == index }) {
                 let languageAttribute = codeBlock.language.map { " class=\"language-\(htmlEscape($0))\"" } ?? ""
-                blocks.append("<pre><code\(languageAttribute)>\(htmlEscape(String(text[codeBlock.contentRange])))</code></pre>")
+                blocks.append((line, "<pre data-line=\"\(line)\"><code\(languageAttribute)>\(htmlEscape(String(text[codeBlock.contentRange])))</code></pre>"))
                 index = advance(past: codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound, in: text)
                 continue
             }
             if let header = headers.first(where: { $0.lineRange.lowerBound == index }) {
-                blocks.append("<h\(header.level)>\(inlineHTML(for: String(text[header.contentRange])))</h\(header.level)>")
+                blocks.append((line, "<h\(header.level) data-line=\"\(line)\">\(inlineHTML(for: String(text[header.contentRange])))</h\(header.level)>"))
                 index = advance(past: header.lineRange, in: text)
                 continue
             }
             if let rule = horizontalRules.first(where: { $0.lineRange.lowerBound == index }) {
-                blocks.append("<hr>")
+                blocks.append((line, "<hr data-line=\"\(line)\">"))
                 index = advance(past: rule.lineRange, in: text)
                 continue
             }
@@ -44,7 +66,7 @@ struct MarkdownHTMLRenderer {
                 }
                 let tag = isOrdered(item.kind) ? "ol" : "ul"
                 let items = groupItems.map { "<li>\(inlineHTML(for: listItemText($0, in: text)))</li>" }.joined()
-                blocks.append("<\(tag)>\(items)</\(tag)>")
+                blocks.append((line, "<\(tag) data-line=\"\(line)\">\(items)</\(tag)>"))
                 index = cursor
                 continue
             }
@@ -55,7 +77,7 @@ struct MarkdownHTMLRenderer {
                     groupLines.append(String(text[next.contentRange]))
                     cursor = advance(past: next.lineRange, in: text)
                 }
-                blocks.append("<blockquote><p>\(inlineHTML(for: groupLines.joined(separator: " ")))</p></blockquote>")
+                blocks.append((line, "<blockquote data-line=\"\(line)\"><p>\(inlineHTML(for: groupLines.joined(separator: " ")))</p></blockquote>"))
                 index = cursor
                 continue
             }
@@ -71,16 +93,45 @@ struct MarkdownHTMLRenderer {
             var cursor = advance(past: firstLineRange, in: text)
             while cursor < text.endIndex, !isBlockStart(at: cursor, headers: headers, listItems: listItems, blockquotes: blockquotes, horizontalRules: horizontalRules, codeBlocks: codeBlocks) {
                 let range = lineRange(at: cursor, in: text)
-                let line = String(text[range])
-                if line.trimmingCharacters(in: .whitespaces).isEmpty { break }
-                paragraphLines.append(line)
+                let lineText = String(text[range])
+                if lineText.trimmingCharacters(in: .whitespaces).isEmpty { break }
+                paragraphLines.append(lineText)
                 cursor = advance(past: range, in: text)
             }
-            blocks.append("<p>\(inlineHTML(for: paragraphLines.joined(separator: " ")))</p>")
+            blocks.append((line, "<p data-line=\"\(line)\">\(inlineHTML(for: paragraphLines.joined(separator: " ")))</p>"))
             index = cursor
         }
 
-        return blocks.joined(separator: "\n")
+        return blocks
+    }
+
+    /// Every line's start index, so a block's start index can be turned into a 1-based line
+    /// number with a binary search rather than a rescan per block.
+    private static func lineStarts(in text: String) -> [String.Index] {
+        var starts = [text.startIndex]
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "\n" {
+                starts.append(text.index(after: index))
+            }
+            index = text.index(after: index)
+        }
+        return starts
+    }
+
+    /// The 1-based line number containing `index`.
+    private static func lineNumber(at index: String.Index, lineStarts: [String.Index]) -> Int {
+        var low = 0
+        var high = lineStarts.count - 1
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if lineStarts[mid] <= index {
+                low = mid
+            } else {
+                high = mid - 1
+            }
+        }
+        return low + 1
     }
 
     private static func lineRange(at start: String.Index, in text: String) -> Range<String.Index> {
