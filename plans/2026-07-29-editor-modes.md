@@ -1598,6 +1598,9 @@ Replace the stored property `private var isShowingSource = false` (line 11) with
 ```swift
     private var previewWebView: PreviewWebView?
     private var scrollView: NSScrollView!
+    /// Bumped on every `setEditorMode` call so an in-flight `topmostVisibleSourceLine` query
+    /// from an earlier switch can recognize it's been superseded and discard its answer.
+    private var modeSwitchGeneration = 0
 
     /// Where the mode controller reads and persists the mode. Tests point this at a throwaway
     /// suite so a developer's own last-used mode can never change what a test observes; it must
@@ -1632,13 +1635,20 @@ Delete `toggleShowSource()` (lines 225–232) and `applyPlainSourceRendering()` 
     func setEditorMode(_ mode: EditorMode) {
         guard mode != editorMode else { return }
 
+        // Distinguishes this switch from a later one that might complete first: the
+        // topmost-line query below is an asynchronous JS round-trip, and a stale answer must
+        // never move the caret after the user has already switched modes again (e.g. Preview ->
+        // Live -> Preview faster than the first query resolves).
+        modeSwitchGeneration += 1
+        let generation = modeSwitchGeneration
+
         if editorMode == .preview, let previewWebView {
             // Capture the reading position before the web view goes away. The JS round-trip is
             // asynchronous, so the caret move lands just after the switch — which is fine, the
             // text view is already showing by then.
             previewWebView.topmostVisibleSourceLine { [weak self] line in
                 Task { @MainActor [weak self] in
-                    guard let self, let line else { return }
+                    guard let self, self.modeSwitchGeneration == generation, let line else { return }
                     self.moveCaretToLine(line)
                 }
             }
@@ -1815,7 +1825,14 @@ extension DocumentViewController: EditorModeHost {
         // NOTE: the status bar's Preview readout (word count / reading time) and its segmented
         // control are wired in Task 10, which is where those StatusBarView members are added.
         // Do not reference them here — they do not exist yet and this task must compile.
-        if !isPreview {
+        if isPreview {
+            // Preview is read-only: if the text view stays first responder, keystrokes keep
+            // routing to it via the responder chain even though it's now hidden -- AppKit does
+            // not resign first responder just because a view (or its ancestor) becomes
+            // isHidden. That would silently mutate the document while the UI claims nothing is
+            // editable, and re-trigger a full webView reload on every keystroke.
+            view.window?.makeFirstResponder(previewWebView)
+        } else {
             // Editing surfaces take focus back when Preview yields it.
             view.window?.makeFirstResponder(textView)
         }
