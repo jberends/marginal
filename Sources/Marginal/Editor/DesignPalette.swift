@@ -24,6 +24,16 @@ enum DesignPalette {
     /// Hairline rules: table grids, horizontal rules.
     static let hairline = dynamic(light: "#E6E5E3", dark: "#33332F")
 
+    /// The gutter and status bar: a tad lighter than the panel tone, so the chrome reads
+    /// as chrome without competing with the paper.
+    static let surfaceGutter = dynamic(light: "#FBFAF7", dark: "#222221")
+
+    /// Muted UI text (status bar).
+    static let textMuted = dynamic(light: "#6B6A67", dark: "#A6A49F")
+
+    /// Very faint UI text (the gutter's line number) -- visible, barely.
+    static let textFaint = dynamic(light: "#C4C2BE", dark: "#55534F")
+
     /// Syntax highlighting inside code cards — warm set from the token sheet.
     static let synString = dynamic(light: "#2F9E68", dark: "#7FCFA0")
     static let synNumber = dynamic(light: "#C98A16", dark: "#E0AB4B")

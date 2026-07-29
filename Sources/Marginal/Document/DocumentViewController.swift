@@ -3,6 +3,10 @@ import AppKit
 final class DocumentViewController: NSViewController {
 
     private(set) var textView: MarkdownTextView!
+    private var gutterView: LineNumberGutterView!
+    private var statusBar: StatusBarView!
+    private var latestModel: MarkdownDocumentModel?
+    private var firstResponderObservation: NSKeyValueObservation?
     private var isApplyingProgrammaticEdit = false
     private var isShowingSource = false
 
@@ -60,15 +64,101 @@ final class DocumentViewController: NSViewController {
         scrollView.documentView = textView
         containerView.addSubview(scrollView)
 
+        // Left sidebar (faint current-line number) and bottom status bar (cursor context).
+        let gutter = LineNumberGutterView()
+        gutter.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(gutter)
+
+        let statusBar = StatusBarView(frame: .zero)
+        statusBar.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(statusBar)
+
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            gutter.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            gutter.topAnchor.constraint(equalTo: containerView.topAnchor),
+            gutter.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            gutter.widthAnchor.constraint(equalToConstant: 44),
+
+            statusBar.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            statusBar.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            statusBar.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+            statusBar.heightAnchor.constraint(equalToConstant: StatusBarView.height),
+
+            scrollView.leadingAnchor.constraint(equalTo: gutter.trailingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+            scrollView.bottomAnchor.constraint(equalTo: statusBar.topAnchor)
         ])
 
+        // The gutter's line number follows the caret's own line, so it must re-position on
+        // scroll, not just on selection changes.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scrollViewDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+
         self.textView = textView
+        self.gutterView = gutter
+        self.statusBar = statusBar
         self.view = containerView
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        // The line number shows only while the cursor is actually in the text -- track focus
+        // by observing the window's first responder.
+        firstResponderObservation = view.window?.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor [weak self] in self?.updateCursorChrome() }
+        }
+        updateCursorChrome()
+    }
+
+    @objc private func scrollViewDidScroll(_ notification: Notification) {
+        updateCursorChrome()
+    }
+
+    /// Recomputes the gutter's line number/position and the status bar's breadcrumb.
+    private func updateCursorChrome() {
+        guard let gutterView, let statusBar else { return }
+        let text = textView.string
+        let cursorInText = view.window?.firstResponder === textView
+
+        guard cursorInText, let cursor = currentCursorIndex() else {
+            gutterView.lineNumber = nil
+            statusBar.update(with: nil)
+            return
+        }
+
+        let model = latestModel ?? MarkdownDocumentModel()
+        let status = CursorStatus.status(for: text, model: model, cursor: cursor)
+        statusBar.update(with: status)
+
+        guard let layoutManager = textView.layoutManager else {
+            gutterView.lineNumber = nil
+            return
+        }
+        let location = textView.selectedRange().location
+        var lineRect: NSRect
+        if location < (textView.textStorage?.length ?? 0) {
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: location)
+            lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        } else {
+            // Caret at the very end: the extra line fragment when the text ends in a newline,
+            // else the last real line.
+            lineRect = layoutManager.extraLineFragmentRect
+            if lineRect.isEmpty, layoutManager.numberOfGlyphs > 0 {
+                lineRect = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.numberOfGlyphs - 1, effectiveRange: nil)
+            }
+        }
+        var rectInTextView = lineRect
+        rectInTextView.origin.y += textView.textContainerInset.height
+        let rectInGutter = textView.convert(rectInTextView, to: gutterView)
+        gutterView.fontSize = min(12, max(10, editorFontSize * 0.7))
+        gutterView.lineNumber = status.line
+        gutterView.lineCenterY = rectInGutter.midY
     }
 
     func loadInitialText(_ text: String) {
@@ -170,6 +260,7 @@ final class DocumentViewController: NSViewController {
             tables: MarkdownParser.parseTables(in: text),
             emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
         )
+        latestModel = model
         let attributed = MarkdownStyler.attributedString(
             for: text,
             model: model,
@@ -210,6 +301,7 @@ extension DocumentViewController: NSTextViewDelegate {
         } else {
             restyle(cursorLocation: currentCursorIndex())
         }
+        updateCursorChrome()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
@@ -219,6 +311,7 @@ extension DocumentViewController: NSTextViewDelegate {
         } else {
             restyle(cursorLocation: currentCursorIndex())
         }
+        updateCursorChrome()
     }
 }
 
