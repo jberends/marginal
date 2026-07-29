@@ -355,6 +355,14 @@ final class MarkdownStylesheetTests: XCTestCase {
         XCTAssertFalse(light.contains("#1E1E1D"), "light variant must not carry dark surfaces")
     }
 
+    // Every token is re-typed as a hex literal here rather than derived from the canonical
+    // token sheet, so each one needs pinning or a one-digit drift goes unnoticed. These are
+    // marketing/Marginal Design System/tokens/colors.css --ink-header for each appearance.
+    func testHeadingTokenMatchesTheDesignSystemInBothAppearances() {
+        XCTAssertTrue(MarkdownStylesheet.screenCSS(appearance: .light, bodyPointSize: 16).contains("#232323"))
+        XCTAssertTrue(MarkdownStylesheet.screenCSS(appearance: .dark, bodyPointSize: 16).contains("#F2F1EE"))
+    }
+
     // Print is always on white paper, so it never follows the window's appearance.
     func testPrintCSSIsLightAndCarriesPageBreakRules() {
         XCTAssertTrue(MarkdownStylesheet.printCSS.contains("#2C2C2B"))
@@ -417,7 +425,7 @@ enum MarkdownStylesheet {
         )
 
         static let dark = Tokens(
-            paper: "#1E1E1D", ink: "#E8E7E3", heading: "#F2F1ED", panel: "#252524",
+            paper: "#1E1E1D", ink: "#E8E7E3", heading: "#F2F1EE", panel: "#252524",
             hairline: "#33332F", accent: "#CB7DF7", muted: "#A6A49F"
         )
     }
@@ -522,7 +530,14 @@ Run: `xcodegen generate && git status --short`
 Expected: `Info.plist`/`Marginal.entitlements` NOT modified.
 
 Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownStylesheetTests -only-testing:MarginalTests/PDFExporterIntegrationTests`
-Expected: PASS. `PDFExporterIntegrationTests` must still pass unchanged — the extraction is behaviour-preserving for print.
+Expected: PASS. `PDFExporterIntegrationTests` must still pass unchanged.
+
+Note that the extraction is **not** byte-identical for print: the shared `rules()` gives print two
+things the old inline CSS lacked — explicit `h4`/`h5`/`h6` sizes (previously left at the WebKit
+default) and a muted blockquote colour (`#6B6A67`, previously inheriting body ink). Both are
+design-token values and both are intentional: print inheriting the screen's refinements is the
+point of having one stylesheet. Exported PDFs containing `####`-or-deeper headings, or
+blockquotes, will look slightly different from before. Task 11's CHANGELOG entry records this.
 
 - [ ] **Step 6: Commit**
 
@@ -2391,6 +2406,8 @@ Add a new `## Unreleased` section at the top (or extend the existing one):
 ### Changed
 - The undiscoverable `⌘⇧P` "Show Source" toggle is replaced by the three-mode switch.
 - Preview and PDF export now share one stylesheet, so the screen and the exported page match.
+  Exported PDFs pick up two refinements as a result: `####`-and-deeper headings are sized from
+  the app's own heading scale rather than the browser default, and blockquotes are muted grey.
 ```
 
 - [ ] **Step 6: Document the component in the design system**
