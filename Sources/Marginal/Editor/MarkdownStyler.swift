@@ -278,6 +278,13 @@ struct MarkdownStyler {
             result.addAttribute(.marginalHorizontalRuleMarker, value: true, range: lineNSRange)
             let ruleFont = revealedHorizontalRules.contains(rule) ? baseFont : hiddenFont
             result.addAttribute(.font, value: ruleFont, range: lineNSRange)
+            // The hidden 0.1pt font would make this line fragment a fraction of a point
+            // tall -- unclickable, so the cursor could never reach the line to reveal the
+            // literal "---". A fixed line height keeps the rule's line a normal, clickable
+            // target (and the drawn rule centers within it).
+            let ruleStyle = NSMutableParagraphStyle()
+            ruleStyle.minimumLineHeight = baseFont.pointSize * 1.5
+            result.addAttribute(.paragraphStyle, value: ruleStyle, range: lineNSRange)
         }
 
         let revealedCodeBlocks = cursorLocation.map {

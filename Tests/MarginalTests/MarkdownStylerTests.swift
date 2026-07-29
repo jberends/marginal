@@ -314,6 +314,17 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertNil(strikethrough, "Incomplete task text must not be struck through")
     }
 
+    func testHiddenHorizontalRuleLineKeepsAClickableLineHeight() {
+        let text = "above\n\n---\n\nbelow"
+        let model = MarkdownDocumentModel(horizontalRules: MarkdownParser.parseHorizontalRules(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 16)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+
+        let ruleLocation = text.distance(from: text.startIndex, to: text.range(of: "---")!.lowerBound)
+        let style = attributed.attribute(.paragraphStyle, at: ruleLocation, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.minimumLineHeight, baseFont.pointSize * 1.5, "The hidden rule line must keep a normal, clickable height")
+    }
+
     func testCursorOnTaskLineRevealsLiteralCheckboxSource() {
         let text = "- [ ] Incomplete task\nOther line"
         let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
