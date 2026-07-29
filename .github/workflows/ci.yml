@@ -21,6 +21,8 @@ jobs:
       - name: Generate project
         run: xcodegen generate
       - name: Run tests
+        # The runner has no KE-works signing certificate; tests don't need one.
         run: |
           xcodebuild -project Marginal.xcodeproj -scheme Marginal \
-            -configuration Debug -destination 'platform=macOS' test
+            -configuration Debug -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO test

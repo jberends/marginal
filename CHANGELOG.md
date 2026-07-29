@@ -4,6 +4,27 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.3.0] — 2026-07-29
+
+### Added
+
+- **Clickable task checkboxes**: click a drawn checkbox to toggle `[ ]` ↔ `[x]` in the
+  source — undoable, and the caret stays where it was.
+- **List continuation**: Return inside a bulleted, ordered, or task item starts the
+  next line with the right marker (`- `, the next number, `- [ ] `). Return on an
+  empty item outdents one level; on an empty top-level item it leaves the list.
+- **Reveal-at-cursor for task markers**: a task item whose line contains the cursor
+  shows its literal `- [ ]` / `- [x]` source, like every other marker.
+
+### Fixed
+
+- Horizontal rules are clickable again: the hidden `---` line kept a near-zero
+  height, so the cursor could never reach it to reveal the source.
+
+### Changed
+
+- Signed with the KE-works BV team; display name "Marginal - Markdown Editor".
+
 ## [0.2.0] — 2026-07-29
 
 ### Added
@@ -44,5 +65,6 @@ All notable changes to Marginal are documented here. The format follows
   lists, blockquotes, emoji shortcodes), plain `.md` files, native AppKit app with
   macOS tabs (⌘1–⌘9), copy as Markdown or HTML, light and dark mode.
 
+[0.3.0]: https://github.com/jberends/marginal/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jberends/marginal/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jberends/marginal/releases/tag/v0.1.0

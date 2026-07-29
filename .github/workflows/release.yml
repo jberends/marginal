@@ -25,10 +25,12 @@ jobs:
       - name: Generate project
         run: xcodegen generate
       - name: Build Release
+        # No KE-works certificate on the runner: sign ad hoc (identity "-").
         run: |
           xcodebuild -project Marginal.xcodeproj -scheme Marginal \
             -configuration Release -destination 'platform=macOS' \
-            SYMROOT="$PWD/build" build
+            SYMROOT="$PWD/build" \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= build
       - name: Zip app
         id: zip
         run: |

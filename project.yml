@@ -10,8 +10,9 @@ attributes:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "2"
+    DEVELOPMENT_TEAM: 2ZP4KRYYZ5  # KE-works BV -- applies to app and test targets alike
+    MARKETING_VERSION: "0.3.0"
+    CURRENT_PROJECT_VERSION: "3"
     GENERATE_INFOPLIST_FILE: NO
 targets:
   Marginal:
@@ -25,11 +26,7 @@ targets:
         PRODUCT_NAME: Marginal
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
-        # Team: KE-works. Uncomment and fill in the 10-character team ID once the
-        # KE-works developer account is signed into Xcode (Settings → Accounts, the
-        # ID is shown next to the team name; also at developer.apple.com/account
-        # under Membership details). Then run `xcodegen generate`.
-        # DEVELOPMENT_TEAM: XXXXXXXXXX
+        INFOPLIST_KEY_CFBundleDisplayName: "Marginal - Markdown Editor"
         INFOPLIST_FILE: Sources/Marginal/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Marginal/App/Marginal.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
