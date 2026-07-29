@@ -31,9 +31,7 @@ final class DocumentViewControllerTests: XCTestCase {
     // thing (and more thoroughly) through the new mode API.
 
     func testSwitchingToCodeThenBackToLiveRestoresStyledRendering() {
-        let viewController = DocumentViewController()
-        _ = viewController.view
-        viewController.loadInitialText("**bold**")
+        let viewController = loadedController("**bold**")
 
         viewController.setEditorMode(.code)
         viewController.setEditorMode(.live)
@@ -53,9 +51,7 @@ final class DocumentViewControllerTests: XCTestCase {
         // textViewDidChangeSelection() called restyle() unconditionally, silently flipping
         // the view back to styled WYSIWYG on the very next cursor move while the mode stayed
         // Code.
-        let viewController = DocumentViewController()
-        _ = viewController.view
-        viewController.loadInitialText("# Title\n**bold**")
+        let viewController = loadedController("# Title\n**bold**")
 
         viewController.setEditorMode(.code)
 
@@ -191,5 +187,99 @@ final class DocumentViewControllerTests: XCTestCase {
         let storage = controller.textView.textStorage!
         let font = storage.attribute(.font, at: storage.length - 1, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.isFixedPitch, true, "typing must not knock Code mode back to Live")
+    }
+
+    // MARK: - Fix round 1 (review findings)
+
+    // List continuation (Return inside a list item) is an editing-surface convenience, not a
+    // Live-only one: Code mode restructures the source on Return exactly the same way, and only
+    // Preview is read-only. Exercises the real NSTextViewDelegate method, not just the pure
+    // ListContinuation.action(forLine:) helper those cases are built on.
+    private func assertReturnInsideAListContinuesIt(mode: EditorMode) {
+        let controller = loadedController("- first")
+        controller.setEditorMode(mode)
+        let endOfText = NSRange(location: (controller.textView.string as NSString).length, length: 0)
+        controller.textView.setSelectedRange(endOfText)
+
+        let handled = controller.textView(controller.textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
+
+        XCTAssertTrue(handled, "\(mode) must handle Return inside a list item")
+        XCTAssertEqual(controller.textView.string, "- first\n- ", "\(mode) must continue the list the same way")
+    }
+
+    func testListContinuationWorksInLiveMode() {
+        assertReturnInsideAListContinuesIt(mode: .live)
+    }
+
+    // Regression test for Fix round 1, Finding 1: this guard used to be `editorMode == .live`,
+    // silently making Code mode a strictly worse editor for list-writing with no stated design
+    // reason -- Code and Live are both "editing surfaces," contrasted with read-only Preview.
+    func testListContinuationWorksInCodeModeToo() {
+        assertReturnInsideAListContinuesIt(mode: .code)
+    }
+
+    // Preview is read-only: if the text view stays first responder after Preview activates,
+    // keystrokes keep routing to it via the responder chain even though it's now hidden --
+    // silently mutating the document and re-triggering a full webView reload on every keystroke.
+    // Needs a real NSWindow: a bare loadView() has no window, so makeFirstResponder calls are
+    // no-ops against nil. The window is never shown -- far offscreen, borderless, never ordered
+    // front -- the same technique VisualRenderHarnessTests uses so this never touches the real
+    // display.
+    func testEnteringPreviewResignsFirstResponderFromTheHiddenTextView() {
+        let controller = loadedController()
+        let window = NSWindow(
+            contentRect: NSRect(x: -20000, y: -20000, width: 700, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        XCTAssertTrue(window.makeFirstResponder(controller.textView))
+        XCTAssertTrue(window.firstResponder === controller.textView)
+
+        controller.setEditorMode(.preview)
+
+        // Note: hiding scrollView's ancestor chain alone already makes AppKit resign the text
+        // view back to the *window* -- so asserting only "not textView" would pass even without
+        // the explicit makeFirstResponder(previewWebView) call below, and wouldn't actually prove
+        // this fix does anything. The discriminating assertion is that focus specifically landed
+        // on the (visible, interactive) web view, not merely off of the hidden text view.
+        XCTAssertTrue(
+            window.firstResponder === controller.previewWebViewForTesting,
+            "Preview must take first responder explicitly, not just rely on the hidden text view falling back to the window"
+        )
+    }
+
+    // Guards against a stale async completion: leaving Preview kicks off an asynchronous
+    // topmostVisibleSourceLine JS round-trip whose completion moves the caret once it resolves.
+    // If the user switches Preview -> Live -> Preview -> Live again faster than the first
+    // round-trip resolves, that first completion's captured generation must no longer match
+    // modeSwitchGeneration by the time it fires, so its answer gets discarded instead of moving
+    // the caret based on a switch that's no longer current. A true end-to-end race (two real
+    // WKWebView loads/JS round-trips actually overlapping) isn't something this suite can force
+    // deterministically -- so this proves the counter mechanism the discard check depends on:
+    // every real switch bumps it, so an earlier switch's captured snapshot is provably stale by
+    // the time a later switch has run.
+    func testRapidModeSwitchesAdvanceTheGenerationCounterPastAnEarlierSwitch() {
+        let controller = loadedController()
+
+        controller.setEditorMode(.preview)
+        // Leaving Preview is what schedules a topmostVisibleSourceLine query, capturing
+        // modeSwitchGeneration's value at this exact point -- reading it right after this call
+        // returns the same value that query's closure captured, since nothing else can bump the
+        // counter in between.
+        controller.setEditorMode(.live)
+        let generationCapturedByFirstLeavePreviewQuery = controller.modeSwitchGenerationForTesting
+
+        // Switch away and back fast enough that, in the real scenario this guards against, the
+        // first query's JS round-trip has not resolved yet.
+        controller.setEditorMode(.preview)
+        controller.setEditorMode(.live)
+
+        XCTAssertGreaterThan(
+            controller.modeSwitchGenerationForTesting,
+            generationCapturedByFirstLeavePreviewQuery,
+            "a later switch must advance the counter past what an earlier switch's in-flight completion captured"
+        )
     }
 }
