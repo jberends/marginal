@@ -1121,16 +1121,19 @@ final class PreviewWebView: NSView {
 
     override init(frame frameRect: NSRect) {
         let configuration = WKWebViewConfiguration()
-        // Nothing in a rendered markdown document needs to run scripts; the only JavaScript is
-        // what this class evaluates itself for scroll positioning.
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        // The rendered HTML comes from a user's own document, so page content must not be able
+        // to run script. This flag governs *page* content only -- evaluateJavaScript, which this
+        // class uses for scroll positioning, is host-driven and keeps working with it off.
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         webView = WKWebView(frame: frameRect, configuration: configuration)
         super.init(frame: frameRect)
 
         webView.translatesAutoresizingMaskIntoConstraints = false
         // The document's own paper colour comes from the stylesheet; keep the web view itself
-        // from flashing white behind it on load.
-        webView.setValue(false, forKey: "drawsBackground")
+        // from flashing white behind it on load. underPageBackgroundColor is the public API for
+        // this (macOS 12+) -- do not reach for the private `setValue(false, forKey:
+        // "drawsBackground")` KVC hack.
+        webView.underPageBackgroundColor = .clear
         addSubview(webView)
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: leadingAnchor),
