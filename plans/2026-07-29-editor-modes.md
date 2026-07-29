@@ -880,8 +880,9 @@ Append to `Tests/MarginalTests/MarkdownStylerTests.swift`:
 
     func testInlineStyleDelimitersAreTintedAccent() {
         let attributed = codeModeString("a **b** c")
+        // "a **b** c" -- offsets: 0'a' 1' ' 2'*' 3'*' 4'b' 5'*' 6'*' 7' ' 8'c'
         XCTAssertEqual(colour(attributed, at: 2), DesignPalette.accent)   // first "*"
-        XCTAssertEqual(colour(attributed, at: 5), NSColor.labelColor)     // "b"
+        XCTAssertEqual(colour(attributed, at: 4), NSColor.labelColor)     // "b"
         XCTAssertEqual(colour(attributed, at: 6), DesignPalette.accent)   // closing "*"
     }
 
