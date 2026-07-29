@@ -35,6 +35,8 @@
             <string>Markdown Document</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
+            <key>CFBundleTypeIconSystemGenerated</key>
+            <true/>
             <key>LSHandlerRank</key>
             <string>Alternate</string>
             <key>LSItemContentTypes</key>
