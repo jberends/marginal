@@ -16,10 +16,11 @@
 - Mode is per-window; the last-chosen mode persists globally in `UserDefaults` under the key `editorMode`, mirroring the existing `editorFontPointSize` precedent.
 - `⌘1`–`⌘9` stay bound to "Select Tab N" (`AppDelegate.buildMainMenu`). Mode switching uses `⌘⌥1/2/3` and is registered **only** as View-menu key equivalents — never in `MarkdownTextView.keyDown`, so plain `⌘1` can never be intercepted from tab switching.
 - Colors come from `DesignPalette` (AppKit) and `MarkdownStylesheet` (CSS). Never hardcode a hex value at a call site.
-- Test command: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test`. A single test: append `-only-testing:MarginalTests/<Suite>/<testName>`.
+- Test command: `xcodebuild -project  -scheme Marginal test`. A single test: append `-only-testing:MarginalTests/<Suite>/<testName>`.
 - GUI-visual verification must be done against the real running app via Accessibility scripting plus a screenshot read back with the Read tool — NOT a code-reasoning walkthrough. Always quit the launched app cleanly (`osascript -e 'tell application "Marginal" to quit'`) when done; a real person may be using this Mac concurrently.
 - Known historical bug (fixed, stays fixed): XcodeGen's `info:`/`entitlements:` keys used to corrupt `Info.plist`/`Marginal.entitlements` on `xcodegen generate`. If either file shows as modified in `git status` after `xcodegen generate`, STOP and report BLOCKED with the diff — do not investigate, do not commit it.
 - New source files must be added to the target. This project uses XcodeGen with directory-based sources, so `xcodegen generate` picks them up automatically — run it after creating a file, then confirm `Info.plist`/`entitlements` are unmodified per the constraint above.
+- **`Marginal.xcodeproj/` is generated and git-ignored (`.gitignore:8`) — never commit it, and never `git add -f` it.** It carries per-user Xcode state (`UserInterfaceState.xcuserstate`) that must not enter the history. Commit only the `Sources/` and `Tests/` files a task creates or edits. Never `git add -A`: the working tree has unrelated pre-existing modifications in `marketing/` and `test/`.
 
 ---
 
@@ -117,7 +118,7 @@ final class EditorModeTests: XCTestCase {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/EditorModeTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/EditorModeTests`
 Expected: FAIL — compile error, `cannot find 'EditorMode' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -186,13 +187,13 @@ enum EditorMode: String, CaseIterable {
 Run: `xcodegen generate && git status --short`
 Expected: `Info.plist` and `Marginal.entitlements` are NOT listed as modified. If either is, STOP and report BLOCKED with the diff.
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/EditorModeTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/EditorModeTests`
 Expected: PASS, 4 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/Marginal/Editor/EditorMode.swift Tests/MarginalTests/EditorModeTests.swift Marginal.xcodeproj
+git add Sources/Marginal/Editor/EditorMode.swift Tests/MarginalTests/EditorModeTests.swift
 git commit -m "feat: EditorMode enum with UserDefaults persistence"
 ```
 
@@ -255,7 +256,7 @@ final class DocumentStatisticsTests: XCTestCase {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/DocumentStatisticsTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/DocumentStatisticsTests`
 Expected: FAIL — `cannot find 'DocumentStatistics' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -300,13 +301,13 @@ struct DocumentStatistics: Equatable {
 Run: `xcodegen generate && git status --short`
 Expected: `Info.plist`/`Marginal.entitlements` NOT modified.
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/DocumentStatisticsTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/DocumentStatisticsTests`
 Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/Marginal/Editor/DocumentStatistics.swift Tests/MarginalTests/DocumentStatisticsTests.swift Marginal.xcodeproj
+git add Sources/Marginal/Editor/DocumentStatistics.swift Tests/MarginalTests/DocumentStatisticsTests.swift
 git commit -m "feat: DocumentStatistics word count and reading time"
 ```
 
@@ -381,7 +382,7 @@ final class MarkdownStylesheetTests: XCTestCase {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownStylesheetTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/MarkdownStylesheetTests`
 Expected: FAIL — `cannot find 'MarkdownStylesheet' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -520,13 +521,13 @@ In `Sources/Marginal/Export/PDFExporter.swift`, replace the whole `static func p
 Run: `xcodegen generate && git status --short`
 Expected: `Info.plist`/`Marginal.entitlements` NOT modified.
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownStylesheetTests -only-testing:MarginalTests/PDFExporterIntegrationTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/MarkdownStylesheetTests -only-testing:MarginalTests/PDFExporterIntegrationTests`
 Expected: PASS. `PDFExporterIntegrationTests` must still pass unchanged — the extraction is behaviour-preserving for print.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/Marginal/Editor/MarkdownStylesheet.swift Sources/Marginal/Export/PDFExporter.swift Tests/MarginalTests/MarkdownStylesheetTests.swift Marginal.xcodeproj
+git add Sources/Marginal/Editor/MarkdownStylesheet.swift Sources/Marginal/Export/PDFExporter.swift Tests/MarginalTests/MarkdownStylesheetTests.swift
 git commit -m "refactor: extract MarkdownStylesheet from PDFExporter, add dark variant"
 ```
 
@@ -620,7 +621,7 @@ Append to `Tests/MarginalTests/MarkdownHTMLRendererTests.swift`:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownHTMLRendererTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/MarkdownHTMLRendererTests`
 Expected: FAIL — `blockSourceLines`/`blockLine` don't exist, and the anchor assertions fail because tags carry no attributes.
 
 - [ ] **Step 3: Refactor `html(fromMarkdown:)` to produce line-tagged blocks**
@@ -771,12 +772,12 @@ Inside the renamed `blocks(fromMarkdown:)`, change the `guard`, add a line table
 
 - [ ] **Step 5: Run the full renderer suite**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownHTMLRendererTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/MarkdownHTMLRendererTests`
 Expected: PASS, including every pre-existing test in the file. Pre-existing tests that assert on exact tag strings like `"<p>"` will now fail — update those assertions to include the `data-line` attribute; do NOT weaken them to `contains("<p")`.
 
 - [ ] **Step 6: Run the PDF suite too — the exported HTML changed shape**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/PDFExporterIntegrationTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/PDFExporterIntegrationTests`
 Expected: PASS. `data-line` attributes are inert in print.
 
 - [ ] **Step 7: Commit**
@@ -904,7 +905,7 @@ Append to `Tests/MarginalTests/MarkdownStylerTests.swift`:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownStylerTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/MarkdownStylerTests`
 Expected: FAIL — `codeSourceAttributedString` doesn't exist.
 
 - [ ] **Step 3: Write the implementation**
@@ -979,7 +980,7 @@ In `Sources/Marginal/Editor/MarkdownStyler.swift`, add directly above the existi
 
 - [ ] **Step 4: Run the styler suite**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/MarkdownStylerTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/MarkdownStylerTests`
 Expected: PASS, including every pre-existing test in the file (Live-mode styling is untouched).
 
 - [ ] **Step 5: Commit**
@@ -1076,7 +1077,7 @@ final class PreviewWebViewTests: XCTestCase {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/PreviewWebViewTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/PreviewWebViewTests`
 Expected: FAIL — `cannot find 'PreviewWebView' in scope`.
 
 - [ ] **Step 3: Write the implementation**
@@ -1190,13 +1191,13 @@ final class PreviewWebView: NSView {
 Run: `xcodegen generate && git status --short`
 Expected: `Info.plist`/`Marginal.entitlements` NOT modified.
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/PreviewWebViewTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/PreviewWebViewTests`
 Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/Marginal/Editor/PreviewWebView.swift Tests/MarginalTests/PreviewWebViewTests.swift Marginal.xcodeproj
+git add Sources/Marginal/Editor/PreviewWebView.swift Tests/MarginalTests/PreviewWebViewTests.swift
 git commit -m "feat: PreviewWebView renders the document as HTML with source-line anchors"
 ```
 
@@ -1322,7 +1323,7 @@ final class EditorModeControllerTests: XCTestCase {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/EditorModeControllerTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/EditorModeControllerTests`
 Expected: FAIL — `cannot find 'EditorModeController' in scope`.
 
 - [ ] **Step 3: Write the implementation**
@@ -1407,13 +1408,13 @@ final class EditorModeController {
 Run: `xcodegen generate && git status --short`
 Expected: `Info.plist`/`Marginal.entitlements` NOT modified.
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/EditorModeControllerTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/EditorModeControllerTests`
 Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/Marginal/Editor/EditorModeController.swift Tests/MarginalTests/EditorModeControllerTests.swift Marginal.xcodeproj
+git add Sources/Marginal/Editor/EditorModeController.swift Tests/MarginalTests/EditorModeControllerTests.swift
 git commit -m "feat: EditorModeController collapses render dispatch to one call site"
 ```
 
@@ -1542,7 +1543,7 @@ Append to `Tests/MarginalTests/DocumentViewControllerTests.swift`:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/DocumentViewControllerTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/DocumentViewControllerTests`
 Expected: FAIL — `setEditorMode`, `editorMode`, `previewWebViewForTesting`, `gutterViewForTesting`, `selectEditorMode` don't exist.
 
 - [ ] **Step 3: Replace the source-toggle state with the mode controller**
@@ -1807,7 +1808,7 @@ In `Sources/Marginal/Editor/MarkdownStyler.swift`, delete `plainSourceAttributed
 
 - [ ] **Step 8: Run the full suite**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test`
+Run: `xcodebuild -project  -scheme Marginal test`
 Expected: PASS, every suite. Existing `DocumentViewControllerTests` that exercised Show Source must be updated to the new mode API rather than deleted, unless they duplicate a Task 8 test.
 
 - [ ] **Step 9: Commit**
@@ -1885,7 +1886,7 @@ final class AppDelegateMenuTests: XCTestCase {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/AppDelegateMenuTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/AppDelegateMenuTests`
 Expected: FAIL — `buildMainMenuForTesting` doesn't exist and there is no View menu.
 
 - [ ] **Step 3: Expose the menu builder and add the View menu**
@@ -1966,7 +1967,7 @@ In `AppDelegate.validateMenuItem(_:)`, add before the existing logic:
 
 - [ ] **Step 6: Run the suite**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test`
+Run: `xcodebuild -project  -scheme Marginal test`
 Expected: PASS, every suite.
 
 - [ ] **Step 7: Commit**
@@ -2073,7 +2074,7 @@ final class EditorChromeViewsTests: XCTestCase {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/EditorChromeViewsTests`
+Run: `xcodebuild -project  -scheme Marginal test -only-testing:MarginalTests/EditorChromeViewsTests`
 Expected: FAIL — none of `modeControlForTesting`, `selectedMode`, `onModeChange`, `isShowingDocumentStatistics`, `GutterLine`, `lines` exist.
 
 - [ ] **Step 3: Add the segmented control and the Preview variant to `StatusBarView`**
@@ -2312,7 +2313,7 @@ tab and comes back — add after `modeController.render()`:
 
 - [ ] **Step 6: Run the suite**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test`
+Run: `xcodebuild -project  -scheme Marginal test`
 Expected: PASS, every suite. Any pre-existing test that set `gutterView.lineNumber` must move to `gutterView.lines`.
 
 - [ ] **Step 7: Commit**
@@ -2338,8 +2339,8 @@ git commit -m "feat: status-bar mode switch, Preview statistics readout, all-lin
 - [ ] **Step 1: Build and launch the real app**
 
 ```bash
-xcodebuild -project Marginal.xcodeproj -scheme Marginal -configuration Debug build
-open "$(xcodebuild -project Marginal.xcodeproj -scheme Marginal -configuration Debug -showBuildSettings | awk -F'= ' '/ BUILT_PRODUCTS_DIR/ {print $2}')/Marginal.app"
+xcodebuild -project  -scheme Marginal -configuration Debug build
+open "$(xcodebuild -project  -scheme Marginal -configuration Debug -showBuildSettings | awk -F'= ' '/ BUILT_PRODUCTS_DIR/ {print $2}')/Marginal.app"
 ```
 
 Open `test/markdown-editor-feature-test.md` in it (File ▸ Open, or `open -a Marginal test/markdown-editor-feature-test.md`).
@@ -2402,7 +2403,7 @@ should read as document state).
 
 - [ ] **Step 7: Full suite, then commit**
 
-Run: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test`
+Run: `xcodebuild -project  -scheme Marginal test`
 Expected: PASS, every suite.
 
 ```bash
