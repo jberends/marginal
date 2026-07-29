@@ -2013,13 +2013,16 @@ final class AppDelegateMenuTests: XCTestCase {
     }
 
     // ⌘1–⌘9 must stay with tab switching — the mode items must never claim a bare ⌘digit.
+    // Restricted to 1...9: ⌘0 ("Actual Size") is a bare command-digit too, but it was never a
+    // tab shortcut (tabs are only 1-9) and is the standard macOS zoom-reset key equivalent, so
+    // it's correctly excluded from this check rather than being a violation of it.
     func testTabShortcutsAreNotStolen() {
         let delegate = AppDelegate()
         let mainMenu = AppDelegate.buildMainMenuForTesting(target: delegate)
         let bareCommandDigits = mainMenu.items
             .compactMap(\.submenu)
             .flatMap(\.items)
-            .filter { $0.keyEquivalentModifierMask == [.command] && Int($0.keyEquivalent) != nil }
+            .filter { $0.keyEquivalentModifierMask == [.command] && (1...9).map(String.init).contains($0.keyEquivalent) }
         XCTAssertEqual(bareCommandDigits.count, 9)
         for item in bareCommandDigits {
             XCTAssertTrue(item.title.hasPrefix("Select Tab"), item.title)
