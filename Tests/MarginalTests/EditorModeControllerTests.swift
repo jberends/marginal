@@ -4,13 +4,19 @@ import XCTest
 @MainActor
 final class EditorModeControllerTests: XCTestCase {
 
+    /// One ordered event log rather than separate chrome/render arrays, so the tests can pin
+    /// the chrome-BEFORE-render contract the protocol documents -- two independent arrays can
+    /// only show that both happened, and would pass just as well if the order were swapped.
     private final class HostSpy: EditorModeHost {
-        var calls: [String] = []
-        var chromeModes: [EditorMode] = []
-        func renderCode() { calls.append("code") }
-        func renderLive() { calls.append("live") }
-        func renderPreview() { calls.append("preview") }
-        func applyChrome(for mode: EditorMode) { chromeModes.append(mode) }
+        var events: [String] = []
+        func renderCode() { events.append("render:code") }
+        func renderLive() { events.append("render:live") }
+        func renderPreview() { events.append("render:preview") }
+        func applyChrome(for mode: EditorMode) { events.append("chrome:\(mode.rawValue)") }
+    }
+
+    private func expectedSwitchEvents(to mode: EditorMode) -> [String] {
+        ["chrome:\(mode.rawValue)", "render:\(mode.rawValue)"]
     }
 
     private func emptyDefaults() -> UserDefaults {
@@ -30,27 +36,26 @@ final class EditorModeControllerTests: XCTestCase {
     func testInitDoesNotRenderUntilActivated() {
         let host = HostSpy()
         _ = EditorModeController(host: host, defaults: emptyDefaults())
-        XCTAssertTrue(host.calls.isEmpty)
-        XCTAssertTrue(host.chromeModes.isEmpty)
+        XCTAssertTrue(host.events.isEmpty)
     }
 
     func testActivateAppliesChromeThenRendersOnce() {
         let host = HostSpy()
         let controller = EditorModeController(host: host, defaults: emptyDefaults())
         controller.activate()
-        XCTAssertEqual(host.chromeModes, [.live])
-        XCTAssertEqual(host.calls, ["live"])
+        // Chrome first, then render -- asserted as one sequence, not as two facts.
+        XCTAssertEqual(host.events, ["chrome:live", "render:live"])
     }
 
     // The reason this class exists: exactly one render path runs per event, from one call site.
     func testRenderDispatchesToExactlyOneSurface() {
-        for (mode, expected) in [(EditorMode.code, "code"), (.live, "live"), (.preview, "preview")] {
+        for mode in EditorMode.allCases {
             let host = HostSpy()
             let controller = EditorModeController(host: host, defaults: emptyDefaults())
             controller.setMode(mode)
-            host.calls.removeAll()
+            host.events.removeAll()
             controller.render()
-            XCTAssertEqual(host.calls, [expected], "\(mode) rendered \(host.calls)")
+            XCTAssertEqual(host.events, ["render:\(mode.rawValue)"], "\(mode) produced \(host.events)")
         }
     }
 
@@ -59,8 +64,7 @@ final class EditorModeControllerTests: XCTestCase {
         let controller = EditorModeController(host: host, defaults: emptyDefaults())
         controller.setMode(.preview)
         XCTAssertEqual(controller.mode, .preview)
-        XCTAssertEqual(host.chromeModes, [.preview])
-        XCTAssertEqual(host.calls, ["preview"])
+        XCTAssertEqual(host.events, expectedSwitchEvents(to: .preview))
     }
 
     func testSetModePersistsTheChoice() {
@@ -73,10 +77,12 @@ final class EditorModeControllerTests: XCTestCase {
     // Re-selecting the active mode must not reload Preview or restyle the whole document.
     func testSetModeToTheCurrentModeIsANoOp() {
         let host = HostSpy()
-        let controller = EditorModeController(host: host, defaults: emptyDefaults())
+        let defaults = emptyDefaults()
+        let controller = EditorModeController(host: host, defaults: defaults)
         controller.setMode(.live)
-        XCTAssertTrue(host.calls.isEmpty)
-        XCTAssertTrue(host.chromeModes.isEmpty)
+        XCTAssertTrue(host.events.isEmpty)
+        // The no-op path must not persist either.
+        XCTAssertNil(defaults.string(forKey: EditorMode.defaultsKey))
     }
 
     func testEveryOrderedPairOfModesTransitionsCleanly() {
@@ -85,12 +91,10 @@ final class EditorModeControllerTests: XCTestCase {
                 let host = HostSpy()
                 let controller = EditorModeController(host: host, defaults: emptyDefaults())
                 controller.setMode(from)
-                host.calls.removeAll()
-                host.chromeModes.removeAll()
+                host.events.removeAll()
                 controller.setMode(to)
                 XCTAssertEqual(controller.mode, to)
-                XCTAssertEqual(host.chromeModes, [to], "\(from) -> \(to)")
-                XCTAssertEqual(host.calls.count, 1, "\(from) -> \(to) rendered \(host.calls)")
+                XCTAssertEqual(host.events, expectedSwitchEvents(to: to), "\(from) -> \(to)")
             }
         }
     }
