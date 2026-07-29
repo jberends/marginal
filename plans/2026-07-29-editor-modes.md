@@ -1552,6 +1552,26 @@ Append to `Tests/MarginalTests/DocumentViewControllerTests.swift`:
         XCTAssertEqual(controller.editorMode, .preview)
     }
 
+    // Switching into Preview triggers an asynchronous load, so the scroll has to be deferred
+    // rather than evaluated against a DOM that does not exist yet.
+    func testEnteringPreviewDefersTheScrollUntilTheDocumentLoads() {
+        let webView = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        webView.load(markdown: "# T\n\npara\n\n- item\n", title: "t", fontSize: 16, appearance: .light)
+        // Still loading: the request must be parked, not dropped and not evaluated.
+        webView.requestScrollToSourceLine(3)
+        XCTAssertEqual(webView.pendingScrollLineForTesting, 3)
+    }
+
+    // A load that arrives after a parked request must invalidate it, so a stale scroll target
+    // from the previous document can never land on the new one.
+    func testLoadingAgainDiscardsAPendingScroll() {
+        let webView = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        webView.load(markdown: "# A\n\nfirst\n", title: "t", fontSize: 16, appearance: .light)
+        webView.requestScrollToSourceLine(3)
+        webView.load(markdown: "# B\n\nsecond\n", title: "t", fontSize: 16, appearance: .light)
+        XCTAssertNil(webView.pendingScrollLineForTesting)
+    }
+
     func testEditingInCodeModeKeepsCodeRendering() {
         let controller = loadedController()
         controller.setEditorMode(.code)
@@ -1627,7 +1647,10 @@ Delete `toggleShowSource()` (lines 225–232) and `applyPlainSourceRendering()` 
         let caretLineBeforeSwitch = mode == .preview ? currentCaretLine() : nil
         modeController.setMode(mode)
         if let caretLineBeforeSwitch {
-            previewWebView?.scrollToSourceLine(caretLineBeforeSwitch)
+            // Must be requested, not performed: setMode -> renderPreview -> load() kicks off an
+            // asynchronous loadHTMLString, so there is no DOM to scroll yet. PreviewWebView
+            // holds the request and applies it when navigation finishes.
+            previewWebView?.requestScrollToSourceLine(caretLineBeforeSwitch)
         }
     }
 
@@ -1659,6 +1682,94 @@ Delete `toggleShowSource()` (lines 225–232) and `applyPlainSourceRendering()` 
         textView.scrollRangeToVisible(NSRange(location: clamped, length: 0))
     }
 ```
+
+- [ ] **Step 4b: Make Preview's scroll survive the asynchronous load**
+
+`PreviewWebView.scrollToSourceLine(_:)` evaluates JavaScript immediately, which works only if a
+document is already loaded. Switching *into* Preview calls `load()` and then wants to scroll — and
+`loadHTMLString` is asynchronous, so at that moment there is no DOM and the scroll silently does
+nothing. Give the view an explicit loaded/not-loaded flag plus a pending-scroll slot, applied once
+navigation finishes. (A flag set by the navigation delegate, not `webView.isLoading`/`.url`, because
+those reflect WebKit's own request state and are the wrong thing to infer readiness from here.)
+
+First add a failing test to `Tests/MarginalTests/PreviewWebViewTests.swift`, appended after
+`testLoadRecordsTheDocumentsBlockAnchors`:
+
+```swift
+    // Switching into Preview triggers an asynchronous load, so the scroll has to be deferred
+    // rather than evaluated against a DOM that does not exist yet.
+    func testEnteringPreviewDefersTheScrollUntilTheDocumentLoads() {
+        let view = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        view.load(markdown: "# T\n\npara\n\n- item\n", title: "t", fontSize: 16, appearance: .light)
+        // The load has not finished yet: the request must be parked, not dropped.
+        view.requestScrollToSourceLine(3)
+        XCTAssertEqual(view.pendingScrollLineForTesting, 3)
+    }
+
+    // A load that arrives after a parked request must invalidate it, so a stale scroll target
+    // from the previous document can never land on the new one.
+    func testLoadingAgainDiscardsAPendingScroll() {
+        let view = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        view.load(markdown: "# A\n\nfirst\n", title: "t", fontSize: 16, appearance: .light)
+        view.requestScrollToSourceLine(3)
+        view.load(markdown: "# B\n\nsecond\n", title: "t", fontSize: 16, appearance: .light)
+        XCTAssertNil(view.pendingScrollLineForTesting)
+    }
+```
+
+Run `xcodebuild -project Marginal.xcodeproj -scheme Marginal test -only-testing:MarginalTests/PreviewWebViewTests` and confirm both fail — `requestScrollToSourceLine`/`pendingScrollLineForTesting` do not exist yet.
+
+Now implement. In `Sources/Marginal/Editor/PreviewWebView.swift`, add stored properties beside `blockSourceLines`:
+
+```swift
+    /// Set false by every `load`, true once that load's navigation finishes. Deliberately not
+    /// inferred from `webView.isLoading`/`.url` -- those reflect WebKit's own request state, not
+    /// "does this specific load's DOM exist yet."
+    private var isDocumentLoaded = false
+
+    /// A scroll requested before the document finished loading, applied once it has.
+    /// `load(...)` clears it, so a stale request can never land on a newer document.
+    private var pendingScrollLine: Int?
+
+    var pendingScrollLineForTesting: Int? { pendingScrollLine }
+```
+
+Set `webView.navigationDelegate = self` in `init`, after `webView.translatesAutoresizingMaskIntoConstraints = false`.
+
+At the top of `load(markdown:title:fontSize:appearance:)`, reset both:
+
+```swift
+        isDocumentLoaded = false
+        pendingScrollLine = nil
+```
+
+Add the request entry point and the delegate conformance, after `topmostVisibleSourceLine`:
+
+```swift
+    /// Scrolls to `line`'s block, now if the document has finished loading, otherwise as soon
+    /// as it does. Callers switching into Preview must use this rather than
+    /// `scrollToSourceLine(_:)`, because the load they just triggered has no DOM yet.
+    func requestScrollToSourceLine(_ line: Int) {
+        if isDocumentLoaded {
+            scrollToSourceLine(line)
+        } else {
+            pendingScrollLine = line
+        }
+    }
+}
+
+extension PreviewWebView: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isDocumentLoaded = true
+        guard let line = pendingScrollLine else { return }
+        pendingScrollLine = nil
+        scrollToSourceLine(line)
+    }
+}
+```
+
+Run the same test command and confirm both new tests pass, then run the full `PreviewWebViewTests`
+suite to confirm nothing else broke.
 
 - [ ] **Step 5: Conform to `EditorModeHost`**
 
