@@ -91,6 +91,9 @@ final class DocumentViewController: NSViewController {
         let statusBar = StatusBarView(frame: .zero)
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         containerView.addSubview(statusBar)
+        statusBar.onModeChange = { [weak self] mode in
+            self?.setEditorMode(mode)
+        }
 
         NSLayoutConstraint.activate([
             gutter.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
@@ -148,7 +151,7 @@ final class DocumentViewController: NSViewController {
         let cursorInText = view.window?.firstResponder === textView
 
         guard cursorInText, let cursor = currentCursorIndex() else {
-            gutterView.lineNumber = nil
+            updateGutterLines(currentLine: nil)
             statusBar.update(with: nil)
             return
         }
@@ -156,30 +159,70 @@ final class DocumentViewController: NSViewController {
         let model = latestModel ?? MarkdownDocumentModel()
         let status = CursorStatus.status(for: text, model: model, cursor: cursor)
         statusBar.update(with: status)
+        updateGutterLines(currentLine: status.line)
+    }
 
-        guard let layoutManager = textView.layoutManager else {
-            gutterView.lineNumber = nil
+    /// Populates the gutter: Code mode lists every line fragment on screen, Live shows only the
+    /// caret's own line, Preview never sees the gutter at all.
+    private func updateGutterLines(currentLine: Int?) {
+        guard let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else {
+            gutterView.lines = []
             return
         }
+        gutterView.fontSize = min(12, max(10, editorFontSize * 0.7))
+
+        guard editorMode == .code else {
+            guard let currentLine, let rect = lineFragmentRectForCaret(layoutManager: layoutManager) else {
+                gutterView.lines = []
+                return
+            }
+            gutterView.lines = [.init(number: currentLine, centerY: gutterY(for: rect), isCurrent: true)]
+            return
+        }
+
+        // Code mode: walk the line fragments intersecting the visible rect, counting newlines to
+        // get each fragment's 1-based source line. Only the first fragment of a wrapped line
+        // gets a number, matching how code editors number source lines rather than visual rows.
+        let visibleRect = textView.visibleRect
+        let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
+        let charRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        let nsText = textView.string as NSString
+
+        var lines: [LineNumberGutterView.GutterLine] = []
+        var index = charRange.location
+        while index < NSMaxRange(charRange) {
+            let lineRange = nsText.lineRange(for: NSRange(location: index, length: 0))
+            let number = nsText.substring(to: lineRange.location).components(separatedBy: "\n").count
+            let fragmentRect = layoutManager.lineFragmentRect(
+                forGlyphAt: layoutManager.glyphIndexForCharacter(at: lineRange.location),
+                effectiveRange: nil
+            )
+            lines.append(.init(number: number, centerY: gutterY(for: fragmentRect), isCurrent: number == currentLine))
+            index = max(NSMaxRange(lineRange), index + 1)
+        }
+        gutterView.lines = lines
+    }
+
+    /// The caret's own line fragment rect, handling the caret-at-very-end cases.
+    private func lineFragmentRectForCaret(layoutManager: NSLayoutManager) -> NSRect? {
         let location = textView.selectedRange().location
-        var lineRect: NSRect
+        guard location != NSNotFound else { return nil }
         if location < (textView.textStorage?.length ?? 0) {
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: location)
-            lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-        } else {
-            // Caret at the very end: the extra line fragment when the text ends in a newline,
-            // else the last real line.
-            lineRect = layoutManager.extraLineFragmentRect
-            if lineRect.isEmpty, layoutManager.numberOfGlyphs > 0 {
-                lineRect = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.numberOfGlyphs - 1, effectiveRange: nil)
-            }
+            return layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
         }
-        var rectInTextView = lineRect
-        rectInTextView.origin.y += textView.textContainerInset.height
-        let rectInGutter = textView.convert(rectInTextView, to: gutterView)
-        gutterView.fontSize = min(12, max(10, editorFontSize * 0.7))
-        gutterView.lineNumber = status.line
-        gutterView.lineCenterY = rectInGutter.midY
+        var rect = layoutManager.extraLineFragmentRect
+        if rect.isEmpty, layoutManager.numberOfGlyphs > 0 {
+            rect = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.numberOfGlyphs - 1, effectiveRange: nil)
+        }
+        return rect.isEmpty ? nil : rect
+    }
+
+    /// Converts a text-container rect to the gutter's own coordinate space.
+    private func gutterY(for rect: NSRect) -> CGFloat {
+        var inTextView = rect
+        inTextView.origin.y += textView.textContainerInset.height
+        return textView.convert(inTextView, to: gutterView).midY
     }
 
     func loadInitialText(_ text: String) {
@@ -414,10 +457,10 @@ extension DocumentViewController: EditorModeHost {
         previewWebView?.isHidden = !isPreview
         scrollView.isHidden = isPreview
         gutterView.isHidden = isPreview
-        // NOTE: the status bar's Preview readout (word count / reading time) and its segmented
-        // control are wired in Task 10, which is where those StatusBarView members are added.
-        // Do not reference them here — they do not exist yet and this task must compile.
+        statusBar.selectedMode = mode
+        statusBar.isShowingDocumentStatistics = isPreview
         if isPreview {
+            statusBar.update(with: DocumentStatistics.statistics(for: textView.string))
             // Preview is read-only, so the text view must not stay first responder. AppKit does
             // resign it automatically when scrollView.isHidden above takes effect (verified: the
             // window falls back to being its own first responder) -- but that fallback leaves
@@ -483,6 +526,9 @@ extension DocumentViewController: NSTextViewDelegate {
         document?.text = textView.string
         document?.updateChangeCount(.changeDone)
         modeController.render()
+        if editorMode == .preview {
+            statusBar.update(with: DocumentStatistics.statistics(for: textView.string))
+        }
         updateCursorChrome()
     }
 
