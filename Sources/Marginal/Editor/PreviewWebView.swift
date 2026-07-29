@@ -16,6 +16,17 @@ final class PreviewWebView: NSView {
     /// The 1-based source line of each rendered block, in document order. Empty until `load`.
     private(set) var blockSourceLines: [Int] = []
 
+    /// Set false by every `load`, true once that load's navigation finishes. Deliberately not
+    /// inferred from `webView.isLoading`/`.url` -- those reflect WebKit's own request state, not
+    /// "does this specific load's DOM exist yet."
+    private var isDocumentLoaded = false
+
+    /// A scroll requested before the document finished loading, applied once it has.
+    /// `load(...)` clears it, so a stale request can never land on a newer document.
+    private var pendingScrollLine: Int?
+
+    var pendingScrollLineForTesting: Int? { pendingScrollLine }
+
     override init(frame frameRect: NSRect) {
         let configuration = WKWebViewConfiguration()
         // The rendered HTML comes from the user's own document, not a trusted app resource, so it
@@ -26,6 +37,7 @@ final class PreviewWebView: NSView {
         super.init(frame: frameRect)
 
         webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.navigationDelegate = self
         // The document's own paper colour comes from the stylesheet; keep the web view itself
         // from flashing white behind it on load. underPageBackgroundColor (public, macOS 12+) is
         // the documented replacement for the old `drawsBackground` private-API KVC hack.
@@ -42,6 +54,8 @@ final class PreviewWebView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func load(markdown: String, title: String, fontSize: CGFloat, appearance: MarkdownStylesheet.Appearance) {
+        isDocumentLoaded = false
+        pendingScrollLine = nil
         blockSourceLines = MarkdownHTMLRenderer.blockSourceLines(fromMarkdown: markdown)
         webView.loadHTMLString(
             Self.documentHTML(markdown: markdown, title: title, fontSize: fontSize, appearance: appearance),
@@ -60,6 +74,17 @@ final class PreviewWebView: NSView {
     func topmostVisibleSourceLine(completion: @escaping (Int?) -> Void) {
         webView.evaluateJavaScript(Self.topmostVisibleLineScript) { value, _ in
             completion((value as? NSNumber)?.intValue)
+        }
+    }
+
+    /// Scrolls to `line`'s block, now if the document has finished loading, otherwise as soon
+    /// as it does. Callers switching into Preview must use this rather than
+    /// `scrollToSourceLine(_:)`, because the load they just triggered has no DOM yet.
+    func requestScrollToSourceLine(_ line: Int) {
+        if isDocumentLoaded {
+            scrollToSourceLine(line)
+        } else {
+            pendingScrollLine = line
         }
     }
 
@@ -98,4 +123,13 @@ final class PreviewWebView: NSView {
       return null;
     })();
     """
+}
+
+extension PreviewWebView: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isDocumentLoaded = true
+        guard let line = pendingScrollLine else { return }
+        pendingScrollLine = nil
+        scrollToSourceLine(line)
+    }
 }

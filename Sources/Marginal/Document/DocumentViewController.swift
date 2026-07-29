@@ -8,14 +8,28 @@ final class DocumentViewController: NSViewController {
     private var latestModel: MarkdownDocumentModel?
     private var firstResponderObservation: NSKeyValueObservation?
     private var isApplyingProgrammaticEdit = false
-    private var isShowingSource = false
+
+    private var previewWebView: PreviewWebView?
+    private var scrollView: NSScrollView!
+
+    /// Where the mode controller reads and persists the mode. Tests point this at a throwaway
+    /// suite so a developer's own last-used mode can never change what a test observes; it must
+    /// be set before `loadInitialText`, which is what first touches `modeController`.
+    var editorModeDefaults: UserDefaults = .standard
+    private lazy var modeController = EditorModeController(host: self, defaults: editorModeDefaults)
+
+    /// The active rendering mode.
+    var editorMode: EditorMode { modeController.mode }
+
+    var previewWebViewForTesting: PreviewWebView? { previewWebView }
+    var gutterViewForTesting: NSView { gutterView }
 
     // Single source of truth for the editor's base font size. NSTextView's `font` getter
     // (in rich-text mode) returns whatever attribute sits at the current selection/cursor —
     // which restyle() may have set to the near-invisible hidden-delimiter size (see
     // MarkdownStyler.hiddenDelimiterFontSize) — so it must never be read back as "the base
-    // font"; this property is the only thing restyle()/toggleShowSource()/font-size
-    // adjustment consult or mutate.
+    // font"; this property is the only thing restyle()/renderCode()/font-size adjustment
+    // consult or mutate.
     // 16px body -- the design system's base size (headings scale 1.25/1.5/1.875 from it).
     private var editorFontSize: CGFloat = 16
 
@@ -100,6 +114,7 @@ final class DocumentViewController: NSViewController {
             object: scrollView.contentView
         )
 
+        self.scrollView = scrollView
         self.textView = textView
         self.gutterView = gutter
         self.statusBar = statusBar
@@ -123,6 +138,7 @@ final class DocumentViewController: NSViewController {
     /// Recomputes the gutter's line number/position and the status bar's breadcrumb.
     private func updateCursorChrome() {
         guard let gutterView, let statusBar else { return }
+        guard editorMode != .preview else { return }
         let text = textView.string
         let cursorInText = view.window?.firstResponder === textView
 
@@ -163,7 +179,7 @@ final class DocumentViewController: NSViewController {
 
     func loadInitialText(_ text: String) {
         textView.string = text
-        restyle(cursorLocation: nil)
+        modeController.activate()
     }
 
     func currentCursorIndex() -> String.Index? {
@@ -222,33 +238,63 @@ final class DocumentViewController: NSViewController {
         }
     }
 
-    func toggleShowSource() {
-        isShowingSource.toggle()
-        if isShowingSource {
-            applyPlainSourceRendering()
-        } else {
-            restyle(cursorLocation: currentCursorIndex())
+    /// Switches rendering mode. Preserves reading position across the switch: leaving an editing
+    /// surface scrolls Preview to the caret's block, and leaving Preview puts the caret on the
+    /// topmost visible block's first line.
+    func setEditorMode(_ mode: EditorMode) {
+        guard mode != editorMode else { return }
+
+        if editorMode == .preview, let previewWebView {
+            // Capture the reading position before the web view goes away. The JS round-trip is
+            // asynchronous, so the caret move lands just after the switch — which is fine, the
+            // text view is already showing by then.
+            previewWebView.topmostVisibleSourceLine { [weak self] line in
+                Task { @MainActor [weak self] in
+                    guard let self, let line else { return }
+                    self.moveCaretToLine(line)
+                }
+            }
+        }
+
+        let caretLineBeforeSwitch = mode == .preview ? currentCaretLine() : nil
+        modeController.setMode(mode)
+        if let caretLineBeforeSwitch {
+            // Must be requested, not performed: setMode -> renderPreview -> load() kicks off an
+            // asynchronous loadHTMLString, so there is no DOM to scroll yet. PreviewWebView
+            // holds the request and applies it when navigation finishes.
+            previewWebView?.requestScrollToSourceLine(caretLineBeforeSwitch)
         }
     }
 
-    // Re-applies the plain monospace source rendering, preserving the selection across the
-    // text storage mutation. Used both when Show Source is first toggled on and whenever a
-    // delegate callback (selection change, text change, font size change) would otherwise
-    // have called restyle() while still in Show Source mode.
-    private func applyPlainSourceRendering() {
-        let plain = MarkdownStyler.plainSourceAttributedString(for: textView.string, font: NSFont.systemFont(ofSize: editorFontSize))
-        let selectedRange = textView.selectedRange()
-        isApplyingProgrammaticEdit = true
-        textView.textStorage?.setAttributedString(plain)
-        // setSelectedRange must run before isApplyingProgrammaticEdit is cleared: it
-        // synchronously fires textViewDidChangeSelection, which would otherwise run
-        // unguarded and stomp the render this method just applied.
-        textView.setSelectedRange(selectedRange)
-        isApplyingProgrammaticEdit = false
+    /// View-menu action. `sender.tag` is the mode's index in `EditorMode.allCases`.
+    @objc func selectEditorMode(_ sender: NSMenuItem) {
+        guard EditorMode.allCases.indices.contains(sender.tag) else { return }
+        setEditorMode(EditorMode.allCases[sender.tag])
     }
 
-    private func restyle(cursorLocation: String.Index?) {
-        let text = textView.string
+    /// The 1-based line the caret sits on, via the same status computation the status bar uses.
+    private func currentCaretLine() -> Int {
+        guard let cursor = currentCursorIndex() else { return 1 }
+        let model = latestModel ?? MarkdownDocumentModel()
+        return CursorStatus.status(for: textView.string, model: model, cursor: cursor).line
+    }
+
+    /// Puts the caret at the start of 1-based `line` and scrolls it into view.
+    private func moveCaretToLine(_ line: Int) {
+        let nsText = textView.string as NSString
+        var location = 0
+        var currentLine = 1
+        while currentLine < line, location < nsText.length {
+            let lineRange = nsText.lineRange(for: NSRange(location: location, length: 0))
+            location = NSMaxRange(lineRange)
+            currentLine += 1
+        }
+        let clamped = min(location, nsText.length)
+        textView.setSelectedRange(NSRange(location: clamped, length: 0))
+        textView.scrollRangeToVisible(NSRange(location: clamped, length: 0))
+    }
+
+    private func parsedModel(for text: String) -> MarkdownDocumentModel {
         let model = MarkdownDocumentModel(
             inlineStyles: MarkdownParser.parseInlineStyles(in: text),
             headers: MarkdownParser.parseHeaders(in: text),
@@ -261,13 +307,12 @@ final class DocumentViewController: NSViewController {
             emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
         )
         latestModel = model
-        let attributed = MarkdownStyler.attributedString(
-            for: text,
-            model: model,
-            baseFont: NSFont.systemFont(ofSize: editorFontSize),
-            cursorLocation: cursorLocation
-        )
+        return model
+    }
 
+    /// Applies a fully-styled attributed string to the text storage in place, preserving the
+    /// selection. Shared by Live and Code rendering — only the string differs.
+    private func applyRendering(_ attributed: NSAttributedString) {
         let selectedRange = textView.selectedRange()
         isApplyingProgrammaticEdit = true
         textView.textStorage?.beginEditing()
@@ -279,15 +324,87 @@ final class DocumentViewController: NSViewController {
         isApplyingProgrammaticEdit = false
         // Horizontal rules are the first feature where revealing/hiding a marker changes an
         // entire line's font size (0.1pt <-> baseFont), which changes that line's height and
-        // therefore shifts every line below it -- unlike headers/blockquotes, where only a
-        // marker prefix toggles size while the line's content stays at content size, so line
-        // height never changes. Found via manual GUI verification: NSTextView's automatic
-        // display invalidation after the in-place setAttributes calls above redraws only the
-        // stale (pre-shift) region, leaving lines below a revealed/hidden rule visually blank
-        // until some other event (e.g. a selection change) forces a full redraw. The layout
-        // itself is always correct (verified with a standalone NSLayoutManager harness); only
-        // the drawn pixels go stale. Forcing a full-view redraw after every restyle fixes it.
+        // therefore shifts every line below it. NSTextView's automatic display invalidation
+        // after the in-place setAttributes calls above redraws only the stale (pre-shift)
+        // region, leaving lines below a revealed/hidden rule visually blank until some other
+        // event forces a full redraw. The layout itself is always correct; only the drawn
+        // pixels go stale. Forcing a full-view redraw after every render fixes it.
         textView.needsDisplay = true
+    }
+
+    private func restyle(cursorLocation: String.Index?) {
+        let text = textView.string
+        let model = parsedModel(for: text)
+        applyRendering(
+            MarkdownStyler.attributedString(
+                for: text,
+                model: model,
+                baseFont: NSFont.systemFont(ofSize: editorFontSize),
+                cursorLocation: cursorLocation
+            )
+        )
+    }
+}
+
+extension DocumentViewController: EditorModeHost {
+
+    func renderCode() {
+        let text = textView.string
+        let model = parsedModel(for: text)
+        applyRendering(
+            MarkdownStyler.codeSourceAttributedString(
+                for: text,
+                model: model,
+                font: NSFont.systemFont(ofSize: editorFontSize)
+            )
+        )
+    }
+
+    func renderLive() {
+        restyle(cursorLocation: currentCursorIndex())
+    }
+
+    func renderPreview() {
+        let webView = previewWebView ?? makePreviewWebView()
+        webView.load(
+            markdown: textView.string,
+            title: document?.displayName ?? "Document",
+            fontSize: editorFontSize,
+            appearance: view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        )
+    }
+
+    func applyChrome(for mode: EditorMode) {
+        let isPreview = mode == .preview
+        if isPreview, previewWebView == nil {
+            _ = makePreviewWebView()
+        }
+        previewWebView?.isHidden = !isPreview
+        scrollView.isHidden = isPreview
+        gutterView.isHidden = isPreview
+        // NOTE: the status bar's Preview readout (word count / reading time) and its segmented
+        // control are wired in Task 10, which is where those StatusBarView members are added.
+        // Do not reference them here — they do not exist yet and this task must compile.
+        if !isPreview {
+            // Editing surfaces take focus back when Preview yields it.
+            view.window?.makeFirstResponder(textView)
+        }
+        updateCursorChrome()
+    }
+
+    private func makePreviewWebView() -> PreviewWebView {
+        let webView = PreviewWebView(frame: .zero)
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.isHidden = true
+        view.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: statusBar.topAnchor)
+        ])
+        previewWebView = webView
+        return webView
     }
 }
 
@@ -295,7 +412,9 @@ extension DocumentViewController: NSTextViewDelegate {
     // Return inside a list item continues the list ("- ", "4. ", "- [ ] " on the new
     // line); Return on an empty item outdents one level, then leaves the list.
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard commandSelector == #selector(NSResponder.insertNewline(_:)), !isShowingSource else { return false }
+        // List continuation is a Live-mode-only convenience: Code mode's whole point is that
+        // typing never restructures the literal source, and Preview isn't editable at all.
+        guard commandSelector == #selector(NSResponder.insertNewline(_:)), editorMode == .live else { return false }
         let nsText = textView.string as NSString
         let selection = textView.selectedRange()
         guard selection.location != NSNotFound else { return false }
@@ -322,21 +441,13 @@ extension DocumentViewController: NSTextViewDelegate {
         guard !isApplyingProgrammaticEdit else { return }
         document?.text = textView.string
         document?.updateChangeCount(.changeDone)
-        if isShowingSource {
-            applyPlainSourceRendering()
-        } else {
-            restyle(cursorLocation: currentCursorIndex())
-        }
+        modeController.render()
         updateCursorChrome()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
-        guard !isApplyingProgrammaticEdit else { return }
-        if isShowingSource {
-            applyPlainSourceRendering()
-        } else {
-            restyle(cursorLocation: currentCursorIndex())
-        }
+        guard !isApplyingProgrammaticEdit, editorMode != .preview else { return }
+        modeController.render()
         updateCursorChrome()
     }
 }
@@ -348,10 +459,6 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
 
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) {
         setFontSize(FontSizing.decreased(from: editorFontSize))
-    }
-
-    func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {
-        toggleShowSource()
     }
 
     // Dropping a markdown file always opens it. If this window's document is untitled and
@@ -375,10 +482,6 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         editorFontSize = size
         textView.font = NSFont.systemFont(ofSize: size)
         UserDefaults.standard.set(size, forKey: "editorFontPointSize")
-        if isShowingSource {
-            applyPlainSourceRendering()
-        } else {
-            restyle(cursorLocation: currentCursorIndex())
-        }
+        modeController.render()
     }
 }

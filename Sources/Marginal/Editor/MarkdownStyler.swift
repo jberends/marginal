@@ -660,13 +660,6 @@ struct MarkdownStyler {
         return result
     }
 
-    static func plainSourceAttributedString(for text: String, font: NSFont) -> NSAttributedString {
-        NSAttributedString(string: text, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
-            .foregroundColor: NSColor.labelColor
-        ])
-    }
-
     private static func headerPointSize(for level: Int, baseSize: CGFloat) -> CGFloat {
         // Notion's heading scale: 30/24/20/18px at 16px body (h5/h6 have no Notion equivalent
         // and extrapolate the same curve downward).

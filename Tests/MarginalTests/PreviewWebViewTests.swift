@@ -55,4 +55,24 @@ final class PreviewWebViewTests: XCTestCase {
         view.load(markdown: "# T\n\npara\n\n- item\n", title: "t", fontSize: 16, appearance: .light)
         XCTAssertEqual(view.blockSourceLines, [1, 3, 5])
     }
+
+    // Switching into Preview triggers an asynchronous load, so the scroll has to be deferred
+    // rather than evaluated against a DOM that does not exist yet.
+    func testEnteringPreviewDefersTheScrollUntilTheDocumentLoads() {
+        let view = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        view.load(markdown: "# T\n\npara\n\n- item\n", title: "t", fontSize: 16, appearance: .light)
+        // The load has not finished yet: the request must be parked, not dropped.
+        view.requestScrollToSourceLine(3)
+        XCTAssertEqual(view.pendingScrollLineForTesting, 3)
+    }
+
+    // A load that arrives after a parked request must invalidate it, so a stale scroll target
+    // from the previous document can never land on the new one.
+    func testLoadingAgainDiscardsAPendingScroll() {
+        let view = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        view.load(markdown: "# A\n\nfirst\n", title: "t", fontSize: 16, appearance: .light)
+        view.requestScrollToSourceLine(3)
+        view.load(markdown: "# B\n\nsecond\n", title: "t", fontSize: 16, appearance: .light)
+        XCTAssertNil(view.pendingScrollLineForTesting)
+    }
 }
