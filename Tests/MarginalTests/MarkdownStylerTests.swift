@@ -592,6 +592,104 @@ final class MarkdownStylerTests: XCTestCase {
         let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
         XCTAssertNotEqual(color, NSColor.secondaryLabelColor, "Code block content must not be recolored as a list marker")
     }
+
+    // MARK: - Code mode
+
+    private func codeModeString(_ markdown: String, size: CGFloat = 16) -> NSAttributedString {
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: markdown),
+            headers: MarkdownParser.parseHeaders(in: markdown),
+            listItems: MarkdownParser.parseListItems(in: markdown),
+            links: MarkdownParser.parseLinks(in: markdown),
+            blockquotes: MarkdownParser.parseBlockquotes(in: markdown),
+            horizontalRules: MarkdownParser.parseHorizontalRules(in: markdown),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: markdown),
+            tables: MarkdownParser.parseTables(in: markdown),
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: markdown)
+        )
+        return MarkdownStyler.codeSourceAttributedString(
+            for: markdown,
+            model: model,
+            font: NSFont.systemFont(ofSize: size)
+        )
+    }
+
+    private func colour(_ attributed: NSAttributedString, at location: Int) -> NSColor? {
+        attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+    }
+
+    // The whole point of Code mode: no size variation anywhere, so nothing ever reflows while
+    // the caret moves or text is typed.
+    func testCodeModeUsesOneFixedPitchSizeForEveryCharacter() {
+        let markdown = "# Big heading\n\nbody **bold** text\n\n> quote\n\n---\n\n- [x] task\n"
+        let attributed = codeModeString(markdown, size: 15)
+        var sizesSeen: Set<CGFloat> = []
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, range, _ in
+            guard let font = value as? NSFont else {
+                return XCTFail("every character must carry a font; range \(range) had none")
+            }
+            XCTAssertTrue(font.isFixedPitch, "Code mode must be monospace throughout")
+            sizesSeen.insert(font.pointSize)
+        }
+        XCTAssertEqual(sizesSeen, [15])
+    }
+
+    // Nothing is hidden in Code mode — the hidden-delimiter trick must not appear.
+    func testCodeModeNeverHidesAnything() {
+        let attributed = codeModeString("**bold** and [link](https://example.com)")
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
+            XCTAssertNotEqual((value as? NSFont)?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+        }
+        attributed.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
+            XCTAssertNotEqual(value as? NSColor, NSColor.clear)
+        }
+    }
+
+    func testHeaderMarkerIsTintedAccentAndContentIsNot() {
+        let attributed = codeModeString("## Heading")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.accent)   // "#"
+        XCTAssertEqual(colour(attributed, at: 1), DesignPalette.accent)   // "#"
+        XCTAssertEqual(colour(attributed, at: 3), NSColor.labelColor)     // "H"
+    }
+
+    func testInlineStyleDelimitersAreTintedAccent() {
+        let attributed = codeModeString("a **b** c")
+        XCTAssertEqual(colour(attributed, at: 2), DesignPalette.accent)   // first "*"
+        XCTAssertEqual(colour(attributed, at: 4), NSColor.labelColor)     // "b"
+        XCTAssertEqual(colour(attributed, at: 6), DesignPalette.accent)   // closing "*"
+    }
+
+    func testListBulletIsFaintAndTaskMarkerIsAccent() {
+        let attributed = codeModeString("- [x] done")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.textFaint) // "-"
+        XCTAssertEqual(colour(attributed, at: 2), DesignPalette.accent)    // "["
+        XCTAssertEqual(colour(attributed, at: 6), NSColor.labelColor)      // "d" of "done"
+    }
+
+    func testLinkSyntaxIsTintedButLinkTextIsNot() {
+        let attributed = codeModeString("[text](https://example.com)")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.accent)   // "["
+        XCTAssertEqual(colour(attributed, at: 1), NSColor.labelColor)     // "t"
+        XCTAssertEqual(colour(attributed, at: 5), DesignPalette.accent)   // "]"
+        XCTAssertEqual(colour(attributed, at: 7), DesignPalette.accent)   // inside the URL
+    }
+
+    func testBlockquoteMarkerAndHorizontalRuleAreTinted() {
+        XCTAssertEqual(colour(codeModeString("> quoted"), at: 0), DesignPalette.accent)
+        XCTAssertEqual(colour(codeModeString("---"), at: 1), DesignPalette.accent)
+    }
+
+    func testCodeFencesAreTintedAndFenceContentIsNot() {
+        let attributed = codeModeString("```swift\nlet x = 1\n```\n")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.accent)   // opening backtick
+        XCTAssertEqual(colour(attributed, at: 9), NSColor.labelColor)     // "l" of "let"
+    }
+
+    func testTablePipesAreFaint() {
+        let attributed = codeModeString("| a | b |\n| --- | --- |\n| 1 | 2 |\n")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.textFaint) // leading "|"
+        XCTAssertEqual(colour(attributed, at: 2), NSColor.labelColor)      // "a"
+    }
 }
 
 final class MarkdownStylerTableTests: XCTestCase {

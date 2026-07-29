@@ -596,6 +596,70 @@ struct MarkdownStyler {
         return result
     }
 
+    /// Code mode: the literal source in one fixed-pitch size, with markdown's own markers
+    /// tinted so structure is legible without anything hiding, moving, or changing size.
+    ///
+    /// Deliberately unlike `attributedString(for:model:baseFont:cursorLocation:)`: there is no
+    /// cursor reveal, no hidden-delimiter font, no per-heading point size, and no paragraph
+    /// indentation. A uniform size is the whole feature — it is what stops lines reflowing
+    /// under the caret while editing.
+    static func codeSourceAttributedString(
+        for text: String,
+        model: MarkdownDocumentModel,
+        font: NSFont
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: text, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
+            .foregroundColor: NSColor.labelColor
+        ])
+
+        func tint(_ range: Range<String.Index>, _ color: NSColor) {
+            guard !range.isEmpty else { return }
+            result.addAttribute(.foregroundColor, value: color, range: NSRange(range, in: text))
+        }
+
+        // Structural markers: violet, the app's single accent.
+        for header in model.headers {
+            tint(header.markerRange, DesignPalette.accent)
+        }
+        for style in model.inlineStyles {
+            tint(style.openingDelimiterRange, DesignPalette.accent)
+            tint(style.closingDelimiterRange, DesignPalette.accent)
+        }
+        for quote in model.blockquotes {
+            tint(quote.markerRange, DesignPalette.accent)
+        }
+        for rule in model.horizontalRules {
+            tint(rule.lineRange, DesignPalette.accent)
+        }
+        for codeBlock in model.codeBlocks {
+            tint(codeBlock.openingFenceRange, DesignPalette.accent)
+            tint(codeBlock.closingFenceRange, DesignPalette.accent)
+        }
+        for link in model.links {
+            // Everything outside the link's own text: "[", "](url)".
+            tint(link.fullRange.lowerBound..<link.textRange.lowerBound, DesignPalette.accent)
+            tint(link.textRange.upperBound..<link.fullRange.upperBound, DesignPalette.accent)
+        }
+
+        // List scaffolding: faint, so bullets recede while their task checkboxes stay legible.
+        for item in model.listItems {
+            tint(item.markerRange, DesignPalette.textFaint)
+            if let taskMarkerRange = item.taskMarkerRange {
+                tint(taskMarkerRange, DesignPalette.accent)
+            }
+        }
+        for table in model.tables {
+            for pipe in table.headerRow.pipeRanges { tint(pipe, DesignPalette.textFaint) }
+            tint(table.separatorRowRange, DesignPalette.textFaint)
+            for row in table.bodyRows {
+                for pipe in row.pipeRanges { tint(pipe, DesignPalette.textFaint) }
+            }
+        }
+
+        return result
+    }
+
     static func plainSourceAttributedString(for text: String, font: NSFont) -> NSAttributedString {
         NSAttributedString(string: text, attributes: [
             .font: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
