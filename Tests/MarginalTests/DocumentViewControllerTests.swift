@@ -282,4 +282,71 @@ final class DocumentViewControllerTests: XCTestCase {
             "a later switch must advance the counter past what an earlier switch's in-flight completion captured"
         )
     }
+
+    // MARK: - Fix round 2 (Task 10 review findings)
+
+    /// A document ending in "\n" has one more blank visual line with no character index of its
+    /// own -- TextKit represents it only as `extraLineFragmentRect` -- so Code mode's
+    /// visible-range walk in `updateGutterLines` never reached it, silently dropping the last
+    /// line's number for the common case of any trailing-newline file. Needs a real (offscreen,
+    /// never-shown) NSWindow: without one, `view.window` is nil, so `updateCursorChrome`'s
+    /// `cursorInText` check is always false and the gutter never populates at all.
+    func testCodeModeGutterNumbersTheTrailingBlankLineAfterATrailingNewline() {
+        let controller = loadedController("a\nb\n")
+        let window = NSWindow(
+            contentRect: NSRect(x: -20000, y: -20000, width: 700, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        // Auto Layout constraints are never resolved into real subview frames without an actual
+        // display/layout pass -- without this, textView.visibleRect stays a degenerate zero
+        // rect and the whole gutter walk below silently produces nothing.
+        controller.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(window.makeFirstResponder(controller.textView))
+
+        controller.setEditorMode(.code)
+        // End of the trailing "\n" -- the caret sits on the blank third line.
+        controller.textView.setSelectedRange(NSRange(location: 4, length: 0))
+        controller.textViewDidChangeSelection(
+            Notification(name: NSTextView.didChangeSelectionNotification, object: controller.textView)
+        )
+
+        let gutter = controller.gutterViewForTesting as! LineNumberGutterView
+        guard let trailingLine = gutter.lines.first(where: { $0.number == 3 }) else {
+            return XCTFail("the trailing blank line after a trailing newline must still get a gutter number")
+        }
+        XCTAssertTrue(trailingLine.isCurrent, "the caret sits on the trailing blank line, so it should read as current")
+
+        var expectedRect = controller.textView.layoutManager!.extraLineFragmentRect
+        expectedRect.origin.y += controller.textView.textContainerInset.height
+        let expectedCenterY = controller.textView.convert(expectedRect, to: gutter).midY
+        XCTAssertEqual(trailingLine.centerY, expectedCenterY, accuracy: 0.01)
+    }
+
+    /// Closing the loop on the fix above: a document with no trailing newline must not gain a
+    /// phantom extra line just because `extraLineFragmentRect` happens to exist.
+    func testCodeModeGutterDoesNotInventATrailingLineWithoutATrailingNewline() {
+        let controller = loadedController("a\nb")
+        let window = NSWindow(
+            contentRect: NSRect(x: -20000, y: -20000, width: 700, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(window.makeFirstResponder(controller.textView))
+
+        controller.setEditorMode(.code)
+        // End of "b" -- no trailing newline, so there is no third line to number.
+        controller.textView.setSelectedRange(NSRange(location: 3, length: 0))
+        controller.textViewDidChangeSelection(
+            Notification(name: NSTextView.didChangeSelectionNotification, object: controller.textView)
+        )
+
+        let gutter = controller.gutterViewForTesting as! LineNumberGutterView
+        XCTAssertEqual(gutter.lines.map(\.number), [1, 2], "no trailing newline means no phantom third line")
+    }
 }
