@@ -37,6 +37,7 @@ final class DocumentViewController: NSViewController {
     // consult or mutate.
     // 16px body -- the design system's base size (headings scale 1.25/1.5/1.875 from it).
     private var editorFontSize: CGFloat = 16
+    private var lastRenderedEditorWidth: CGFloat = 0
 
     weak var document: MarkdownDocument?
 
@@ -428,9 +429,30 @@ final class DocumentViewController: NSViewController {
                 for: text,
                 model: model,
                 baseFont: NSFont.systemFont(ofSize: editorFontSize),
-                cursorLocation: cursorLocation
+                cursorLocation: cursorLocation,
+                availableWidth: editorAvailableWidth
             )
         )
+    }
+
+    /// The width Live rendering may lay a table out in -- the text container's content width.
+    /// Before the first real layout pass the container can be degenerate; treat that as
+    /// unconstrained rather than compressing every table into a sliver.
+    private var editorAvailableWidth: CGFloat {
+        guard let container = textView.textContainer else { return .greatestFiniteMagnitude }
+        let width = container.size.width - container.lineFragmentPadding * 2
+        return width > 50 ? width : .greatestFiniteMagnitude
+    }
+
+    /// Over-wide tables are fitted to the view width at styling time, so a resized window
+    /// needs a re-render for tables to re-fit.
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        let width = editorAvailableWidth
+        if abs(width - lastRenderedEditorWidth) > 0.5 {
+            lastRenderedEditorWidth = width
+            modeController.render()
+        }
     }
 }
 

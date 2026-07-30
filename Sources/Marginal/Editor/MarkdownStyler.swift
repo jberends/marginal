@@ -8,7 +8,8 @@ struct MarkdownStyler {
         for text: String,
         model: MarkdownDocumentModel,
         baseFont: NSFont,
-        cursorLocation: String.Index?
+        cursorLocation: String.Index?,
+        availableWidth: CGFloat = .greatestFiniteMagnitude
     ) -> NSAttributedString {
         let result = NSMutableAttributedString(string: text, attributes: [
             .font: baseFont,
@@ -369,6 +370,100 @@ struct MarkdownStyler {
             }
             var slotStarts: [CGFloat] = [0]
             for c in 0..<pending.columnCount { slotStarts.append(slotStarts[c] + columnWidths[c] + cellPadding * 2) }
+
+            // A table wider than the view can't stay on the fully-live kern path (a single
+            // visual line can't reflow per cell): columns compress to fit the available width
+            // and each cell's styled text is drawn wrapped within its column by the layout
+            // manager -- HTML/Notion behavior. The caret's own row reveals as raw source so
+            // the hidden text stays editable.
+            if (slotStarts.last ?? 0) > availableWidth {
+                let minColumnContentWidth = baseFont.pointSize * 3
+                let cellVerticalPadding = baseFont.pointSize * 0.45
+                let availableContent = availableWidth - cellPadding * 2 * CGFloat(pending.columnCount)
+                let naturalContentTotal = columnWidths.reduce(0, +)
+                var fittedWidths = columnWidths
+                if naturalContentTotal > 0, availableContent > 0 {
+                    // Proportional shares like a browser's auto table layout, with a floor so a
+                    // short column ("Yes") isn't squeezed into nothing by a long neighbor.
+                    let scale = availableContent / naturalContentTotal
+                    fittedWidths = columnWidths.map { max(min($0, minColumnContentWidth), $0 * scale) }
+                }
+                var fittedSlotStarts: [CGFloat] = [0]
+                for c in 0..<pending.columnCount { fittedSlotStarts.append(fittedSlotStarts[c] + fittedWidths[c] + cellPadding * 2) }
+
+                for (rowIndex, row) in pending.allRows.enumerated() {
+                    let rowNSRange = NSRange(row.lineRange, in: text)
+
+                    // The caret's row shows its literal source (all markers visible, plain
+                    // text attributes) so the otherwise-hidden row stays editable in place.
+                    if let cursor = cursorLocation, cursor >= row.lineRange.lowerBound, cursor <= row.lineRange.upperBound {
+                        result.addAttribute(.font, value: baseFont, range: rowNSRange)
+                        result.addAttribute(.foregroundColor, value: NSColor.labelColor, range: rowNSRange)
+                        result.addAttribute(.paragraphStyle, value: NSParagraphStyle.default, range: rowNSRange)
+                        result.removeAttribute(.kern, range: rowNSRange)
+                        result.removeAttribute(.backgroundColor, range: rowNSRange)
+                        result.removeAttribute(.baselineOffset, range: rowNSRange)
+                        result.removeAttribute(.marginalEmojiShortcode, range: rowNSRange)
+                        continue
+                    }
+
+                    let cols = min(pending.columnCount, row.pipeRanges.count - 1)
+                    var cellTexts: [NSAttributedString] = []
+                    var maxCellHeight: CGFloat = 0
+                    for c in 0..<cols {
+                        let cellRange = pending.rowCellRanges[rowIndex][c]
+                        let display = NSMutableAttributedString(
+                            attributedString: result.attributedSubstring(from: NSRange(cellRange, in: text))
+                        )
+                        // Emoji shortcodes are hidden runs the layout manager substitutes at
+                        // draw time -- that machinery doesn't run inside a hand-drawn cell,
+                        // so substitute the actual emoji into the display copy here.
+                        var emojiRuns: [(NSRange, String)] = []
+                        display.enumerateAttribute(.marginalEmojiShortcode, in: NSRange(location: 0, length: display.length)) { value, runRange, _ in
+                            if let info = value as? EmojiGlyphInfo { emojiRuns.append((runRange, info.emoji)) }
+                        }
+                        for (runRange, emoji) in emojiRuns.reversed() {
+                            display.replaceCharacters(in: runRange, with: NSAttributedString(string: emoji, attributes: [.font: baseFont]))
+                        }
+                        let cellStyle = NSMutableParagraphStyle()
+                        switch pending.alignments[c] {
+                        case .left: cellStyle.alignment = .natural
+                        case .center: cellStyle.alignment = .center
+                        case .right: cellStyle.alignment = .right
+                        }
+                        display.addAttribute(.paragraphStyle, value: cellStyle, range: NSRange(location: 0, length: display.length))
+                        let bounds = display.boundingRect(
+                            with: NSSize(width: fittedWidths[c], height: .greatestFiniteMagnitude),
+                            options: [.usesLineFragmentOrigin]
+                        )
+                        maxCellHeight = max(maxCellHeight, ceil(bounds.height))
+                        cellTexts.append(display)
+                    }
+
+                    let rowHeight = max(maxCellHeight, baseFont.pointSize * 1.5) + cellVerticalPadding * 2
+                    result.addAttribute(.font, value: hiddenFont, range: rowNSRange)
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: rowNSRange)
+                    result.removeAttribute(.baselineOffset, range: rowNSRange)
+                    let rowStyle = NSMutableParagraphStyle()
+                    rowStyle.minimumLineHeight = rowHeight
+                    rowStyle.maximumLineHeight = rowHeight
+                    rowStyle.lineBreakMode = .byClipping
+                    result.addAttribute(.paragraphStyle, value: rowStyle, range: rowNSRange)
+                    result.addAttribute(
+                        .marginalTableWrappedRow,
+                        value: WrappedTableRowInfo(
+                            columnBoundaries: fittedSlotStarts,
+                            contentWidths: fittedWidths,
+                            cellPadding: cellPadding,
+                            verticalPadding: cellVerticalPadding,
+                            cells: cellTexts,
+                            isHeaderRow: rowIndex == 0
+                        ),
+                        range: rowNSRange
+                    )
+                }
+                continue
+            }
 
             for (rowIndex, row) in pending.allRows.enumerated() {
                 let cols = min(pending.columnCount, row.pipeRanges.count - 1)

@@ -783,6 +783,68 @@ final class MarkdownStylerTableTests: XCTestCase {
         XCTAssertEqual(style?.lineBreakMode, .byClipping)
     }
 
+    // MARK: - Over-wide tables wrap inside their cells (HTML/Notion behavior)
+
+    private let overWideText = "| Requirement | Status |\n|---|---|\n| App Sandbox enabled | The entitlements file sets the sandbox key which is mandatory for the Mac App Store and this sentence is intentionally far too long |"
+
+    func testOverWideTableColumnsCompressToFitTheAvailableWidth() {
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        let info = attributed.attribute(.marginalTableWrappedRow, at: 0, effectiveRange: nil) as? WrappedTableRowInfo
+        XCTAssertNotNil(info, "An over-wide table switches to the wrapped-cell rendering")
+        XCTAssertLessThanOrEqual(info?.columnBoundaries.last ?? .infinity, 400.5, "The fitted grid must not exceed the available width")
+    }
+
+    func testOverWideTableRowsGrowToFitWrappedCellText() {
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        let bodyRowLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "| App Sandbox")!.lowerBound)
+        let style = attributed.attribute(.paragraphStyle, at: bodyRowLocation, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertGreaterThan(style?.minimumLineHeight ?? 0, 14 * 2.2 + 0.5, "A row with wrapping cell text must reserve more height than a single-line row")
+    }
+
+    func testOverWideTableSourceIsHiddenAndCellsCarryTheirStyledText() {
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        let cellLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "Sandbox")!.lowerBound)
+        let font = attributed.attribute(.font, at: cellLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize, "Wrapped rows hide the literal source; the layout manager draws the cells")
+        let info = attributed.attribute(.marginalTableWrappedRow, at: cellLocation, effectiveRange: nil) as? WrappedTableRowInfo
+        XCTAssertEqual(info?.cells.count, 2)
+        XCTAssertEqual(info?.cells.first?.string, "App Sandbox enabled")
+    }
+
+    func testCaretInsideOverWideTableRowRevealsThatRowAsSource() {
+        let caret = overWideText.range(of: "Sandbox")!.lowerBound
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: caret, availableWidth: 400
+        )
+        let cellLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "Sandbox")!.lowerBound)
+        let font = attributed.attribute(.font, at: cellLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14, "The caret's row must show its raw source for editing")
+        XCTAssertNil(attributed.attribute(.marginalTableWrappedRow, at: cellLocation, effectiveRange: nil), "No drawn cells on top of the revealed source")
+
+        let headerLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "Requirement")!.lowerBound)
+        XCTAssertNotNil(attributed.attribute(.marginalTableWrappedRow, at: headerLocation, effectiveRange: nil), "Other rows stay in the wrapped rendering")
+    }
+
+    func testTableThatFitsKeepsTheLiveKernRendering() {
+        let text = "| A | B |\n|---|---|\n| 1 | 2 |"
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model(for: text),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        XCTAssertNil(attributed.attribute(.marginalTableWrappedRow, at: 0, effectiveRange: nil), "A table that fits keeps the fully-live kern rendering")
+        XCTAssertNotNil(attributed.attribute(.kern, at: 0, effectiveRange: nil))
+    }
+
     // The user's exact reported case: an escaped pipe inside a cell must not become a hidden
     // "column boundary" -- it should render as ordinary (visible) text.
     func testEscapedPipeInsideACellStaysVisible() {
