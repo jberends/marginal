@@ -79,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(DocumentViewController.selectEditorMode(_:)) {
+            let controller = NSApp.keyWindow?.contentViewController as? DocumentViewController
+            guard let controller, EditorMode.allCases.indices.contains(menuItem.tag) else {
+                menuItem.state = .off
+                return false
+            }
+            menuItem.state = EditorMode.allCases[menuItem.tag] == controller.editorMode ? .on : .off
+            return true
+        }
         if menuItem.action == #selector(selectTabAtIndex(_:)) {
             let tabs = (NSApp.keyWindow ?? NSApp.mainWindow)?.tabbedWindows
             return menuItem.tag < (tabs?.count ?? 1)
@@ -111,6 +120,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         preferencesWindowController?.showWindow(nil)
         preferencesWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Test seam over the private menu builder.
+    static func buildMainMenuForTesting(target: AppDelegate) -> NSMenu {
+        buildMainMenu(target: target)
     }
 
     private static func buildMainMenu(target: AppDelegate) -> NSMenu {
@@ -163,6 +177,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
+
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        // A radio group, not three checkboxes: the modes are mutually exclusive view state,
+        // which is what the HIG's checkmark-on-the-active-item pattern is for. ⌘⌥ rather than
+        // bare ⌘ because ⌘1–⌘9 belong to tab switching below.
+        for (index, mode) in EditorMode.allCases.enumerated() {
+            let item = NSMenuItem(
+                title: mode.title,
+                action: #selector(DocumentViewController.selectEditorMode(_:)),
+                keyEquivalent: mode.menuKeyEquivalent
+            )
+            item.keyEquivalentModifierMask = [.command, .option]
+            item.tag = index
+            viewMenu.addItem(item)
+        }
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(withTitle: "Zoom In", action: #selector(DocumentViewController.zoomIn(_:)), keyEquivalent: "+")
+        viewMenu.addItem(withTitle: "Zoom Out", action: #selector(DocumentViewController.zoomOut(_:)), keyEquivalent: "-")
+        viewMenu.addItem(withTitle: "Actual Size", action: #selector(DocumentViewController.actualSize(_:)), keyEquivalent: "0")
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
 
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")

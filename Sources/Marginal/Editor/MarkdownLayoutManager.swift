@@ -7,6 +7,7 @@ extension NSAttributedString.Key {
     static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
     static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
     static let marginalTableGridMarker = NSAttributedString.Key("marginalTableGridMarker")
+    static let marginalTableWrappedRow = NSAttributedString.Key("marginalTableWrappedRow")
     static let marginalCodeBlockMarker = NSAttributedString.Key("marginalCodeBlockMarker")
     static let marginalEmojiShortcode = NSAttributedString.Key("marginalEmojiShortcode")
 }
@@ -17,6 +18,20 @@ extension NSAttributedString.Key {
 /// grid lines up across rows regardless of each row's own content width.
 struct TableGridInfo: Equatable {
     let columnBoundaries: [CGFloat]
+    let isHeaderRow: Bool
+}
+
+/// One over-wide table row, rendered by drawing rather than by positioning the source glyphs:
+/// the row's literal text is hidden (its paragraph reserves the wrapped height), and the layout
+/// manager draws each cell's styled text wrapped within its fitted column. Produced by
+/// MarkdownStyler only when a table's natural width exceeds the view -- fitting tables keep the
+/// fully-live kern rendering (see MarkdownStyler's table passes).
+struct WrappedTableRowInfo {
+    let columnBoundaries: [CGFloat]
+    let contentWidths: [CGFloat]
+    let cellPadding: CGFloat
+    let verticalPadding: CGFloat
+    let cells: [NSAttributedString]
     let isHeaderRow: Bool
 }
 
@@ -227,6 +242,51 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 topLine.move(to: NSPoint(x: left, y: top))
                 topLine.line(to: NSPoint(x: left + totalWidth, y: top))
                 topLine.stroke()
+            }
+        }
+
+        textStorage.enumerateAttribute(.marginalTableWrappedRow, in: fullRange) { value, range, _ in
+            guard let info = value as? WrappedTableRowInfo, let totalWidth = info.columnBoundaries.last else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let rowRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let left = origin.x + rowRect.minX
+            let top = origin.y + rowRect.minY
+            let bottom = origin.y + rowRect.maxY
+
+            if info.isHeaderRow {
+                NSColor.textBackgroundColor.blended(withFraction: 0.04, of: .labelColor)?.setFill()
+                NSRect(x: left, y: top, width: totalWidth, height: rowRect.height).fill()
+            }
+
+            NSColor.separatorColor.setStroke()
+            for x in info.columnBoundaries {
+                let line = NSBezierPath()
+                line.lineWidth = 1
+                line.move(to: NSPoint(x: left + x, y: top))
+                line.line(to: NSPoint(x: left + x, y: bottom))
+                line.stroke()
+            }
+            let bottomLine = NSBezierPath()
+            bottomLine.lineWidth = 1
+            bottomLine.move(to: NSPoint(x: left, y: bottom))
+            bottomLine.line(to: NSPoint(x: left + totalWidth, y: bottom))
+            bottomLine.stroke()
+            if info.isHeaderRow {
+                let topLine = NSBezierPath()
+                topLine.lineWidth = 1
+                topLine.move(to: NSPoint(x: left, y: top))
+                topLine.line(to: NSPoint(x: left + totalWidth, y: top))
+                topLine.stroke()
+            }
+
+            for (column, cell) in info.cells.enumerated() where column < info.contentWidths.count {
+                let cellRect = NSRect(
+                    x: left + info.columnBoundaries[column] + info.cellPadding,
+                    y: top + info.verticalPadding,
+                    width: info.contentWidths[column],
+                    height: max(0, (bottom - top) - info.verticalPadding * 2)
+                )
+                cell.draw(with: cellRect, options: [.usesLineFragmentOrigin])
             }
         }
 

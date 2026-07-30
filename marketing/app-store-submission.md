@@ -83,24 +83,13 @@ Written in the brand voice (sentence case, short declaratives, no exclamation ma
 
 ## 5b. Review notes (paste into App Review Information → Notes)
 
-> Marginal is a document-based markdown editor. No account, sign-in, or
-> configuration is required — everything can be tested immediately.
->
-> To test: launch the app (an untitled document opens), or File → Open any .md
-> file. Type markdown — for example `# Heading`, `**bold**`, `- [ ] task` — and
-> it renders live; the syntax markers reveal themselves when the caret is on
-> them and hide when it leaves. Click a task checkbox to toggle it. Press
-> Return inside a list to continue it. File → Export as PDF produces a PDF of
-> the document. Documents are plain text files saved wherever the user
-> chooses (App Sandbox, user-selected read-write only).
->
-> Network access: the app makes no network connections on its own. The single
-> exception is the user-initiated "Check for Updates" menu item, which fetches
-> the latest release number from GitHub's public API and nothing else. No
-> analytics, no telemetry, no data collection (privacy policy:
-> https://jberends.github.io/marginal/privacy).
->
-> The app is open source (Apache 2.0): https://github.com/jberends/marginal
+Marginal is a document-based markdown editor. No account, sign-in, or configuration is required — everything can be tested immediately.
+
+To test: launch the app (an untitled document opens), or File → Open any .md file. Type markdown — for example `# Heading`, `**bold**`, `- [ ] task` — and it renders live; the syntax markers reveal themselves when the caret is on them and hide when it leaves. Click a task checkbox to toggle it. Press Return inside a list to continue it. File → Export as PDF produces a PDF of the document. Documents are plain text files saved wherever the user chooses (App Sandbox, user-selected read-write only).
+
+Network access: the app makes no network connections on its own. The single exception is the user-initiated "Check for Updates" menu item, which fetches the latest release number from GitHub's public API and nothing else. No analytics, no telemetry, no data collection (privacy policy: https://jberends.github.io/marginal/privacy).
+
+The app is open source (Apache 2.0): https://github.com/jberends/marginal
 
 ## 6. Screenshots
 

@@ -21,7 +21,12 @@ final class VisualRenderHarnessTests: XCTestCase {
             emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
         )
         let baseFont = NSFont.systemFont(ofSize: fontSize)
-        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        // Mirror the real editor's available width: container inset (40 per side) plus the
+        // container's default lineFragmentPadding (5 per side).
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: baseFont, cursorLocation: nil,
+            availableWidth: width - 80 - 10
+        )
 
         let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
         textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
@@ -96,6 +101,7 @@ final class VisualRenderHarnessTests: XCTestCase {
         | Headings | Yes | Levels 1-6 |
         | Tables | Yes | Extension in many parsers |
         | Footnotes | Maybe | Depends on parser |
+        | App Sandbox enabled | `Marginal.entitlements` sets `com.apple.security.app-sandbox` — mandatory for the Mac App Store |
 
         | Left aligned | Center aligned | Right aligned |
         | :--- | :---: | ---: |

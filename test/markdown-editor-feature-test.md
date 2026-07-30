@@ -677,8 +677,9 @@ console.log("A fenced block inside a longer fence.");
 | Column A | Column B | Column C |
 |---|---|---|
 | Value |  | Value |
-|  | Value |  |
-|  |  |  |
+|  | Value |  Value |
+|  |  |  Nieuwe value	|
+| hello ||
 
 ---
 
@@ -1212,7 +1213,7 @@ Use this section to manually verify editor functionality.
 - [ ] Inline code shortcut works
 - [ ] Link insertion command works
 - [ ] Image insertion command works
-- [ ] Heading commands work
+- [x] Heading commands work
 - [ ] Blockquote command works
 - [ ] Ordered list command works
 - [ ] Unordered list command works

@@ -9,7 +9,6 @@ final class MarkdownTextViewTests: XCTestCase {
         var decreaseCallCount = 0
         func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView) { increaseCallCount += 1 }
         func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) { decreaseCallCount += 1 }
-        func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {}
         func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL) {}
     }
 

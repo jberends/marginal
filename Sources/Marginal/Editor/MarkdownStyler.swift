@@ -8,7 +8,8 @@ struct MarkdownStyler {
         for text: String,
         model: MarkdownDocumentModel,
         baseFont: NSFont,
-        cursorLocation: String.Index?
+        cursorLocation: String.Index?,
+        availableWidth: CGFloat = .greatestFiniteMagnitude
     ) -> NSAttributedString {
         let result = NSMutableAttributedString(string: text, attributes: [
             .font: baseFont,
@@ -194,6 +195,11 @@ struct MarkdownStyler {
                 let rowParagraphStyle = NSMutableParagraphStyle()
                 rowParagraphStyle.minimumLineHeight = rowHeight
                 rowParagraphStyle.maximumLineHeight = rowHeight
+                // A row wider than the view must not soft-wrap: the kern-positioned columns
+                // live on one visual line, so a wrapped remainder would land flush-left UNDER
+                // the first column, scrambling the grid. Per-cell reflow isn't possible with
+                // this technique -- overflow clips at the view edge instead.
+                rowParagraphStyle.lineBreakMode = .byClipping
                 let rowNSRange = NSRange(row.lineRange, in: text)
                 result.addAttribute(.paragraphStyle, value: rowParagraphStyle, range: rowNSRange)
                 let naturalLineHeight = baseFont.ascender - baseFont.descender + baseFont.leading
@@ -364,6 +370,100 @@ struct MarkdownStyler {
             }
             var slotStarts: [CGFloat] = [0]
             for c in 0..<pending.columnCount { slotStarts.append(slotStarts[c] + columnWidths[c] + cellPadding * 2) }
+
+            // A table wider than the view can't stay on the fully-live kern path (a single
+            // visual line can't reflow per cell): columns compress to fit the available width
+            // and each cell's styled text is drawn wrapped within its column by the layout
+            // manager -- HTML/Notion behavior. The caret's own row reveals as raw source so
+            // the hidden text stays editable.
+            if (slotStarts.last ?? 0) > availableWidth {
+                let minColumnContentWidth = baseFont.pointSize * 3
+                let cellVerticalPadding = baseFont.pointSize * 0.45
+                let availableContent = availableWidth - cellPadding * 2 * CGFloat(pending.columnCount)
+                let naturalContentTotal = columnWidths.reduce(0, +)
+                var fittedWidths = columnWidths
+                if naturalContentTotal > 0, availableContent > 0 {
+                    // Proportional shares like a browser's auto table layout, with a floor so a
+                    // short column ("Yes") isn't squeezed into nothing by a long neighbor.
+                    let scale = availableContent / naturalContentTotal
+                    fittedWidths = columnWidths.map { max(min($0, minColumnContentWidth), $0 * scale) }
+                }
+                var fittedSlotStarts: [CGFloat] = [0]
+                for c in 0..<pending.columnCount { fittedSlotStarts.append(fittedSlotStarts[c] + fittedWidths[c] + cellPadding * 2) }
+
+                for (rowIndex, row) in pending.allRows.enumerated() {
+                    let rowNSRange = NSRange(row.lineRange, in: text)
+
+                    // The caret's row shows its literal source (all markers visible, plain
+                    // text attributes) so the otherwise-hidden row stays editable in place.
+                    if let cursor = cursorLocation, cursor >= row.lineRange.lowerBound, cursor <= row.lineRange.upperBound {
+                        result.addAttribute(.font, value: baseFont, range: rowNSRange)
+                        result.addAttribute(.foregroundColor, value: NSColor.labelColor, range: rowNSRange)
+                        result.addAttribute(.paragraphStyle, value: NSParagraphStyle.default, range: rowNSRange)
+                        result.removeAttribute(.kern, range: rowNSRange)
+                        result.removeAttribute(.backgroundColor, range: rowNSRange)
+                        result.removeAttribute(.baselineOffset, range: rowNSRange)
+                        result.removeAttribute(.marginalEmojiShortcode, range: rowNSRange)
+                        continue
+                    }
+
+                    let cols = min(pending.columnCount, row.pipeRanges.count - 1)
+                    var cellTexts: [NSAttributedString] = []
+                    var maxCellHeight: CGFloat = 0
+                    for c in 0..<cols {
+                        let cellRange = pending.rowCellRanges[rowIndex][c]
+                        let display = NSMutableAttributedString(
+                            attributedString: result.attributedSubstring(from: NSRange(cellRange, in: text))
+                        )
+                        // Emoji shortcodes are hidden runs the layout manager substitutes at
+                        // draw time -- that machinery doesn't run inside a hand-drawn cell,
+                        // so substitute the actual emoji into the display copy here.
+                        var emojiRuns: [(NSRange, String)] = []
+                        display.enumerateAttribute(.marginalEmojiShortcode, in: NSRange(location: 0, length: display.length)) { value, runRange, _ in
+                            if let info = value as? EmojiGlyphInfo { emojiRuns.append((runRange, info.emoji)) }
+                        }
+                        for (runRange, emoji) in emojiRuns.reversed() {
+                            display.replaceCharacters(in: runRange, with: NSAttributedString(string: emoji, attributes: [.font: baseFont]))
+                        }
+                        let cellStyle = NSMutableParagraphStyle()
+                        switch pending.alignments[c] {
+                        case .left: cellStyle.alignment = .natural
+                        case .center: cellStyle.alignment = .center
+                        case .right: cellStyle.alignment = .right
+                        }
+                        display.addAttribute(.paragraphStyle, value: cellStyle, range: NSRange(location: 0, length: display.length))
+                        let bounds = display.boundingRect(
+                            with: NSSize(width: fittedWidths[c], height: .greatestFiniteMagnitude),
+                            options: [.usesLineFragmentOrigin]
+                        )
+                        maxCellHeight = max(maxCellHeight, ceil(bounds.height))
+                        cellTexts.append(display)
+                    }
+
+                    let rowHeight = max(maxCellHeight, baseFont.pointSize * 1.5) + cellVerticalPadding * 2
+                    result.addAttribute(.font, value: hiddenFont, range: rowNSRange)
+                    result.addAttribute(.foregroundColor, value: NSColor.clear, range: rowNSRange)
+                    result.removeAttribute(.baselineOffset, range: rowNSRange)
+                    let rowStyle = NSMutableParagraphStyle()
+                    rowStyle.minimumLineHeight = rowHeight
+                    rowStyle.maximumLineHeight = rowHeight
+                    rowStyle.lineBreakMode = .byClipping
+                    result.addAttribute(.paragraphStyle, value: rowStyle, range: rowNSRange)
+                    result.addAttribute(
+                        .marginalTableWrappedRow,
+                        value: WrappedTableRowInfo(
+                            columnBoundaries: fittedSlotStarts,
+                            contentWidths: fittedWidths,
+                            cellPadding: cellPadding,
+                            verticalPadding: cellVerticalPadding,
+                            cells: cellTexts,
+                            isHeaderRow: rowIndex == 0
+                        ),
+                        range: rowNSRange
+                    )
+                }
+                continue
+            }
 
             for (rowIndex, row) in pending.allRows.enumerated() {
                 let cols = min(pending.columnCount, row.pipeRanges.count - 1)
@@ -596,11 +696,68 @@ struct MarkdownStyler {
         return result
     }
 
-    static func plainSourceAttributedString(for text: String, font: NSFont) -> NSAttributedString {
-        NSAttributedString(string: text, attributes: [
+    /// Code mode: the literal source in one fixed-pitch size, with markdown's own markers
+    /// tinted so structure is legible without anything hiding, moving, or changing size.
+    ///
+    /// Deliberately unlike `attributedString(for:model:baseFont:cursorLocation:)`: there is no
+    /// cursor reveal, no hidden-delimiter font, no per-heading point size, and no paragraph
+    /// indentation. A uniform size is the whole feature — it is what stops lines reflowing
+    /// under the caret while editing.
+    static func codeSourceAttributedString(
+        for text: String,
+        model: MarkdownDocumentModel,
+        font: NSFont
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: text, attributes: [
             .font: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
             .foregroundColor: NSColor.labelColor
         ])
+
+        func tint(_ range: Range<String.Index>, _ color: NSColor) {
+            guard !range.isEmpty else { return }
+            result.addAttribute(.foregroundColor, value: color, range: NSRange(range, in: text))
+        }
+
+        // Structural markers: violet, the app's single accent.
+        for header in model.headers {
+            tint(header.markerRange, DesignPalette.accent)
+        }
+        for style in model.inlineStyles {
+            tint(style.openingDelimiterRange, DesignPalette.accent)
+            tint(style.closingDelimiterRange, DesignPalette.accent)
+        }
+        for quote in model.blockquotes {
+            tint(quote.markerRange, DesignPalette.accent)
+        }
+        for rule in model.horizontalRules {
+            tint(rule.lineRange, DesignPalette.accent)
+        }
+        for codeBlock in model.codeBlocks {
+            tint(codeBlock.openingFenceRange, DesignPalette.accent)
+            tint(codeBlock.closingFenceRange, DesignPalette.accent)
+        }
+        for link in model.links {
+            // Everything outside the link's own text: "[", "](url)".
+            tint(link.fullRange.lowerBound..<link.textRange.lowerBound, DesignPalette.accent)
+            tint(link.textRange.upperBound..<link.fullRange.upperBound, DesignPalette.accent)
+        }
+
+        // List scaffolding: faint, so bullets recede while their task checkboxes stay legible.
+        for item in model.listItems {
+            tint(item.markerRange, DesignPalette.textFaint)
+            if let taskMarkerRange = item.taskMarkerRange {
+                tint(taskMarkerRange, DesignPalette.accent)
+            }
+        }
+        for table in model.tables {
+            for pipe in table.headerRow.pipeRanges { tint(pipe, DesignPalette.textFaint) }
+            tint(table.separatorRowRange, DesignPalette.textFaint)
+            for row in table.bodyRows {
+                for pipe in row.pipeRanges { tint(pipe, DesignPalette.textFaint) }
+            }
+        }
+
+        return result
     }
 
     private static func headerPointSize(for level: Int, baseSize: CGFloat) -> CGFloat {

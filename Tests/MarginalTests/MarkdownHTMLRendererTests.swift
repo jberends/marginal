@@ -5,75 +5,166 @@ final class MarkdownHTMLRendererTests: XCTestCase {
 
     func testBoldRendersAsStrong() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "Hello **world**")
-        XCTAssertEqual(html, "<p>Hello <strong>world</strong></p>")
+        XCTAssertEqual(html, "<p data-line=\"1\">Hello <strong>world</strong></p>")
     }
 
     func testItalicRendersAsEm() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "Hello *world*")
-        XCTAssertEqual(html, "<p>Hello <em>world</em></p>")
+        XCTAssertEqual(html, "<p data-line=\"1\">Hello <em>world</em></p>")
     }
 
     func testInlineCodeRendersAsCode() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "Use `npm install`")
-        XCTAssertEqual(html, "<p>Use <code>npm install</code></p>")
+        XCTAssertEqual(html, "<p data-line=\"1\">Use <code>npm install</code></p>")
     }
 
     func testStrikethroughAndUnderline() {
-        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "~~gone~~"), "<p><del>gone</del></p>")
-        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "<u>under</u>"), "<p><u>under</u></p>")
+        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "~~gone~~"), "<p data-line=\"1\"><del>gone</del></p>")
+        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "<u>under</u>"), "<p data-line=\"1\"><u>under</u></p>")
     }
 
     func testBoldSpanContainingNestedInlineCodeRendersBothCorrectly() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "**Repos & branches (both from `dev-gis`):**")
-        XCTAssertEqual(html, "<p><strong>Repos &amp; branches (both from <code>dev-gis</code>):</strong></p>")
+        XCTAssertEqual(html, "<p data-line=\"1\"><strong>Repos &amp; branches (both from <code>dev-gis</code>):</strong></p>")
     }
 
     func testLinkRendersAsAnchor() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "Check [this](https://example.com) out")
-        XCTAssertEqual(html, "<p>Check <a href=\"https://example.com\">this</a> out</p>")
+        XCTAssertEqual(html, "<p data-line=\"1\">Check <a href=\"https://example.com\">this</a> out</p>")
     }
 
     func testHeaderRendersWithCorrectLevel() {
-        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "# Title"), "<h1>Title</h1>")
-        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "### Sub"), "<h3>Sub</h3>")
+        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "# Title"), "<h1 data-line=\"1\">Title</h1>")
+        XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: "### Sub"), "<h3 data-line=\"1\">Sub</h3>")
     }
 
     func testHorizontalRuleRendersAsHr() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "Above\n\n---\n\nBelow")
-        XCTAssertEqual(html, "<p>Above</p>\n<hr>\n<p>Below</p>")
+        XCTAssertEqual(html, "<p data-line=\"1\">Above</p>\n<hr data-line=\"3\">\n<p data-line=\"5\">Below</p>")
     }
 
     func testBlockquoteRendersWithParagraph() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "> quoted text")
-        XCTAssertEqual(html, "<blockquote><p>quoted text</p></blockquote>")
+        XCTAssertEqual(html, "<blockquote data-line=\"1\"><p>quoted text</p></blockquote>")
     }
 
     func testUnorderedListRendersAsUl() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "- one\n- two")
-        XCTAssertEqual(html, "<ul><li>one</li><li>two</li></ul>")
+        XCTAssertEqual(html, "<ul data-line=\"1\"><li>one</li><li>two</li></ul>")
     }
 
     func testOrderedListRendersAsOl() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "1. one\n2. two")
-        XCTAssertEqual(html, "<ol><li>one</li><li>two</li></ol>")
+        XCTAssertEqual(html, "<ol data-line=\"1\"><li>one</li><li>two</li></ol>")
     }
 
     func testListItemLazyContinuationJoinsIntoSameListItem() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "- one\ncontinued text")
-        XCTAssertEqual(html, "<ul><li>one continued text</li></ul>")
+        XCTAssertEqual(html, "<ul data-line=\"1\"><li>one continued text</li></ul>")
+    }
+
+    // MARK: - Tables
+
+    func testTableRendersAsHTMLTableWithHeaderAndBody() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| A | B |\n|---|---|\n| 1 | **2** |")
+        XCTAssertEqual(html, "<table data-line=\"1\"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td><strong>2</strong></td></tr></tbody></table>")
+    }
+
+    func testTableColumnAlignmentBecomesTextAlignStyles() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| L | C | R |\n|:---|:---:|---:|\n| a | b | c |")
+        XCTAssertTrue(html.contains("<th>L</th>"), html)
+        XCTAssertTrue(html.contains("<th style=\"text-align:center\">C</th>"), html)
+        XCTAssertTrue(html.contains("<td style=\"text-align:right\">c</td>"), html)
+    }
+
+    func testEscapedPipeInsideACellRendersAsALiteralPipe() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| Expr |\n|---|\n| A \\| B |")
+        XCTAssertTrue(html.contains("<td>A | B</td>"), html)
+    }
+
+    // The user's exact reported case: table lines must never be swallowed into a <p> as
+    // literal "| ... |" text.
+    func testTableDirectlyAfterAParagraphLineIsNotSwallowedIntoTheParagraph() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "intro\n| A |\n|---|\n| 1 |")
+        XCTAssertEqual(html, "<p data-line=\"1\">intro</p>\n<table data-line=\"2\"><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>")
     }
 
     func testFencedCodeBlockEscapesAndPreservesLiteralContent() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "```swift\nlet x = 1 < 2 && true\n```")
-        XCTAssertEqual(html, "<pre><code class=\"language-swift\">let x = 1 &lt; 2 &amp;&amp; true\n</code></pre>")
+        XCTAssertEqual(html, "<pre data-line=\"1\"><code class=\"language-swift\">let x = 1 &lt; 2 &amp;&amp; true\n</code></pre>")
     }
 
     func testPlainParagraphLinesGroupTogether() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "line one\nline two\n\nline three")
-        XCTAssertEqual(html, "<p>line one line two</p>\n<p>line three</p>")
+        XCTAssertEqual(html, "<p data-line=\"1\">line one line two</p>\n<p data-line=\"4\">line three</p>")
     }
 
     func testEmptyStringProducesEmptyHTML() {
         XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: ""), "")
+    }
+
+    // MARK: - data-line anchors
+
+    func testEveryBlockKindCarriesItsSourceLine() {
+        let markdown = """
+        # Title
+
+        A paragraph.
+
+        - one
+        - two
+
+        > quoted
+
+        ---
+
+        ```swift
+        let x = 1
+        ```
+        """
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: markdown)
+        XCTAssertTrue(html.contains("<h1 data-line=\"1\">"), html)
+        XCTAssertTrue(html.contains("<p data-line=\"3\">"), html)
+        XCTAssertTrue(html.contains("<ul data-line=\"5\">"), html)
+        XCTAssertTrue(html.contains("<blockquote data-line=\"8\">"), html)
+        XCTAssertTrue(html.contains("<hr data-line=\"10\">"), html)
+        XCTAssertTrue(html.contains("<pre data-line=\"12\">"), html)
+    }
+
+    // A paragraph's soft newlines collapse into one <p>, so the anchor is the FIRST line.
+    func testMultiLineParagraphAnchorsToItsFirstLine() {
+        let markdown = "# T\n\nline one\nline two\nline three\n\n## Next"
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: markdown)
+        XCTAssertTrue(html.contains("<p data-line=\"3\">line one line two line three</p>"), html)
+        XCTAssertTrue(html.contains("<h2 data-line=\"7\">"), html)
+    }
+
+    func testBlockSourceLinesInDocumentOrder() {
+        let markdown = "# T\n\npara\n\n- item\n"
+        XCTAssertEqual(MarkdownHTMLRenderer.blockSourceLines(fromMarkdown: markdown), [1, 3, 5])
+    }
+
+    func testBlockSourceLinesIsEmptyForEmptyDocument() {
+        XCTAssertEqual(MarkdownHTMLRenderer.blockSourceLines(fromMarkdown: ""), [])
+    }
+
+    // MARK: - caret line -> block mapping
+
+    func testBlockLineMapsToTheBlockContainingTheCaret() {
+        let blocks = [1, 3, 7]
+        XCTAssertEqual(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 1, in: blocks), 1)
+        XCTAssertEqual(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 2, in: blocks), 1)
+        XCTAssertEqual(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 5, in: blocks), 3)
+        XCTAssertEqual(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 7, in: blocks), 7)
+        XCTAssertEqual(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 99, in: blocks), 7)
+    }
+
+    // A caret above the first block (e.g. leading blank lines) still lands somewhere sensible.
+    func testCaretBeforeFirstBlockMapsToFirstBlock() {
+        XCTAssertEqual(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 1, in: [4, 9]), 4)
+    }
+
+    func testNoBlocksMapsToNil() {
+        XCTAssertNil(MarkdownHTMLRenderer.blockLine(nearestAtOrBefore: 3, in: []))
     }
 }

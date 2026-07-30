@@ -592,6 +592,104 @@ final class MarkdownStylerTests: XCTestCase {
         let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
         XCTAssertNotEqual(color, NSColor.secondaryLabelColor, "Code block content must not be recolored as a list marker")
     }
+
+    // MARK: - Code mode
+
+    private func codeModeString(_ markdown: String, size: CGFloat = 16) -> NSAttributedString {
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: markdown),
+            headers: MarkdownParser.parseHeaders(in: markdown),
+            listItems: MarkdownParser.parseListItems(in: markdown),
+            links: MarkdownParser.parseLinks(in: markdown),
+            blockquotes: MarkdownParser.parseBlockquotes(in: markdown),
+            horizontalRules: MarkdownParser.parseHorizontalRules(in: markdown),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: markdown),
+            tables: MarkdownParser.parseTables(in: markdown),
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: markdown)
+        )
+        return MarkdownStyler.codeSourceAttributedString(
+            for: markdown,
+            model: model,
+            font: NSFont.systemFont(ofSize: size)
+        )
+    }
+
+    private func colour(_ attributed: NSAttributedString, at location: Int) -> NSColor? {
+        attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+    }
+
+    // The whole point of Code mode: no size variation anywhere, so nothing ever reflows while
+    // the caret moves or text is typed.
+    func testCodeModeUsesOneFixedPitchSizeForEveryCharacter() {
+        let markdown = "# Big heading\n\nbody **bold** text\n\n> quote\n\n---\n\n- [x] task\n"
+        let attributed = codeModeString(markdown, size: 15)
+        var sizesSeen: Set<CGFloat> = []
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, range, _ in
+            guard let font = value as? NSFont else {
+                return XCTFail("every character must carry a font; range \(range) had none")
+            }
+            XCTAssertTrue(font.isFixedPitch, "Code mode must be monospace throughout")
+            sizesSeen.insert(font.pointSize)
+        }
+        XCTAssertEqual(sizesSeen, [15])
+    }
+
+    // Nothing is hidden in Code mode — the hidden-delimiter trick must not appear.
+    func testCodeModeNeverHidesAnything() {
+        let attributed = codeModeString("**bold** and [link](https://example.com)")
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
+            XCTAssertNotEqual((value as? NSFont)?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+        }
+        attributed.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
+            XCTAssertNotEqual(value as? NSColor, NSColor.clear)
+        }
+    }
+
+    func testHeaderMarkerIsTintedAccentAndContentIsNot() {
+        let attributed = codeModeString("## Heading")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.accent)   // "#"
+        XCTAssertEqual(colour(attributed, at: 1), DesignPalette.accent)   // "#"
+        XCTAssertEqual(colour(attributed, at: 3), NSColor.labelColor)     // "H"
+    }
+
+    func testInlineStyleDelimitersAreTintedAccent() {
+        let attributed = codeModeString("a **b** c")
+        XCTAssertEqual(colour(attributed, at: 2), DesignPalette.accent)   // first "*"
+        XCTAssertEqual(colour(attributed, at: 4), NSColor.labelColor)     // "b"
+        XCTAssertEqual(colour(attributed, at: 6), DesignPalette.accent)   // closing "*"
+    }
+
+    func testListBulletIsFaintAndTaskMarkerIsAccent() {
+        let attributed = codeModeString("- [x] done")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.textFaint) // "-"
+        XCTAssertEqual(colour(attributed, at: 2), DesignPalette.accent)    // "["
+        XCTAssertEqual(colour(attributed, at: 6), NSColor.labelColor)      // "d" of "done"
+    }
+
+    func testLinkSyntaxIsTintedButLinkTextIsNot() {
+        let attributed = codeModeString("[text](https://example.com)")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.accent)   // "["
+        XCTAssertEqual(colour(attributed, at: 1), NSColor.labelColor)     // "t"
+        XCTAssertEqual(colour(attributed, at: 5), DesignPalette.accent)   // "]"
+        XCTAssertEqual(colour(attributed, at: 7), DesignPalette.accent)   // inside the URL
+    }
+
+    func testBlockquoteMarkerAndHorizontalRuleAreTinted() {
+        XCTAssertEqual(colour(codeModeString("> quoted"), at: 0), DesignPalette.accent)
+        XCTAssertEqual(colour(codeModeString("---"), at: 1), DesignPalette.accent)
+    }
+
+    func testCodeFencesAreTintedAndFenceContentIsNot() {
+        let attributed = codeModeString("```swift\nlet x = 1\n```\n")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.accent)   // opening backtick
+        XCTAssertEqual(colour(attributed, at: 9), NSColor.labelColor)     // "l" of "let"
+    }
+
+    func testTablePipesAreFaint() {
+        let attributed = codeModeString("| a | b |\n| --- | --- |\n| 1 | 2 |\n")
+        XCTAssertEqual(colour(attributed, at: 0), DesignPalette.textFaint) // leading "|"
+        XCTAssertEqual(colour(attributed, at: 2), NSColor.labelColor)      // "a"
+    }
 }
 
 final class MarkdownStylerTableTests: XCTestCase {
@@ -673,6 +771,78 @@ final class MarkdownStylerTableTests: XCTestCase {
             XCTAssertEqual(renderedX, gridInfo.columnBoundaries[probe.column] + padding, accuracy: 0.5,
                            "\(probe.cellText) must start exactly at its column boundary plus padding")
         }
+    }
+
+    // The user's exact reported case: a row wider than the view must not soft-wrap -- the
+    // wrapped remainder landed flush-left UNDER the first column, scrambling the grid. The
+    // kern-positioned single-line row can't reflow per cell, so overflow clips instead.
+    func testTableRowsClipInsteadOfWrappingIntoTheFirstColumn() {
+        let text = "| A | B |\n|---|---|\n| short | a very long cell value that will exceed any reasonable view width |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.lineBreakMode, .byClipping)
+    }
+
+    // MARK: - Over-wide tables wrap inside their cells (HTML/Notion behavior)
+
+    private let overWideText = "| Requirement | Status |\n|---|---|\n| App Sandbox enabled | The entitlements file sets the sandbox key which is mandatory for the Mac App Store and this sentence is intentionally far too long |"
+
+    func testOverWideTableColumnsCompressToFitTheAvailableWidth() {
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        let info = attributed.attribute(.marginalTableWrappedRow, at: 0, effectiveRange: nil) as? WrappedTableRowInfo
+        XCTAssertNotNil(info, "An over-wide table switches to the wrapped-cell rendering")
+        XCTAssertLessThanOrEqual(info?.columnBoundaries.last ?? .infinity, 400.5, "The fitted grid must not exceed the available width")
+    }
+
+    func testOverWideTableRowsGrowToFitWrappedCellText() {
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        let bodyRowLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "| App Sandbox")!.lowerBound)
+        let style = attributed.attribute(.paragraphStyle, at: bodyRowLocation, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertGreaterThan(style?.minimumLineHeight ?? 0, 14 * 2.2 + 0.5, "A row with wrapping cell text must reserve more height than a single-line row")
+    }
+
+    func testOverWideTableSourceIsHiddenAndCellsCarryTheirStyledText() {
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        let cellLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "Sandbox")!.lowerBound)
+        let font = attributed.attribute(.font, at: cellLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize, "Wrapped rows hide the literal source; the layout manager draws the cells")
+        let info = attributed.attribute(.marginalTableWrappedRow, at: cellLocation, effectiveRange: nil) as? WrappedTableRowInfo
+        XCTAssertEqual(info?.cells.count, 2)
+        XCTAssertEqual(info?.cells.first?.string, "App Sandbox enabled")
+    }
+
+    func testCaretInsideOverWideTableRowRevealsThatRowAsSource() {
+        let caret = overWideText.range(of: "Sandbox")!.lowerBound
+        let attributed = MarkdownStyler.attributedString(
+            for: overWideText, model: model(for: overWideText),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: caret, availableWidth: 400
+        )
+        let cellLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "Sandbox")!.lowerBound)
+        let font = attributed.attribute(.font, at: cellLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14, "The caret's row must show its raw source for editing")
+        XCTAssertNil(attributed.attribute(.marginalTableWrappedRow, at: cellLocation, effectiveRange: nil), "No drawn cells on top of the revealed source")
+
+        let headerLocation = overWideText.distance(from: overWideText.startIndex, to: overWideText.range(of: "Requirement")!.lowerBound)
+        XCTAssertNotNil(attributed.attribute(.marginalTableWrappedRow, at: headerLocation, effectiveRange: nil), "Other rows stay in the wrapped rendering")
+    }
+
+    func testTableThatFitsKeepsTheLiveKernRendering() {
+        let text = "| A | B |\n|---|---|\n| 1 | 2 |"
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model(for: text),
+            baseFont: .systemFont(ofSize: 14), cursorLocation: nil, availableWidth: 400
+        )
+        XCTAssertNil(attributed.attribute(.marginalTableWrappedRow, at: 0, effectiveRange: nil), "A table that fits keeps the fully-live kern rendering")
+        XCTAssertNotNil(attributed.attribute(.kern, at: 0, effectiveRange: nil))
     }
 
     // The user's exact reported case: an escaped pipe inside a cell must not become a hidden
