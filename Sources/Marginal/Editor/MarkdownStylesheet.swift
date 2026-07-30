@@ -82,6 +82,9 @@ enum MarkdownStylesheet {
           a { color: \(tokens.accent); }
           hr { border: 0; border-top: 1px solid \(tokens.hairline); }
           li { margin-bottom: 6px; }
+          table { border-collapse: collapse; margin: 4px 0; }
+          th, td { border: 1px solid \(tokens.hairline); padding: 7px 9px; text-align: left; }
+          th { background: \(tokens.panel); font-weight: 500; }
         \(extra)
         """
     }

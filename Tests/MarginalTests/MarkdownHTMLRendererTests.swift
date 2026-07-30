@@ -63,6 +63,32 @@ final class MarkdownHTMLRendererTests: XCTestCase {
         XCTAssertEqual(html, "<ul data-line=\"1\"><li>one continued text</li></ul>")
     }
 
+    // MARK: - Tables
+
+    func testTableRendersAsHTMLTableWithHeaderAndBody() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| A | B |\n|---|---|\n| 1 | **2** |")
+        XCTAssertEqual(html, "<table data-line=\"1\"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td><strong>2</strong></td></tr></tbody></table>")
+    }
+
+    func testTableColumnAlignmentBecomesTextAlignStyles() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| L | C | R |\n|:---|:---:|---:|\n| a | b | c |")
+        XCTAssertTrue(html.contains("<th>L</th>"), html)
+        XCTAssertTrue(html.contains("<th style=\"text-align:center\">C</th>"), html)
+        XCTAssertTrue(html.contains("<td style=\"text-align:right\">c</td>"), html)
+    }
+
+    func testEscapedPipeInsideACellRendersAsALiteralPipe() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| Expr |\n|---|\n| A \\| B |")
+        XCTAssertTrue(html.contains("<td>A | B</td>"), html)
+    }
+
+    // The user's exact reported case: table lines must never be swallowed into a <p> as
+    // literal "| ... |" text.
+    func testTableDirectlyAfterAParagraphLineIsNotSwallowedIntoTheParagraph() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "intro\n| A |\n|---|\n| 1 |")
+        XCTAssertEqual(html, "<p data-line=\"1\">intro</p>\n<table data-line=\"2\"><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>")
+    }
+
     func testFencedCodeBlockEscapesAndPreservesLiteralContent() {
         let html = MarkdownHTMLRenderer.html(fromMarkdown: "```swift\nlet x = 1 < 2 && true\n```")
         XCTAssertEqual(html, "<pre data-line=\"1\"><code class=\"language-swift\">let x = 1 &lt; 2 &amp;&amp; true\n</code></pre>")

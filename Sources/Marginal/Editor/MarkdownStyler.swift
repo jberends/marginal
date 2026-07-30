@@ -194,6 +194,11 @@ struct MarkdownStyler {
                 let rowParagraphStyle = NSMutableParagraphStyle()
                 rowParagraphStyle.minimumLineHeight = rowHeight
                 rowParagraphStyle.maximumLineHeight = rowHeight
+                // A row wider than the view must not soft-wrap: the kern-positioned columns
+                // live on one visual line, so a wrapped remainder would land flush-left UNDER
+                // the first column, scrambling the grid. Per-cell reflow isn't possible with
+                // this technique -- overflow clips at the view edge instead.
+                rowParagraphStyle.lineBreakMode = .byClipping
                 let rowNSRange = NSRange(row.lineRange, in: text)
                 result.addAttribute(.paragraphStyle, value: rowParagraphStyle, range: rowNSRange)
                 let naturalLineHeight = baseFont.ascender - baseFont.descender + baseFont.leading

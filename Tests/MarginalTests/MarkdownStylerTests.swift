@@ -773,6 +773,16 @@ final class MarkdownStylerTableTests: XCTestCase {
         }
     }
 
+    // The user's exact reported case: a row wider than the view must not soft-wrap -- the
+    // wrapped remainder landed flush-left UNDER the first column, scrambling the grid. The
+    // kern-positioned single-line row can't reflow per cell, so overflow clips instead.
+    func testTableRowsClipInsteadOfWrappingIntoTheFirstColumn() {
+        let text = "| A | B |\n|---|---|\n| short | a very long cell value that will exceed any reasonable view width |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.lineBreakMode, .byClipping)
+    }
+
     // The user's exact reported case: an escaped pipe inside a cell must not become a hidden
     // "column boundary" -- it should render as ordinary (visible) text.
     func testEscapedPipeInsideACellStaysVisible() {

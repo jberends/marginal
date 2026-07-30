@@ -2,7 +2,7 @@ import Foundation
 
 /// Converts markdown source into HTML, reusing the same block/inline parsers MarkdownStyler uses
 /// for on-screen rendering -- one parsing model, two consumers. Covers exactly the constructs this
-/// app supports (single-level lists/blockquotes, no tables, no nested lists), matching
+/// app supports (single-level lists/blockquotes, pipe tables, no nested lists), matching
 /// MarkdownParser's own "pragmatic single-pass, not full CommonMark" scope.
 struct MarkdownHTMLRenderer {
 
@@ -33,6 +33,7 @@ struct MarkdownHTMLRenderer {
         let blockquotes = MarkdownParser.parseBlockquotes(in: text)
         let horizontalRules = MarkdownParser.parseHorizontalRules(in: text)
         let codeBlocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        let tables = MarkdownParser.parseTables(in: text)
         let starts = lineStarts(in: text)
 
         var blocks: [(line: Int, html: String)] = []
@@ -45,6 +46,12 @@ struct MarkdownHTMLRenderer {
                 let languageAttribute = codeBlock.language.map { " class=\"language-\(htmlEscape($0))\"" } ?? ""
                 blocks.append((line, "<pre data-line=\"\(line)\"><code\(languageAttribute)>\(htmlEscape(String(text[codeBlock.contentRange])))</code></pre>"))
                 index = advance(past: codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound, in: text)
+                continue
+            }
+            if let table = tables.first(where: { $0.headerRow.lineRange.lowerBound == index }) {
+                blocks.append((line, tableHTML(for: table, in: text, line: line)))
+                let lastRowRange = table.bodyRows.last?.lineRange ?? table.separatorRowRange
+                index = advance(past: lastRowRange, in: text)
                 continue
             }
             if let header = headers.first(where: { $0.lineRange.lowerBound == index }) {
@@ -91,7 +98,7 @@ struct MarkdownHTMLRenderer {
 
             var paragraphLines = [firstLine]
             var cursor = advance(past: firstLineRange, in: text)
-            while cursor < text.endIndex, !isBlockStart(at: cursor, headers: headers, listItems: listItems, blockquotes: blockquotes, horizontalRules: horizontalRules, codeBlocks: codeBlocks) {
+            while cursor < text.endIndex, !isBlockStart(at: cursor, headers: headers, listItems: listItems, blockquotes: blockquotes, horizontalRules: horizontalRules, codeBlocks: codeBlocks, tables: tables) {
                 let range = lineRange(at: cursor, in: text)
                 let lineText = String(text[range])
                 if lineText.trimmingCharacters(in: .whitespaces).isEmpty { break }
@@ -149,13 +156,48 @@ struct MarkdownHTMLRenderer {
         listItems: [ListItemSpan],
         blockquotes: [BlockquoteSpan],
         horizontalRules: [HorizontalRuleSpan],
-        codeBlocks: [CodeBlockSpan]
+        codeBlocks: [CodeBlockSpan],
+        tables: [TableSpan]
     ) -> Bool {
         headers.contains { $0.lineRange.lowerBound == index }
             || listItems.contains { $0.lineRange.lowerBound == index }
             || blockquotes.contains { $0.lineRange.lowerBound == index }
             || horizontalRules.contains { $0.lineRange.lowerBound == index }
             || codeBlocks.contains { $0.openingFenceRange.lowerBound == index }
+            || tables.contains { $0.headerRow.lineRange.lowerBound == index }
+    }
+
+    /// Header cells become <th> (with a text-align style for center/right columns), body rows
+    /// <td>; cell content goes through the same inline renderer as any other fragment, and an
+    /// escaped "\|" (a literal pipe, not a column boundary) unescapes to "|".
+    private static func tableHTML(for table: TableSpan, in text: String, line: Int) -> String {
+        func alignAttribute(_ column: Int) -> String {
+            guard table.columnAlignments.indices.contains(column) else { return "" }
+            switch table.columnAlignments[column] {
+            case .center: return " style=\"text-align:center\""
+            case .right: return " style=\"text-align:right\""
+            case .left: return ""
+            }
+        }
+        func cells(of row: TableRowSpan) -> [String] {
+            guard row.pipeRanges.count >= 2 else { return [] }
+            return (0..<(row.pipeRanges.count - 1)).map { c in
+                String(text[row.pipeRanges[c].upperBound..<row.pipeRanges[c + 1].lowerBound])
+                    .trimmingCharacters(in: .whitespaces)
+                    .replacingOccurrences(of: "\\|", with: "|")
+            }
+        }
+        let headerCells = cells(of: table.headerRow).enumerated()
+            .map { "<th\(alignAttribute($0.offset))>\(inlineHTML(for: $0.element))</th>" }
+            .joined()
+        let bodyRows = table.bodyRows
+            .map { row in
+                "<tr>" + cells(of: row).enumerated()
+                    .map { "<td\(alignAttribute($0.offset))>\(inlineHTML(for: $0.element))</td>" }
+                    .joined() + "</tr>"
+            }
+            .joined()
+        return "<table data-line=\"\(line)\"><thead><tr>\(headerCells)</tr></thead><tbody>\(bodyRows)</tbody></table>"
     }
 
     private static func sameListKind(_ a: ListMarkerKind, _ b: ListMarkerKind) -> Bool {

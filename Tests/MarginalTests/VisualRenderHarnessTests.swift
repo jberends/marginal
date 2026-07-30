@@ -96,6 +96,7 @@ final class VisualRenderHarnessTests: XCTestCase {
         | Headings | Yes | Levels 1-6 |
         | Tables | Yes | Extension in many parsers |
         | Footnotes | Maybe | Depends on parser |
+        | App Sandbox enabled | `Marginal.entitlements` sets `com.apple.security.app-sandbox` — mandatory for the Mac App Store |
 
         | Left aligned | Center aligned | Right aligned |
         | :--- | :---: | ---: |
