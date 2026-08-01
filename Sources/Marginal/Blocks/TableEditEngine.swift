@@ -59,13 +59,13 @@ enum TableEditEngine {
 
         if cell.row == nil {
             // Update header cell
-            if cell.column < header.count {
+            if cell.column >= 0 && cell.column < header.count {
                 header[cell.column] = content
             }
         } else {
             // Update body cell
             let row = cell.row!
-            if row < rows.count && cell.column < rows[row].count {
+            if row >= 0 && row < rows.count && cell.column >= 0 && cell.column < rows[row].count {
                 rows[row][cell.column] = content
             }
         }
