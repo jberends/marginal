@@ -55,11 +55,40 @@ final class BlockEditEngineTests: XCTestCase {
             let out = BlockEditEngine.applyShorthand(BlockDocument(blocks: [b]), in: b.id)
             XCTAssertEqual(out?.document.blocks.first?.kind, expected, typed)
         }
-        XCTAssertNil(BlockEditEngine.applyShorthand(BlockDocument(blocks: [para("no ")]), in: para("x").id))
+        let noMatch = para("no ")
+        XCTAssertNil(BlockEditEngine.applyShorthand(BlockDocument(blocks: [noMatch]), in: noMatch.id))
     }
     func testBackspaceAtDocumentStartIsNoOp() {
         let b = para("x")
         let out = BlockEditEngine.backspaceAtStart(BlockDocument(blocks: [b]), in: b.id)
         XCTAssertEqual(out.document.blocks, [b])
+    }
+    func testRow5_EnterOnListItemWithContentContinuesList() {
+        let li = Block(kind: .listItem(style: .task(done: true), indent: 1, InlineText("ab")))
+        let out = BlockEditEngine.split(BlockDocument(blocks: [li]), at: Caret(blockID: li.id, offset: 2))
+        XCTAssertEqual(out.document.blocks[1].kind,
+                       .listItem(style: .task(done: false), indent: 1, InlineText("")),
+                       "New task item is unchecked; style and indent carry over")
+    }
+    func testRow7_EnterOnEmptyNestedItemOutdents() {
+        let li = Block(kind: .listItem(style: .bullet, indent: 2, InlineText("")))
+        let out = BlockEditEngine.split(BlockDocument(blocks: [li]), at: Caret(blockID: li.id, offset: 0))
+        XCTAssertEqual(out.document.blocks.map(\.kind), [.listItem(style: .bullet, indent: 1, InlineText(""))])
+    }
+    func testRow7_EnterOnEmptyTopLevelItemBecomesParagraph() {
+        let li = Block(kind: .listItem(style: .bullet, indent: 0, InlineText("")))
+        let out = BlockEditEngine.split(BlockDocument(blocks: [li]), at: Caret(blockID: li.id, offset: 0))
+        XCTAssertEqual(out.document.blocks.map(\.kind), [.paragraph(InlineText(""))])
+    }
+    func testRow6_IndentCapsAtOneDeeperThanPreviousItem() {
+        let a = Block(kind: .listItem(style: .bullet, indent: 0, InlineText("a")))
+        let b = Block(kind: .listItem(style: .bullet, indent: 0, InlineText("b")))
+        let once = BlockEditEngine.indent(BlockDocument(blocks: [a, b]), blockID: b.id, by: 1)
+        XCTAssertEqual(once.document.blocks[1].kind, .listItem(style: .bullet, indent: 1, InlineText("b")))
+        let twice = BlockEditEngine.indent(once.document, blockID: b.id, by: 1)
+        XCTAssertEqual(twice.document.blocks[1].kind, .listItem(style: .bullet, indent: 1, InlineText("b")),
+                       "Cannot indent deeper than previous item + 1")
+        let out = BlockEditEngine.indent(twice.document, blockID: b.id, by: -1)
+        XCTAssertEqual(out.document.blocks[1].kind, .listItem(style: .bullet, indent: 0, InlineText("b")))
     }
 }

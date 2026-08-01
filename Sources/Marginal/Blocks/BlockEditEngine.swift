@@ -17,6 +17,18 @@ enum BlockEditEngine {
             return Outcome(document: doc, caret: caret)
         }
 
+        if case .listItem(let style, let indent, let text) = block.kind, text.length == 0 {
+            // Empty list item: Enter does not split, it outdents or converts to paragraph in place.
+            var newBlocks = doc.blocks
+            if indent > 0 {
+                newBlocks[index].kind = .listItem(style: style, indent: indent - 1, text)
+            } else {
+                newBlocks[index].kind = .paragraph(text)
+            }
+            let newDoc = BlockDocument(blocks: newBlocks)
+            return Outcome(document: newDoc, caret: Caret(blockID: block.id, offset: 0))
+        }
+
         let (left, right) = inlineText.split(at: caret.offset)
 
         let firstKind = block.kind.replacingInlineText(left)
@@ -24,6 +36,14 @@ enum BlockEditEngine {
         let secondKind: BlockKind
         if case .heading = block.kind {
             secondKind = .paragraph(right)
+        } else if case .listItem(let style, let indent, _) = block.kind {
+            let continuationStyle: ListStyle
+            if case .task = style {
+                continuationStyle = .task(done: false)
+            } else {
+                continuationStyle = style
+            }
+            secondKind = .listItem(style: continuationStyle, indent: indent, right)
         } else {
             secondKind = block.kind.replacingInlineText(right)
         }
@@ -150,7 +170,16 @@ enum BlockEditEngine {
             return Outcome(document: doc, caret: Caret(blockID: blockID, offset: 0))
         }
 
-        let newIndent = max(0, indent + delta)
+        var newIndent = max(0, indent + delta)
+        if delta > 0 {
+            let maxIndent: Int
+            if index > 0, case .listItem(_, let previousIndent, _) = doc.blocks[index - 1].kind {
+                maxIndent = previousIndent + 1
+            } else {
+                maxIndent = 0
+            }
+            newIndent = min(newIndent, maxIndent)
+        }
         var newBlocks = doc.blocks
         newBlocks[index].kind = .listItem(style: style, indent: newIndent, text)
         let newDoc = BlockDocument(blocks: newBlocks)
