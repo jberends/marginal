@@ -47,17 +47,28 @@ enum BlockViewFactory {
             var attrs = base
             var font = baseParagraphFont
 
-            if run.style.contains(.bold) {
-                // Semibold (600) -- Notion's "bold" weight; the design system never uses 700.
-                font = NSFont.systemFont(ofSize: font.pointSize, weight: .semibold)
-            }
-            if run.style.contains(.italic) {
-                font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
-            }
             if run.style.contains(.code) {
-                font = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.85, weight: .regular)
+                // Bold/italic layer onto the monospaced font itself (not the proportional base
+                // font) so a "**`code`**" run keeps both its mono face and its weight/slant --
+                // .code no longer unconditionally overwrites font, which used to silently drop
+                // any bold/italic also present on the same run.
+                font = NSFont.monospacedSystemFont(
+                    ofSize: baseFont.pointSize * 0.85,
+                    weight: run.style.contains(.bold) ? .semibold : .regular
+                )
+                if run.style.contains(.italic) {
+                    font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+                }
                 attrs[.backgroundColor] = DesignPalette.surfaceCode
                 attrs[.foregroundColor] = DesignPalette.accent
+            } else {
+                if run.style.contains(.bold) {
+                    // Semibold (600) -- Notion's "bold" weight; the design system never uses 700.
+                    font = NSFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+                }
+                if run.style.contains(.italic) {
+                    font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+                }
             }
             attrs[.font] = font
 
@@ -66,6 +77,9 @@ enum BlockViewFactory {
             }
             if run.style.contains(.underline) {
                 attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                // Distinguishes an explicit underline style from the purely visual underline a
+                // link also gets below -- see `.marginalExplicitUnderline`'s doc comment.
+                attrs[.marginalExplicitUnderline] = true
             }
             if let linkURL = run.linkURL {
                 attrs[.link] = linkURL

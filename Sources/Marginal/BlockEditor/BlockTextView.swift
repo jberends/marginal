@@ -1,5 +1,12 @@
 import AppKit
 
+extension NSAttributedString.Key {
+    /// Marks a run's underline as an *explicit* `.underline` inline style, as opposed to the
+    /// purely visual underline `BlockViewFactory` also paints under link runs. Read back in
+    /// `BlockTextView.currentInlineText` to tell the two apart -- see the comment there.
+    static let marginalExplicitUnderline = NSAttributedString.Key("marginalExplicitUnderline")
+}
+
 /// Delegate protocol through which a `BlockTextView` reports edits and structural events
 /// (Enter, backspace-at-start, Tab, vertical focus movement, selection escaping the block's
 /// bounds) to whatever owns the block document -- the text view itself never mutates the
@@ -80,23 +87,19 @@ final class BlockTextView: NSTextView {
 
             if let font = attributes[.font] as? NSFont {
                 let traits = NSFontManager.shared.traits(of: font)
+                if traits.contains(.italicFontMask) {
+                    style.insert(.italic)
+                }
+                if font.isBoldWeight {
+                    style.insert(.bold)
+                }
                 if font.isMonospaced {
                     style.insert(.code)
-                } else {
-                    if traits.contains(.italicFontMask) {
-                        style.insert(.italic)
-                    }
-                    if font.isBoldWeight {
-                        style.insert(.bold)
-                    }
                 }
             }
 
             if let strikethrough = attributes[.strikethroughStyle] as? Int, strikethrough != 0 {
                 style.insert(.strikethrough)
-            }
-            if let underline = attributes[.underlineStyle] as? Int, underline != 0 {
-                style.insert(.underline)
             }
 
             var linkURL: String? = nil
@@ -104,6 +107,20 @@ final class BlockTextView: NSTextView {
                 linkURL = link
             } else if let link = attributes[.link] as? URL {
                 linkURL = link.absoluteString
+            }
+
+            // The visual underline under a link is rendered with plain `.underlineStyle` (same
+            // attribute an explicit underline style uses), so it can't be told apart from a real
+            // `.underline` run just by reading that attribute back -- a link-only run would
+            // otherwise gain a spurious `.underline` bit on every round-trip. The private
+            // `.marginalExplicitUnderline` marker (set only when the *run* itself asked for
+            // underline, in `BlockViewFactory.attributedString(for:kind:baseFont:)`) disambiguates:
+            // an underline is only inferred as an explicit style bit when that marker is present.
+            let hasExplicitUnderlineMarker = (attributes[.marginalExplicitUnderline] as? Bool) == true
+            if let underline = attributes[.underlineStyle] as? Int, underline != 0 {
+                if linkURL == nil || hasExplicitUnderlineMarker {
+                    style.insert(.underline)
+                }
             }
 
             runs.append(InlineRun(text: substring, style: style, linkURL: linkURL))

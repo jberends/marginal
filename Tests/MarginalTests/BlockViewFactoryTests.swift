@@ -20,6 +20,35 @@ final class BlockViewFactoryTests: XCTestCase {
     }
 
     @MainActor
+    func testRenderRoundTripsLinkOnlyRunWithoutSpuriousUnderline() {
+        let tv = BlockTextView()
+        let t = InlineText(runs: [InlineRun(text: "click", style: [], linkURL: "https://example.com")])
+        tv.render(t, asKind: .paragraph(t), baseFont: .systemFont(ofSize: 16))
+        let result = tv.currentInlineText
+        XCTAssertEqual(result, t)
+        XCTAssertEqual(result.runs.first?.style, [])
+        XCTAssertEqual(result.runs.first?.linkURL, "https://example.com")
+    }
+
+    @MainActor
+    func testRenderRoundTripsBoldCodeRun() {
+        let tv = BlockTextView()
+        let t = InlineText(runs: [InlineRun(text: "code", style: [.bold, .code])])
+        tv.render(t, asKind: .paragraph(t), baseFont: .systemFont(ofSize: 16))
+        XCTAssertEqual(tv.currentInlineText, t)
+    }
+
+    @MainActor
+    func testRenderRoundTripsExplicitUnderlineOnLinkRun() {
+        let tv = BlockTextView()
+        let t = InlineText(runs: [InlineRun(text: "click", style: [.underline], linkURL: "https://example.com")])
+        tv.render(t, asKind: .paragraph(t), baseFont: .systemFont(ofSize: 16))
+        let result = tv.currentInlineText
+        XCTAssertEqual(result, t)
+        XCTAssertEqual(result.runs.first?.style, [.underline])
+    }
+
+    @MainActor
     func testFactoryProducesViewPerKind() {
         final class Sink: NSObject, BlockTextViewDelegate { /* empty conformance, all methods no-op */
             func blockTextView(_ v: BlockTextView, didEditInlineText t: InlineText) {}
