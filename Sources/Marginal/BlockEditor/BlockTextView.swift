@@ -135,6 +135,46 @@ final class BlockTextView: NSTextView {
 
     // MARK: - Command interception
 
+    // NSTextView's own keyDown -> interpretKeyEvents(_:) flow calls `doCommand(by:)`
+    // exclusively for every one of these NSStandardKeyBindingResponding selectors -- it never
+    // calls the concrete action method (insertNewline(_:), deleteBackward(_:), etc.) directly.
+    // Those concrete methods only get invoked some other way (a menu item, an accessibility
+    // action, a test calling them straight on the responder) that bypasses `doCommand(by:)`
+    // entirely, which would silently skip this class's interception below. These thin
+    // overrides route every path through the single `doCommand(by:)` switch, so a direct
+    // call behaves identically to the real key event.
+    override func insertNewline(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.insertNewline(_:)))
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.deleteBackward(_:)))
+    }
+
+    override func insertTab(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.insertTab(_:)))
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.insertBacktab(_:)))
+    }
+
+    override func moveUp(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.moveUp(_:)))
+    }
+
+    override func moveDown(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.moveDown(_:)))
+    }
+
+    override func moveUpAndModifySelection(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.moveUpAndModifySelection(_:)))
+    }
+
+    override func moveDownAndModifySelection(_ sender: Any?) {
+        doCommand(by: #selector(NSResponder.moveDownAndModifySelection(_:)))
+    }
+
     override func doCommand(by selector: Selector) {
         switch selector {
         case #selector(NSResponder.insertNewline(_:)):

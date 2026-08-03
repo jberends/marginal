@@ -147,6 +147,24 @@ enum BlockViewFactory {
         textView.render(text, asKind: kind, baseFont: baseFont)
         return textView
     }
+
+    /// Finds the `BlockTextView` embedded inside a block's wrapper view (as returned by
+    /// `view(for:baseFont:textDelegate:)`) -- bare for paragraphs/headings/code blocks, nested
+    /// one level inside list-item and quote wrappers, and absent for dividers/tables. Lets the
+    /// document-level controller (Task 10) reach the text view without knowing each wrapper's
+    /// internal shape.
+    static func textView(in wrapper: NSView) -> BlockTextView? {
+        if let textView = wrapper as? BlockTextView {
+            return textView
+        }
+        if let listItem = wrapper as? ListItemWrapperView {
+            return listItem.textView
+        }
+        if let quote = wrapper as? QuoteWrapperView {
+            return quote.textView
+        }
+        return nil
+    }
 }
 
 /// Wraps a list item's `BlockTextView` with a fixed leading gutter slot (`24 * (indent + 1)` pt)
@@ -186,6 +204,15 @@ final class ListItemWrapperView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// The gutter marker's displayed text. Bullets/checkboxes never change after creation, but
+    /// an ordered item's running number depends on its position among sibling items -- something
+    /// only the document-level controller (Task 10) knows -- so this must stay settable after
+    /// the wrapper is built, not just an `init` parameter.
+    var markerText: String {
+        get { markerLabel.stringValue }
+        set { markerLabel.stringValue = newValue }
     }
 }
 
