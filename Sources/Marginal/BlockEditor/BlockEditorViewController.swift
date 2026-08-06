@@ -22,6 +22,11 @@ final class BlockEditorViewController: NSViewController {
     /// `addArrangedSubview`, but re-adding an already-constrained wrapper (e.g. reordering
     /// during a diff) must not install a second, redundant constraint.
     private var widthConstrainedIDs: Set<UUID> = []
+    /// Plain text of each block as of its last edit, keyed by block id -- lets
+    /// `didEditInlineText` tell an insertion apart from a deletion (shorthand must only fire on
+    /// insertion of a trailing trigger character, never on a delete that happens to land on a
+    /// shorthand-shaped string; see the doc comment there).
+    private var previousPlainText: [UUID: String] = [:]
 
     init(document: BlockDocument, baseFont: NSFont) {
         self.document = document
@@ -170,6 +175,7 @@ final class BlockEditorViewController: NSViewController {
             blockViews[goneID]?.removeFromSuperview()
             blockViews.removeValue(forKey: goneID)
             widthConstrainedIDs.remove(goneID)
+            previousPlainText.removeValue(forKey: goneID)
         }
 
         for block in new {
@@ -228,24 +234,55 @@ final class BlockEditorViewController: NSViewController {
 // MARK: - BlockTextViewDelegate
 
 extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
+    /// A shorthand/autoformat trigger is *only* ever the trailing character that was just
+    /// inserted (a space closes `"# "`/`"- "`/`"1. "`/etc., a dash closes `"---"`, a backtick
+    /// closes `` ` `` /``` ``` ``` ```). Gating on this (plus the edit having been a net
+    /// insertion, not a deletion) is what stops a backspace that happens to land on a
+    /// shorthand-shaped string -- e.g. deleting "answer- " down to "- " -- from spuriously
+    /// converting the block.
+    private static func isShorthandTriggerChar(_ character: Character?) -> Bool {
+        character == " " || character == "-" || character == "`"
+    }
+
     func blockTextView(_ view: BlockTextView, didEditInlineText text: InlineText) {
         guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
+
+        // Code blocks have no `InlineText` representation (`replacingInlineText` is a no-op for
+        // them) but their `BlockTextView` is real and editable, so persisting a typed edit means
+        // rebuilding the `.codeBlock` case directly from the text view's raw string. Shorthand/
+        // autoformat never apply inside a code block.
+        if case .codeBlock(let language, _) = document.blocks[index].kind {
+            var blocks = document.blocks
+            blocks[index].kind = .codeBlock(language: language, view.string)
+            document = BlockDocument(blocks: blocks)
+            previousPlainText[blockID] = view.string
+            onDocumentChange?(document)
+            return
+        }
+
+        let oldPlainText = previousPlainText[blockID] ?? document.blocks[index].kind.inlineText?.plainText ?? ""
+        let newPlainText = text.plainText
+        previousPlainText[blockID] = newPlainText
+        let isTriggerInsertion = newPlainText.count > oldPlainText.count
+            && Self.isShorthandTriggerChar(newPlainText.last)
 
         var blocks = document.blocks
         blocks[index].kind = blocks[index].kind.replacingInlineText(text)
         document = BlockDocument(blocks: blocks)
         onDocumentChange?(document)
 
-        if let outcome = BlockEditEngine.applyShorthand(document, in: blockID) {
+        if isTriggerInsertion, let outcome = BlockEditEngine.applyShorthand(document, in: blockID) {
+            previousPlainText[outcome.caret.blockID] = outcome.document[outcome.caret.blockID]?.kind.inlineText?.plainText ?? ""
             apply(outcome)
             return
         }
 
-        if let (converted, caret) = InlineAutoformat.convertCompletedPattern(in: text, caret: view.caretOffset) {
+        if isTriggerInsertion, let (converted, caret) = InlineAutoformat.convertCompletedPattern(in: text, caret: view.caretOffset) {
             guard let idx = document.index(of: blockID) else { return }
             var convertedBlocks = document.blocks
             convertedBlocks[idx].kind = convertedBlocks[idx].kind.replacingInlineText(converted)
             document = BlockDocument(blocks: convertedBlocks)
+            previousPlainText[blockID] = converted.plainText
             onDocumentChange?(document)
             view.render(converted, asKind: document.blocks[idx].kind, baseFont: baseFont)
             view.caretOffset = caret
