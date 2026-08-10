@@ -125,4 +125,58 @@ final class BlockEditorSmokeTests: XCTestCase {
         (vc.view.window?.firstResponder as? BlockTextView)?.deleteBackward(nil)
         XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText("onetwo"))])
     }
+
+    // MARK: - Task 11: style shortcuts + autoformat wiring
+
+    /// ⌘B (`toggleStyleBold(_:)`) over a selected range must apply `.bold` to the model's
+    /// inline text for that range, and pressing it again over the same selection must remove
+    /// it -- the toggle routes through `InlineAutoformat.toggling` on the model, then
+    /// re-renders through `BlockViewFactory` so the document stays the single source of truth.
+    func testToggleStyleBoldOnSelectionTogglesModel() {
+        let (vc, _) = makeEditor("ab")
+        let blockID = vc.document.blocks[0].id
+        vc.focusBlock(blockID, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+        tv?.setSelectedRange(NSRange(location: 0, length: 1))
+
+        tv?.toggleStyleBold(nil)
+
+        guard case .paragraph(let text) = vc.document.blocks[0].kind else {
+            return XCTFail("expected paragraph, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertTrue(text.runs.contains { $0.text == "a" && $0.style.contains(.bold) },
+                      "expected a bold 'a' run, got \(text.runs)")
+
+        tv?.setSelectedRange(NSRange(location: 0, length: 1))
+        tv?.toggleStyleBold(nil)
+
+        guard case .paragraph(let text2) = vc.document.blocks[0].kind else {
+            return XCTFail("expected paragraph, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertFalse(text2.runs.contains { $0.text.contains("a") && $0.style.contains(.bold) },
+                       "expected bold removed, got \(text2.runs)")
+        XCTAssertEqual(text2.plainText, "ab")
+    }
+
+    /// Pins the already-wired live inline autoformat (Task 8's `convertCompletedPattern`,
+    /// wired into `didEditInlineText` in Task 10): typing `*i*` character-by-character in an
+    /// empty paragraph must convert to an italic "i" run with the delimiters removed, and
+    /// leave the caret positioned right after the styled content.
+    func testLiveAutoformatItalicConvertsCharByChar() {
+        let (vc, _) = makeEditor("")
+        vc.focusBlock(vc.document.blocks[0].id, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.insertText("*", replacementRange: NSRange(location: 0, length: 0))
+        tv?.insertText("i", replacementRange: NSRange(location: 1, length: 0))
+        tv?.insertText("*", replacementRange: NSRange(location: 2, length: 0))
+
+        guard case .paragraph(let text) = vc.document.blocks[0].kind else {
+            return XCTFail("expected paragraph, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertEqual(text.plainText, "i")
+        XCTAssertTrue(text.runs.contains { $0.text == "i" && $0.style.contains(.italic) },
+                      "expected an italic 'i' run, got \(text.runs)")
+        XCTAssertEqual(tv?.caretOffset, 1)
+    }
 }

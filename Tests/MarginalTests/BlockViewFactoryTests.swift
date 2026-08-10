@@ -57,6 +57,7 @@ final class BlockViewFactoryTests: XCTestCase {
             func blockTextViewDidPressTab(_ v: BlockTextView, backward: Bool) {}
             func blockTextView(_ v: BlockTextView, moveFocusVertically up: Bool, caretX: CGFloat) {}
             func blockTextView(_ v: BlockTextView, selectionEscapedBoundary up: Bool) {}
+            func blockTextView(_ v: BlockTextView, didToggleStyle t: InlineText, selection: NSRange) {}
         }
         let sink = Sink()
         for kind: BlockKind in [.paragraph(InlineText("p")), .divider,

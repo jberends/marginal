@@ -236,12 +236,16 @@ final class BlockEditorViewController: NSViewController {
 extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
     /// A shorthand/autoformat trigger is *only* ever the trailing character that was just
     /// inserted (a space closes `"# "`/`"- "`/`"1. "`/etc., a dash closes `"---"`, a backtick
-    /// closes `` ` `` /``` ``` ``` ```). Gating on this (plus the edit having been a net
-    /// insertion, not a deletion) is what stops a backspace that happens to land on a
-    /// shorthand-shaped string -- e.g. deleting "answer- " down to "- " -- from spuriously
-    /// converting the block.
+    /// closes `` ` `` /``` ``` ``` ```, and an asterisk/tilde closes an inline
+    /// `**bold**`/`*italic*`/`~~strikethrough~~` pattern for `InlineAutoformat`). Gating on
+    /// this (plus the edit having been a net insertion, not a deletion) is what stops a
+    /// backspace that happens to land on a shorthand-shaped string -- e.g. deleting
+    /// "answer- " down to "- " -- from spuriously converting the block. Accepting "*"/"~" here
+    /// is safe for block-level shorthand too: `BlockEditEngine.shorthandKind` never matches a
+    /// plain text ending in either, so it's a no-op for that path and only unlocks
+    /// `InlineAutoformat.convertCompletedPattern` below.
     private static func isShorthandTriggerChar(_ character: Character?) -> Bool {
-        character == " " || character == "-" || character == "`"
+        character == " " || character == "-" || character == "`" || character == "*" || character == "~"
     }
 
     func blockTextView(_ view: BlockTextView, didEditInlineText text: InlineText) {
@@ -324,6 +328,23 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
 
     func blockTextView(_ view: BlockTextView, selectionEscapedBoundary up: Bool) {
         // Selection escalation across block boundaries is Task 14 -- stubbed for now.
+    }
+
+    /// Persists a ⌘B/⌘I/⌘U/⌘⇧S style toggle's already-computed `text` into the document model,
+    /// then re-renders `view` (through `BlockViewFactory`, via `render(_:asKind:baseFont:)`) so
+    /// the new styling is actually visible, and restores `selection` -- `render` replaces the
+    /// text storage wholesale, which would otherwise silently collapse the selection to nothing.
+    /// No shorthand/autoformat check here: a style toggle never changes `plainText`, so none of
+    /// those triggers can apply.
+    func blockTextView(_ view: BlockTextView, didToggleStyle text: InlineText, selection: NSRange) {
+        guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
+        var blocks = document.blocks
+        blocks[index].kind = blocks[index].kind.replacingInlineText(text)
+        document = BlockDocument(blocks: blocks)
+        previousPlainText[blockID] = text.plainText
+        onDocumentChange?(document)
+        view.render(text, asKind: document.blocks[index].kind, baseFont: baseFont)
+        view.setSelectedRange(selection)
     }
 }
 

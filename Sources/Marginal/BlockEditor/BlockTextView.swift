@@ -18,6 +18,13 @@ protocol BlockTextViewDelegate: AnyObject {
     func blockTextViewDidPressTab(_ view: BlockTextView, backward: Bool)
     func blockTextView(_ view: BlockTextView, moveFocusVertically up: Bool, caretX: CGFloat)
     func blockTextView(_ view: BlockTextView, selectionEscapedBoundary up: Bool)
+    /// A ⌘B/⌘I/⌘U/⌘⇧S style toggle (see `BlockTextView.toggleStyleBold(_:)` etc.) already
+    /// computed `text` (the block's `InlineText` with `style` toggled over the selection) --
+    /// the delegate persists it into the document model, re-renders `view` through
+    /// `BlockViewFactory` (so the semibold/italic/underline/strikethrough styling actually
+    /// shows), and restores `selection` since re-rendering replaces the text storage and would
+    /// otherwise collapse the selection.
+    func blockTextView(_ view: BlockTextView, didToggleStyle text: InlineText, selection: NSRange)
 }
 
 /// One block's text view. Renders a single block's `InlineText` as an attributed string and
@@ -131,6 +138,32 @@ final class BlockTextView: NSTextView {
     var caretOffset: Int {
         get { selectedRange().location }
         set { setSelectedRange(NSRange(location: newValue, length: 0)) }
+    }
+
+    // MARK: - Style toggles (⌘B / ⌘I / ⌘U / ⌘⇧S)
+
+    /// These are plain `@objc` menu-action methods (not part of the command-interception
+    /// dispatch above -- they're never routed through `doCommand(by:)`, AppKit invokes them
+    /// directly via the responder chain from `Format` menu items whose `action` names them).
+    /// Each computes the current selection, toggles `style` over it on the *model*
+    /// (`InlineAutoformat.toggling`, operating on `currentInlineText` read back from this
+    /// view's own text storage), and hands the result to `blockDelegate` -- this view never
+    /// hand-patches its own attributed string for a toggle, `didToggleStyle` re-renders it
+    /// through `BlockViewFactory` so semibold/italic/underline/strikethrough all match the
+    /// design system (see the brief's design-constraints note on why bold means semibold, not
+    /// the `NSFontManager` bold trait).
+    @objc func toggleStyleBold(_ sender: Any?) { toggleStyle(.bold) }
+    @objc func toggleStyleItalic(_ sender: Any?) { toggleStyle(.italic) }
+    @objc func toggleStyleUnderline(_ sender: Any?) { toggleStyle(.underline) }
+    @objc func toggleStyleStrikethrough(_ sender: Any?) { toggleStyle(.strikethrough) }
+
+    private func toggleStyle(_ style: InlineStyle) {
+        let selection = selectedRange()
+        let text = currentInlineText
+        guard selection.location >= 0, selection.location + selection.length <= text.length else { return }
+        let range = selection.location..<(selection.location + selection.length)
+        let toggled = InlineAutoformat.toggling(text, range: range, style: style)
+        blockDelegate?.blockTextView(self, didToggleStyle: toggled, selection: selection)
     }
 
     // MARK: - Command interception

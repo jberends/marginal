@@ -164,6 +164,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
+        let formatMenuItem = NSMenuItem()
+        let formatMenu = NSMenu(title: "Format")
+        formatMenu.addItem(withTitle: "Bold", action: #selector(BlockTextView.toggleStyleBold(_:)), keyEquivalent: "b")
+        formatMenu.addItem(withTitle: "Italic", action: #selector(BlockTextView.toggleStyleItalic(_:)), keyEquivalent: "i")
+        formatMenu.addItem(withTitle: "Underline", action: #selector(BlockTextView.toggleStyleUnderline(_:)), keyEquivalent: "u")
+        // NOTE: ⌘⇧S collides with File > "Save As…" (keyEquivalent "S", added above). AppKit
+        // resolves duplicate key-equivalents to the earlier menu item in traversal order, so
+        // Save As keeps the ⌘⇧S keystroke and this item is reachable by menu click / responder
+        // dispatch but not by the key combo itself. Implemented as the brief specifies; the
+        // collision is a known follow-up for later polish, not something to fix by rebinding
+        // Save As.
+        formatMenu.addItem(withTitle: "Strikethrough", action: #selector(BlockTextView.toggleStyleStrikethrough(_:)), keyEquivalent: "S")
+        formatMenuItem.submenu = formatMenu
+        mainMenu.addItem(formatMenuItem)
+
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
