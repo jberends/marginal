@@ -26,10 +26,15 @@ enum BlockViewFactory {
             return [.font: font, .foregroundColor: NSColor.labelColor]
 
         case .codeBlock:
-            // Whole-block mono text at full size -- the 0.85x scale-down is reserved for an
-            // *inline* code run sitting inside otherwise-regular text.
-            let font = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular)
-            return [.font: font, .foregroundColor: NSColor.labelColor]
+            // A full code block renders at 0.85x with 1.5x line height, inside its own rounded
+            // card (see `CodeBlockCardView`) -- unlike an *inline* code run sitting inside
+            // otherwise-regular text, which also uses 0.85x but stays at the paragraph's own
+            // line height and gets its background from a per-character `.backgroundColor`
+            // instead of a card.
+            let font = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.85, weight: .regular)
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineHeightMultiple = 1.5
+            return [.font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraphStyle]
 
         case .paragraph, .listItem, .quote, .table, .divider:
             return [.font: baseFont, .foregroundColor: NSColor.labelColor]
@@ -105,7 +110,9 @@ enum BlockViewFactory {
             return makeTextView(text: text, kind: block.kind, baseFont: baseFont, blockID: block.id, textDelegate: textDelegate)
 
         case .codeBlock(_, let code):
-            return makeTextView(text: InlineText(code), kind: block.kind, baseFont: baseFont, blockID: block.id, textDelegate: textDelegate)
+            let textView = makeTextView(text: InlineText(code), kind: block.kind, baseFont: baseFont, blockID: block.id, textDelegate: textDelegate)
+            applyCodeHighlighting(to: textView, code: code)
+            return CodeBlockCardView(textView: textView, baseFont: baseFont)
 
         case .quote(let text):
             let textView = makeTextView(text: text, kind: block.kind, baseFont: baseFont, blockID: block.id, textDelegate: textDelegate)
@@ -140,6 +147,27 @@ enum BlockViewFactory {
         }
     }
 
+    /// Re-applies `MarkdownParser.parseCodeHighlightTokens` coloring over a code block's text
+    /// storage -- shared between the initial factory render above and the document controller's
+    /// re-render after every edit (Task 12), so the two paths can never drift. Token kind -> color
+    /// mirrors `MarkdownStyler`'s reference mapping exactly (`.string`/`.comment`/`.number`; any
+    /// other kind gets no color override).
+    static func applyCodeHighlighting(to textView: BlockTextView, code: String) {
+        guard let storage = textView.textStorage else { return }
+        for token in MarkdownParser.parseCodeHighlightTokens(in: code) {
+            let nsRange = NSRange(token.range, in: code)
+            guard nsRange.location != NSNotFound, nsRange.location + nsRange.length <= storage.length else { continue }
+
+            let tokenColor: NSColor
+            switch token.kind {
+            case .string: tokenColor = DesignPalette.synString
+            case .comment: tokenColor = DesignPalette.synComment
+            case .number: tokenColor = DesignPalette.synNumber
+            }
+            storage.addAttribute(.foregroundColor, value: tokenColor, range: nsRange)
+        }
+    }
+
     private static func makeTextView(text: InlineText, kind: BlockKind, baseFont: NSFont, blockID: UUID, textDelegate: BlockTextViewDelegate) -> BlockTextView {
         let textView = BlockTextView()
         textView.blockID = blockID
@@ -162,6 +190,9 @@ enum BlockViewFactory {
         }
         if let quote = wrapper as? QuoteWrapperView {
             return quote.textView
+        }
+        if let codeCard = wrapper as? CodeBlockCardView {
+            return codeCard.textView
         }
         return nil
     }
@@ -249,6 +280,39 @@ final class QuoteWrapperView: NSView {
             textView.trailingAnchor.constraint(equalTo: trailingAnchor),
             textView.topAnchor.constraint(equalTo: topAnchor),
             textView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+/// Wraps a code block's `BlockTextView` in a rounded `DesignPalette.surfaceCode` card, following
+/// the `QuoteWrapperView`/`ListItemWrapperView` pattern -- the card's fill + 10pt corner radius
+/// replaces the per-character background an *inline* code run gets, and the text is inset by
+/// 1.375em on every side (Notion's code-block padding).
+final class CodeBlockCardView: NSView {
+    let textView: BlockTextView
+
+    init(textView: BlockTextView, baseFont: NSFont) {
+        self.textView = textView
+        super.init(frame: .zero)
+
+        let contentInset = baseFont.pointSize * 1.375
+
+        wantsLayer = true
+        layer?.backgroundColor = DesignPalette.surfaceCode.cgColor
+        layer?.cornerRadius = 10
+
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(textView)
+
+        NSLayoutConstraint.activate([
+            textView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: contentInset),
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -contentInset),
+            textView.topAnchor.constraint(equalTo: topAnchor, constant: contentInset),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -contentInset)
         ])
     }
 

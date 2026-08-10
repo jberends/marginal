@@ -256,10 +256,12 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
         // rebuilding the `.codeBlock` case directly from the text view's raw string. Shorthand/
         // autoformat never apply inside a code block.
         if case .codeBlock(let language, _) = document.blocks[index].kind {
+            let code = view.string
             var blocks = document.blocks
-            blocks[index].kind = .codeBlock(language: language, view.string)
+            blocks[index].kind = .codeBlock(language: language, code)
             document = BlockDocument(blocks: blocks)
-            previousPlainText[blockID] = view.string
+            previousPlainText[blockID] = code
+            BlockViewFactory.applyCodeHighlighting(to: view, code: code)
             onDocumentChange?(document)
             return
         }
@@ -293,13 +295,41 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
         }
     }
 
+    /// A code block has no `InlineText` -- `BlockEditEngine.split` treats it (like any block
+    /// whose `inlineText` is nil) as a no-op, so Enter inside one is special-cased here to insert
+    /// a literal newline instead: `insertText` goes through the real `NSTextView` insertion path
+    /// (moving the caret past the inserted character itself) and fires `textDidChange`, which
+    /// routes into `blockTextView(_:didEditInlineText:)`'s `.codeBlock` branch above to persist
+    /// the new string and re-run syntax highlighting -- the same path ordinary typing uses, so
+    /// there is nothing extra to reconcile here.
     func blockTextViewDidPressEnter(_ view: BlockTextView, atOffset offset: Int) {
-        guard let blockID = view.blockID else { return }
+        guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
+        if case .codeBlock = document.blocks[index].kind {
+            view.insertText("\n", replacementRange: NSRange(location: offset, length: 0))
+            return
+        }
         apply(BlockEditEngine.split(document, at: Caret(blockID: blockID, offset: offset)))
     }
 
+    /// Backspace at offset 0 of a code block converts it in place to a `.paragraph` holding the
+    /// code's raw text -- unlike a normal paragraph/heading/quote, it never merges into the
+    /// previous block here (`BlockEditEngine.backspaceAtStart`'s own `previous.kind.inlineText`
+    /// guard already treats a *previous* code block this way; this is the symmetric case where
+    /// the block *being backspaced into* is itself a code block).
     func blockTextViewDidBackspaceAtStart(_ view: BlockTextView) {
-        guard let blockID = view.blockID else { return }
+        guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
+        if case .codeBlock(_, let code) = document.blocks[index].kind {
+            let oldBlocks = document.blocks
+            var blocks = document.blocks
+            blocks[index].kind = .paragraph(InlineText(code))
+            document = BlockDocument(blocks: blocks)
+            diffAndPatch(old: oldBlocks, new: document.blocks)
+            updateListMarkers()
+            previousPlainText[blockID] = code
+            onDocumentChange?(document)
+            focusBlock(blockID, caretOffset: 0)
+            return
+        }
         apply(BlockEditEngine.backspaceAtStart(document, in: blockID))
     }
 

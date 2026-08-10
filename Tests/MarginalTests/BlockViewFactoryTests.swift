@@ -67,4 +67,29 @@ final class BlockViewFactoryTests: XCTestCase {
                                                   textDelegate: sink), String(describing: kind))
         }
     }
+
+    @MainActor
+    func testCodeBlockViewIsCardWithMonoTextAt85Percent() {
+        final class Sink: NSObject, BlockTextViewDelegate {
+            func blockTextView(_ v: BlockTextView, didEditInlineText t: InlineText) {}
+            func blockTextViewDidPressEnter(_ v: BlockTextView, atOffset o: Int) {}
+            func blockTextViewDidBackspaceAtStart(_ v: BlockTextView) {}
+            func blockTextViewDidPressTab(_ v: BlockTextView, backward: Bool) {}
+            func blockTextView(_ v: BlockTextView, moveFocusVertically up: Bool, caretX: CGFloat) {}
+            func blockTextView(_ v: BlockTextView, selectionEscapedBoundary up: Bool) {}
+            func blockTextView(_ v: BlockTextView, didToggleStyle t: InlineText, selection: NSRange) {}
+        }
+        let sink = Sink()
+        let wrapper = BlockViewFactory.view(for: Block(kind: .codeBlock(language: nil, "x")),
+                                            baseFont: .systemFont(ofSize: 16), textDelegate: sink)
+        XCTAssertTrue(wrapper is CodeBlockCardView, "expected a CodeBlockCardView, got \(type(of: wrapper))")
+
+        guard let textView = BlockViewFactory.textView(in: wrapper) else {
+            return XCTFail("expected textView(in:) to find the BlockTextView inside the code card")
+        }
+        let font = textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize ?? 0, 13.6, accuracy: 0.01)
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.monoSpace) ?? false || font?.isFixedPitch ?? false,
+                     "expected a monospaced font, got \(String(describing: font))")
+    }
 }

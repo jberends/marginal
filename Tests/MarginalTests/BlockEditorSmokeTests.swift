@@ -193,4 +193,47 @@ final class BlockEditorSmokeTests: XCTestCase {
                       "expected an italic 'i' run, got \(text.runs)")
         XCTAssertEqual(tv?.caretOffset, 1)
     }
+
+    // MARK: - Task 12: code block card
+
+    func makeCodeEditor(_ code: String) -> (BlockEditorViewController, NSWindow) {
+        let doc = BlockDocument(blocks: [Block(kind: .codeBlock(language: nil, code))])
+        let vc = BlockEditorViewController(document: doc, baseFont: .systemFont(ofSize: 16))
+        let window = NSWindow(contentRect: .init(x: -20000, y: -20000, width: 700, height: 600),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = vc
+        vc.view.layoutSubtreeIfNeeded()
+        return (vc, window)
+    }
+
+    /// Enter inside a code block must insert a literal newline into the *same* block instead of
+    /// splitting it (`BlockEditEngine.split` is for text blocks with an `InlineText` -- code
+    /// blocks are raw strings and stay a single block across Enter).
+    func testEnterInCodeBlockInsertsNewlineWithoutSplitting() {
+        let (vc, _) = makeCodeEditor("a")
+        vc.focusBlock(vc.document.blocks[0].id, caretOffset: 1)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.insertNewline(nil)
+        tv?.insertText("b", replacementRange: tv?.selectedRange() ?? NSRange(location: 0, length: 0))
+
+        XCTAssertEqual(vc.document.blocks.count, 1)
+        guard case .codeBlock(_, let code) = vc.document.blocks[0].kind else {
+            return XCTFail("expected a codeBlock, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertEqual(code, "a\nb")
+    }
+
+    /// Backspace at offset 0 of a code block converts it in place to a `.paragraph` holding the
+    /// code text -- it must not merge into the previous block the way a normal paragraph would.
+    func testBackspaceAtStartOfCodeBlockConvertsToParagraph() {
+        let (vc, _) = makeCodeEditor("a")
+        vc.focusBlock(vc.document.blocks[0].id, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.deleteBackward(nil)
+
+        XCTAssertEqual(vc.document.blocks.count, 1)
+        XCTAssertEqual(vc.document.blocks[0].kind, .paragraph(InlineText("a")))
+    }
 }
