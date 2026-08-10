@@ -132,12 +132,20 @@ final class BlockEditorSmokeTests: XCTestCase {
     /// inline text for that range, and pressing it again over the same selection must remove
     /// it -- the toggle routes through `InlineAutoformat.toggling` on the model, then
     /// re-renders through `BlockViewFactory` so the document stays the single source of truth.
+    /// Also guards the two other load-bearing parts of the round-trip: `onDocumentChange` must
+    /// fire (the host app persists on this signal), and the selection must survive the
+    /// `render(...)` call inside `didToggleStyle` -- `render` replaces the text storage
+    /// wholesale, so this pins the ordering of `view.render(...)` then
+    /// `view.setSelectedRange(...)` against a future accidental reorder.
     func testToggleStyleBoldOnSelectionTogglesModel() {
         let (vc, _) = makeEditor("ab")
         let blockID = vc.document.blocks[0].id
         vc.focusBlock(blockID, caretOffset: 0)
         let tv = vc.view.window?.firstResponder as? BlockTextView
         tv?.setSelectedRange(NSRange(location: 0, length: 1))
+
+        var changeCount = 0
+        vc.onDocumentChange = { _ in changeCount += 1 }
 
         tv?.toggleStyleBold(nil)
 
@@ -146,6 +154,9 @@ final class BlockEditorSmokeTests: XCTestCase {
         }
         XCTAssertTrue(text.runs.contains { $0.text == "a" && $0.style.contains(.bold) },
                       "expected a bold 'a' run, got \(text.runs)")
+        XCTAssertEqual(changeCount, 1, "expected onDocumentChange to fire on toggle")
+        XCTAssertEqual(tv?.selectedRange(), NSRange(location: 0, length: 1),
+                       "expected the selection to survive the re-render")
 
         tv?.setSelectedRange(NSRange(location: 0, length: 1))
         tv?.toggleStyleBold(nil)
@@ -155,6 +166,9 @@ final class BlockEditorSmokeTests: XCTestCase {
         }
         XCTAssertFalse(text2.runs.contains { $0.text.contains("a") && $0.style.contains(.bold) },
                        "expected bold removed, got \(text2.runs)")
+        XCTAssertEqual(changeCount, 2, "expected onDocumentChange to fire again on the second toggle")
+        XCTAssertEqual(tv?.selectedRange(), NSRange(location: 0, length: 1),
+                       "expected the selection to survive the second re-render")
         XCTAssertEqual(text2.plainText, "ab")
     }
 

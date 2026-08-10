@@ -159,6 +159,7 @@ final class BlockTextView: NSTextView {
 
     private func toggleStyle(_ style: InlineStyle) {
         let selection = selectedRange()
+        guard selection.length > 0 else { return }
         let text = currentInlineText
         guard selection.location >= 0, selection.location + selection.length <= text.length else { return }
         let range = selection.location..<(selection.location + selection.length)
