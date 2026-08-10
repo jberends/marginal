@@ -104,6 +104,22 @@ final class BlockEditorViewController: NSViewController {
         focusedBlockID = id
     }
 
+    /// Focuses one cell of a `.table` block by coordinate -- tables have no single text view
+    /// (`BlockViewFactory.textView(in:)` returns nil for them), so `focusBlock(_:caretOffset:)`
+    /// can't reach into one; this is the table-specific equivalent.
+    func focusTableCell(_ blockID: UUID, _ cell: TableEditEngine.Cell) {
+        guard let tableView = tableView(for: blockID) else { return }
+        tableView.focus(cell: cell)
+        focusedBlockID = blockID
+    }
+
+    /// The `BlockTableView` wrapper for a `.table` block, if `blockID` names one -- exposed so
+    /// tests (and this controller's own table-editing callbacks) can reach cell-level state
+    /// without knowing every other block kind's wrapper shape.
+    func tableView(for blockID: UUID) -> BlockTableView? {
+        blockViews[blockID] as? BlockTableView
+    }
+
     // MARK: - Rendering
 
     private func renderAll() {
@@ -127,8 +143,40 @@ final class BlockEditorViewController: NSViewController {
         if let textView = BlockViewFactory.textView(in: wrapper) {
             textView.delegate = self
         }
+        if let tableView = wrapper as? BlockTableView {
+            let blockID = block.id
+            tableView.onCellEdit = { [weak self] cell, text in
+                self?.applyTableCellEdit(blockID: blockID, cell: cell, text: text)
+            }
+            tableView.onAppendRow = { [weak self] in
+                self?.appendTableRow(blockID: blockID)
+            }
+        }
         wrapper.translatesAutoresizingMaskIntoConstraints = false
         return wrapper
+    }
+
+    /// A table cell's edit: applies `TableEditEngine.updateCell` and fires `onDocumentChange` --
+    /// the cell's own text storage already shows the edit (the user just typed it), so unlike
+    /// `apply(_:)` there is nothing to re-render or refocus here.
+    private func applyTableCellEdit(blockID: UUID, cell: TableEditEngine.Cell, text: InlineText) {
+        document = TableEditEngine.updateCell(document, blockID: blockID, cell: cell, content: text)
+        onDocumentChange?(document)
+    }
+
+    /// Tab past a table's last cell: applies `TableEditEngine.appendRow` to the document. That
+    /// changes the block's `BlockKind` (one more row), so `diffAndPatch` tears down the old
+    /// `BlockTableView` and rebuilds a fresh one straight from the updated document -- the new
+    /// instance already has the appended row's (empty) cell views built in, so all that's left is
+    /// focusing its first cell.
+    private func appendTableRow(blockID: UUID) {
+        let oldBlocks = document.blocks
+        document = TableEditEngine.appendRow(document, blockID: blockID)
+        diffAndPatch(old: oldBlocks, new: document.blocks)
+        updateListMarkers()
+        onDocumentChange?(document)
+        guard case .table(_, _, let rows) = document[blockID]?.kind else { return }
+        tableView(for: blockID)?.focus(cell: TableEditEngine.Cell(row: rows.count - 1, column: 0))
     }
 
     /// Every block's wrapper spans the stack's full width ("full-width blocks" -- `NSStackView`'s

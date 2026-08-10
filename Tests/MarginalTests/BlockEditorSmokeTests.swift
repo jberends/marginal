@@ -236,4 +236,80 @@ final class BlockEditorSmokeTests: XCTestCase {
         XCTAssertEqual(vc.document.blocks.count, 1)
         XCTAssertEqual(vc.document.blocks[0].kind, .paragraph(InlineText("a")))
     }
+
+    // MARK: - Task 13: in-place table editing
+
+    func makeTableEditor() -> (BlockEditorViewController, NSWindow, UUID) {
+        let doc = BlockDocument(blocks: [
+            Block(kind: .table(
+                alignments: [.left, .left],
+                header: [InlineText("A"), InlineText("B")],
+                rows: [[InlineText("1"), InlineText("2")]]
+            ))
+        ])
+        let vc = BlockEditorViewController(document: doc, baseFont: .systemFont(ofSize: 16))
+        let window = NSWindow(contentRect: .init(x: -20000, y: -20000, width: 700, height: 600),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = vc
+        vc.view.layoutSubtreeIfNeeded()
+        return (vc, window, vc.document.blocks[0].id)
+    }
+
+    /// Tab from the header's first cell walks header columns before dropping into the body:
+    /// header col 0 -> header col 1 -> body row 0, col 0. Verifies focus lands on the actual
+    /// text view for that coordinate, not just some non-nil responder.
+    func testTableTabNavigatesHeaderIntoBody() {
+        let (vc, _, tableID) = makeTableEditor()
+        vc.focusTableCell(tableID, TableEditEngine.Cell(row: nil, column: 0))
+        XCTAssertNotNil(vc.view.window?.firstResponder as? BlockTextView)
+
+        (vc.view.window?.firstResponder as? BlockTextView)?.insertTab(nil)
+        (vc.view.window?.firstResponder as? BlockTextView)?.insertTab(nil)
+
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+        guard let tableView = vc.tableView(for: tableID) else { return XCTFail("expected a BlockTableView") }
+        let bodyCell = TableEditEngine.Cell(row: 0, column: 0)
+        XCTAssertTrue(tv === tableView.textView(for: bodyCell), "expected focus on body cell (0,0)")
+    }
+
+    /// Typing into a cell must route `TableEditEngine.updateCell` through `onDocumentChange` --
+    /// the document stays the single source of truth, the cell's own text storage is not the
+    /// record of truth.
+    func testTableCellEditUpdatesDocument() {
+        let (vc, _, tableID) = makeTableEditor()
+        vc.focusTableCell(tableID, TableEditEngine.Cell(row: 0, column: 1))
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        var changeCount = 0
+        vc.onDocumentChange = { _ in changeCount += 1 }
+        tv?.insertText("x", replacementRange: NSRange(location: 0, length: tv?.string.count ?? 0))
+
+        guard case .table(_, _, let rows) = vc.document.blocks[0].kind else {
+            return XCTFail("expected a table, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertEqual(rows[0][1].plainText, "x")
+        XCTAssertGreaterThanOrEqual(changeCount, 1, "expected onDocumentChange to fire on cell edit")
+    }
+
+    /// Tab from the very last cell (last column of the last body row) appends a fresh, all-empty
+    /// row to the document's table and moves focus into its first cell.
+    func testTableTabFromLastCellAppendsRow() {
+        let (vc, _, tableID) = makeTableEditor()
+        vc.focusTableCell(tableID, TableEditEngine.Cell(row: 0, column: 1))
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.insertTab(nil)
+
+        guard case .table(_, let header, let rows) = vc.document.blocks[0].kind else {
+            return XCTFail("expected a table, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertEqual(rows.count, 2, "expected a new row to be appended")
+        XCTAssertEqual(rows[1], Array(repeating: InlineText(""), count: header.count),
+                       "expected the new row's cells to all be empty")
+
+        guard let tableView = vc.tableView(for: tableID) else { return XCTFail("expected a BlockTableView") }
+        let newCell = TableEditEngine.Cell(row: 1, column: 0)
+        let focused = vc.view.window?.firstResponder as? BlockTextView
+        XCTAssertTrue(focused === tableView.textView(for: newCell), "expected focus to move into the new row's first cell")
+    }
 }

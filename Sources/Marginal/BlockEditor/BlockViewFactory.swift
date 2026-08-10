@@ -125,11 +125,8 @@ enum BlockViewFactory {
         case .divider:
             return DividerView()
 
-        case .table:
-            // Table rendering (grid layout, per-cell text views) is a later task; for now a
-            // block still needs *some* non-nil view so the document controller has a stable
-            // per-block view to insert.
-            return NSView()
+        case .table(let alignments, let header, let rows):
+            return BlockTableView(blockID: block.id, alignments: alignments, header: header, rows: rows, baseFont: baseFont)
         }
     }
 
