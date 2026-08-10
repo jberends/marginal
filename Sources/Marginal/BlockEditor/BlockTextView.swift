@@ -18,6 +18,13 @@ protocol BlockTextViewDelegate: AnyObject {
     func blockTextViewDidPressTab(_ view: BlockTextView, backward: Bool)
     func blockTextView(_ view: BlockTextView, moveFocusVertically up: Bool, caretX: CGFloat)
     func blockTextView(_ view: BlockTextView, selectionEscapedBoundary up: Bool)
+    /// Escape was pressed while `view` is focused -- the delegate selects `view`'s whole block
+    /// (see `BlockSelectionController`).
+    func blockTextViewDidPressEscape(_ view: BlockTextView)
+    /// A mouse click landed in `view` -- reported *before* the click is otherwise handled (see
+    /// `mouseDown(with:)` below) so the delegate can clear an active whole-block selection and
+    /// return to normal text editing.
+    func blockTextViewDidReceiveClick(_ view: BlockTextView)
     /// A ⌘B/⌘I/⌘U/⌘⇧S style toggle (see `BlockTextView.toggleStyleBold(_:)` etc.) already
     /// computed `text` (the block's `InlineText` with `style` toggled over the selection) --
     /// the delegate persists it into the document model, re-renders `view` through
@@ -241,6 +248,17 @@ final class BlockTextView: NSTextView {
         super.moveDownAndModifySelection(sender)
     }
 
+    override func cancelOperation(_ sender: Any?) {
+        blockDelegate?.blockTextViewDidPressEscape(self)
+    }
+
+    /// Any click clears an active whole-block selection (see `BlockSelectionController`) before
+    /// falling through to `super.mouseDown`, which does the real hit-testing/caret placement.
+    override func mouseDown(with event: NSEvent) {
+        blockDelegate?.blockTextViewDidReceiveClick(self)
+        super.mouseDown(with: event)
+    }
+
     /// The real key-event path (`interpretKeyEvents(_:)`) reaches every command above only
     /// through here, never through the concrete method directly -- so this just routes each
     /// selector into its concrete override (see the comment above) and forwards anything else
@@ -263,6 +281,8 @@ final class BlockTextView: NSTextView {
             moveUpAndModifySelection(nil)
         case #selector(NSResponder.moveDownAndModifySelection(_:)):
             moveDownAndModifySelection(nil)
+        case #selector(NSResponder.cancelOperation(_:)):
+            cancelOperation(nil)
         default:
             super.doCommand(by: selector)
         }

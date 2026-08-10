@@ -57,6 +57,8 @@ final class BlockViewFactoryTests: XCTestCase {
             func blockTextViewDidPressTab(_ v: BlockTextView, backward: Bool) {}
             func blockTextView(_ v: BlockTextView, moveFocusVertically up: Bool, caretX: CGFloat) {}
             func blockTextView(_ v: BlockTextView, selectionEscapedBoundary up: Bool) {}
+            func blockTextViewDidPressEscape(_ v: BlockTextView) {}
+            func blockTextViewDidReceiveClick(_ v: BlockTextView) {}
             func blockTextView(_ v: BlockTextView, didToggleStyle t: InlineText, selection: NSRange) {}
         }
         let sink = Sink()
@@ -77,6 +79,8 @@ final class BlockViewFactoryTests: XCTestCase {
             func blockTextViewDidPressTab(_ v: BlockTextView, backward: Bool) {}
             func blockTextView(_ v: BlockTextView, moveFocusVertically up: Bool, caretX: CGFloat) {}
             func blockTextView(_ v: BlockTextView, selectionEscapedBoundary up: Bool) {}
+            func blockTextViewDidPressEscape(_ v: BlockTextView) {}
+            func blockTextViewDidReceiveClick(_ v: BlockTextView) {}
             func blockTextView(_ v: BlockTextView, didToggleStyle t: InlineText, selection: NSRange) {}
         }
         let sink = Sink()

@@ -312,4 +312,130 @@ final class BlockEditorSmokeTests: XCTestCase {
         let focused = vc.view.window?.firstResponder as? BlockTextView
         XCTAssertTrue(focused === tableView.textView(for: newCell), "expected focus to move into the new row's first cell")
     }
+
+    // MARK: - Task 14: whole-block selection escalation
+
+    /// Shift+Down at the last (here, only) visual line of the focused block's text escalates
+    /// text selection into whole-block selection spanning the focused block and its downward
+    /// neighbor -- routed through `moveDownAndModifySelection` -> the `selectionEscapedBoundary`
+    /// delegate hook -> `BlockSelectionController.beginSelection`.
+    func testShiftDownAtLastVisualLineEscalatesToBlockSelection() {
+        let (vc, _) = makeEditor("alpha\n\nbeta")
+        let ids = vc.document.blocks.map(\.id)
+        vc.focusBlock(ids[0], caretOffset: 3)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.moveDownAndModifySelection(nil)
+
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, ids)
+    }
+
+    /// Shift+Up at the first visual line escalates upward, selecting the focused block and its
+    /// upward neighbor.
+    func testShiftUpAtFirstVisualLineEscalatesToBlockSelection() {
+        let (vc, _) = makeEditor("alpha\n\nbeta")
+        let ids = vc.document.blocks.map(\.id)
+        vc.focusBlock(ids[1], caretOffset: 2)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.moveUpAndModifySelection(nil)
+
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, ids)
+    }
+
+    /// Escape while a block's text view is focused selects that whole block (a single-block
+    /// selection), routed through `BlockTextView.cancelOperation(_:)` ->
+    /// `blockTextViewDidPressEscape`.
+    func testEscapeSelectsWholeFocusedBlock() {
+        let (vc, _) = makeEditor("alpha\n\nbeta")
+        let firstID = vc.document.blocks[0].id
+        vc.focusBlock(firstID, caretOffset: 3)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.cancelOperation(nil)
+
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, [firstID])
+    }
+
+    /// Backspace at offset 0 whose merge target has no inline text (a divider here) cannot merge
+    /// -- `BlockEditEngine.backspaceAtStart` carets onto the divider instead, and the controller
+    /// must enter whole-block selection on it rather than calling `focusBlock` (there's no text
+    /// view to focus).
+    func testBackspaceOntoDividerEntersBlockSelectionInsteadOfFocusing() {
+        let doc = BlockDocument(blocks: [Block(kind: .divider), Block(kind: .paragraph(InlineText("x")))])
+        let vc = BlockEditorViewController(document: doc, baseFont: .systemFont(ofSize: 16))
+        let window = NSWindow(contentRect: .init(x: -20000, y: -20000, width: 700, height: 600),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = vc
+        vc.view.layoutSubtreeIfNeeded()
+        let dividerID = doc.blocks[0].id
+        let paragraphID = doc.blocks[1].id
+
+        vc.focusBlock(paragraphID, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+        tv?.deleteBackward(nil)
+
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, [dividerID])
+        XCTAssertNil(vc.view.window?.firstResponder as? BlockTextView, "expected no text view focused")
+    }
+
+    /// With a block selection active, ⌫ (routed through `deleteBlockSelection()`) removes exactly
+    /// the selected blocks from `document`, clears the selection, and focuses the surviving
+    /// neighbor.
+    func testDeleteBlockSelectionRemovesBlocksAndFocusesNeighbor() {
+        let (vc, _) = makeEditor("alpha\n\nbeta\n\ngamma")
+        let ids = vc.document.blocks.map(\.id)
+        vc.beginBlockSelection(anchor: ids[1], extendingTo: ids[1])
+
+        vc.deleteBlockSelection()
+
+        XCTAssertEqual(vc.document.blocks.map(\.id), [ids[0], ids[2]])
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, [])
+        XCTAssertEqual(vc.focusedBlockID, ids[2])
+    }
+
+    /// With a block selection active, ⌘C (the `copy(_:)` responder action) puts the selection's
+    /// canonical markdown -- exactly `markdownForSelection` -- onto the general pasteboard as
+    /// plain text.
+    func testCopyBlockSelectionPutsMarkdownOnPasteboard() {
+        let (vc, _) = makeEditor("alpha\n\nbeta\n\ngamma")
+        let ids = vc.document.blocks.map(\.id)
+        vc.beginBlockSelection(anchor: ids[0], extendingTo: ids[1])
+        let expected = vc.selectionController.markdownForSelection(in: vc.document)
+
+        vc.copy(nil)
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), expected)
+    }
+
+    /// Any click clears an active block selection and returns to normal text editing --
+    /// `BlockTextView.mouseDown(_:)` reports the click to the delegate before falling through to
+    /// `super.mouseDown`.
+    func testClickClearsBlockSelection() {
+        let (vc, _) = makeEditor("alpha\n\nbeta")
+        let ids = vc.document.blocks.map(\.id)
+        vc.beginBlockSelection(anchor: ids[0], extendingTo: ids[1])
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs.count, 2)
+
+        vc.focusBlock(ids[0], caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+        let event = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [],
+                                        timestamp: 0, windowNumber: vc.view.window?.windowNumber ?? 0,
+                                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        tv?.mouseDown(with: event)
+
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, [])
+    }
+
+    /// A typed character clears an active block selection too.
+    func testTypingClearsBlockSelection() {
+        let (vc, _) = makeEditor("alpha\n\nbeta")
+        let ids = vc.document.blocks.map(\.id)
+        vc.beginBlockSelection(anchor: ids[0], extendingTo: ids[1])
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs.count, 2)
+
+        vc.blockTextView(BlockTextView(), didEditInlineText: InlineText("x"))
+
+        XCTAssertEqual(vc.selectionController.selectedBlockIDs, [])
+    }
 }

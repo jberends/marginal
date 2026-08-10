@@ -12,6 +12,13 @@ final class BlockEditorViewController: NSViewController {
     var onDocumentChange: ((BlockDocument) -> Void)?
     private(set) var focusedBlockID: UUID?
 
+    /// Whole-block selection (Task 14): escalates from ordinary in-block text selection to
+    /// selecting one or more entire blocks. This controller wires the AppKit-side triggers
+    /// (Shift+Up/Down past a block's bounds, Escape, ⌫, ⌘C, click/typing) to the pure
+    /// `BlockSelectionController`, and keeps the selection overlay (`DesignPalette.selection`)
+    /// on each selected block's wrapper view in sync with it.
+    let selectionController = BlockSelectionController()
+
     private var scrollView: NSScrollView!
     private var stackView: NSStackView!
     /// Each block's wrapper view (as returned by `BlockViewFactory.view`), keyed by block id --
@@ -118,6 +125,82 @@ final class BlockEditorViewController: NSViewController {
     /// without knowing every other block kind's wrapper shape.
     func tableView(for blockID: UUID) -> BlockTableView? {
         blockViews[blockID] as? BlockTableView
+    }
+
+    // MARK: - Whole-block selection (Task 14)
+
+    /// Starts (or restarts) whole-block selection from `anchor` to `focus` inclusive, applies the
+    /// selection overlay, and makes this controller the window's first responder so it can
+    /// intercept ⌫/⌘C/Escape while the selection is active (see `keyDown(with:)`/`copy(_:)`
+    /// below) -- no block's text view stays focused during whole-block selection.
+    func beginBlockSelection(anchor: UUID, extendingTo focus: UUID) {
+        selectionController.beginSelection(anchor: anchor, extendingTo: focus, in: document)
+        applySelectionOverlay()
+        focusedBlockID = nil
+        view.window?.makeFirstResponder(self)
+    }
+
+    /// Ends whole-block selection and removes the overlay -- returns to normal text editing.
+    func clearBlockSelection() {
+        guard !selectionController.selectedBlockIDs.isEmpty else { return }
+        selectionController.clear()
+        applySelectionOverlay()
+    }
+
+    /// ⌫ with a block selection active: removes the selected blocks, reconciles the view stack,
+    /// fires `onDocumentChange`, clears the selection, and focuses the returned caret's block.
+    func deleteBlockSelection() {
+        guard !selectionController.selectedBlockIDs.isEmpty else { return }
+        let oldBlocks = document.blocks
+        let (newDocument, caret) = selectionController.deletingSelection(from: document)
+        document = newDocument
+        diffAndPatch(old: oldBlocks, new: document.blocks)
+        updateListMarkers()
+        selectionController.clear()
+        applySelectionOverlay()
+        onDocumentChange?(document)
+        focusBlock(caret.blockID, caretOffset: caret.offset)
+    }
+
+    /// ⌘C with a block selection active: puts the selection's canonical markdown on the general
+    /// pasteboard as plain text. A plain `@objc` responder action (like the style toggles on
+    /// `BlockTextView`) rather than AppDelegate/menu wiring -- menu integration is Task 16.
+    @objc func copy(_ sender: Any?) {
+        guard !selectionController.selectedBlockIDs.isEmpty else { return }
+        let markdown = selectionController.markdownForSelection(in: document)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(markdown, forType: .string)
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    /// While a block selection is active this controller is the first responder (see
+    /// `beginBlockSelection`), so real ⌫/Escape key events land here instead of in any text
+    /// view.
+    override func keyDown(with event: NSEvent) {
+        guard !selectionController.selectedBlockIDs.isEmpty else {
+            super.keyDown(with: event)
+            return
+        }
+        switch event.keyCode {
+        case 51, 117: // delete/backspace, forward-delete
+            deleteBlockSelection()
+        case 53: // escape
+            clearBlockSelection()
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    /// Re-applies the selection overlay to exactly `selectionController.selectedBlockIDs`,
+    /// clearing it from every other block's wrapper view.
+    private func applySelectionOverlay() {
+        let selected = Set(selectionController.selectedBlockIDs)
+        for (id, wrapper) in blockViews {
+            wrapper.wantsLayer = true
+            wrapper.layer?.backgroundColor = selected.contains(id) ? DesignPalette.selection.cgColor : nil
+        }
     }
 
     // MARK: - Rendering
@@ -297,6 +380,7 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
     }
 
     func blockTextView(_ view: BlockTextView, didEditInlineText text: InlineText) {
+        clearBlockSelection()
         guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
 
         // Code blocks have no `InlineText` representation (`replacingInlineText` is a no-op for
@@ -378,7 +462,21 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
             focusBlock(blockID, caretOffset: 0)
             return
         }
-        apply(BlockEditEngine.backspaceAtStart(document, in: blockID))
+
+        let outcome = BlockEditEngine.backspaceAtStart(document, in: blockID)
+        // The Task 5 edge: the outcome carets onto a block whose kind has no inline text
+        // (divider/table/code block) because it can't merge into that block -- there is no text
+        // view to focus there, so enter whole-block selection on it instead.
+        if outcome.document[outcome.caret.blockID]?.kind.inlineText == nil {
+            let oldBlocks = document.blocks
+            document = outcome.document
+            diffAndPatch(old: oldBlocks, new: document.blocks)
+            updateListMarkers()
+            onDocumentChange?(document)
+            beginBlockSelection(anchor: outcome.caret.blockID, extendingTo: outcome.caret.blockID)
+            return
+        }
+        apply(outcome)
     }
 
     func blockTextViewDidPressTab(_ view: BlockTextView, backward: Bool) {
@@ -404,8 +502,27 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
         }
     }
 
+    /// Shift+Up at the focused block's first visual line, or Shift+Down at its last visual line
+    /// (see `BlockTextView.moveUpAndModifySelection`/`moveDownAndModifySelection`): the text
+    /// selection has run out of room to grow inside this block, so it escalates to whole-block
+    /// selection spanning the focused block and its neighbor in that direction. No-op if there is
+    /// no neighbor that way (already at the document's edge).
     func blockTextView(_ view: BlockTextView, selectionEscapedBoundary up: Bool) {
-        // Selection escalation across block boundaries is Task 14 -- stubbed for now.
+        guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
+        let neighborIndex = up ? index - 1 : index + 1
+        guard neighborIndex >= 0, neighborIndex < document.blocks.count else { return }
+        beginBlockSelection(anchor: blockID, extendingTo: document.blocks[neighborIndex].id)
+    }
+
+    /// Escape while `view` is focused selects `view`'s whole block (a single-block selection).
+    func blockTextViewDidPressEscape(_ view: BlockTextView) {
+        guard let blockID = view.blockID else { return }
+        beginBlockSelection(anchor: blockID, extendingTo: blockID)
+    }
+
+    /// Any click clears an active whole-block selection and returns to normal text editing.
+    func blockTextViewDidReceiveClick(_ view: BlockTextView) {
+        clearBlockSelection()
     }
 
     /// Persists a ⌘B/⌘I/⌘U/⌘⇧S style toggle's already-computed `text` into the document model,
