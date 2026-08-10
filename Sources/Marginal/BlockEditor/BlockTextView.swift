@@ -135,96 +135,103 @@ final class BlockTextView: NSTextView {
 
     // MARK: - Command interception
 
-    // NSTextView's own keyDown -> interpretKeyEvents(_:) flow calls `doCommand(by:)`
-    // exclusively for every one of these NSStandardKeyBindingResponding selectors -- it never
-    // calls the concrete action method (insertNewline(_:), deleteBackward(_:), etc.) directly.
-    // Those concrete methods only get invoked some other way (a menu item, an accessibility
-    // action, a test calling them straight on the responder) that bypasses `doCommand(by:)`
-    // entirely, which would silently skip this class's interception below. These thin
-    // overrides route every path through the single `doCommand(by:)` switch, so a direct
-    // call behaves identically to the real key event.
+    // Each concrete NSStandardKeyBindingResponding override below is the single place its
+    // command is intercepted: it makes the decision (is the caret at the boundary that means
+    // "hand this to the document controller?") and, when the answer is no, falls back to the
+    // real `super.<method>(sender)` -- NSTextView's own implementation -- to get normal editing
+    // behavior (actually deleting a character, actually moving the caret up a line, etc.).
+    //
+    // `doCommand(by:)` is *not* a second, independent place this logic lives. NSTextView's own
+    // keyDown -> interpretKeyEvents(_:) flow calls `doCommand(by:)` exclusively for these
+    // selectors -- it never calls the concrete action method directly -- so `doCommand(by:)`
+    // below just dispatches each selector straight into its concrete override. That keeps both
+    // call paths (a real key event, and a direct call to e.g. `deleteBackward(nil)` from a menu
+    // item / accessibility action / test) behaving identically, without the recursion a prior
+    // version of this file had: that version put the decision in `doCommand(by:)` and fell back
+    // to `super.doCommand(by: selector)` on "no", but `NSResponder.doCommand(by:)`'s own default
+    // implementation re-invokes the overridden concrete method (`self.deleteBackward(_:)`, since
+    // that's the dynamic type), which called `doCommand(by:)` again -- an infinite loop that
+    // crashed (`EXC_BAD_ACCESS`) on any mid-block backspace or off-boundary arrow press. Falling
+    // back to `super.<concreteMethod>(sender)` here instead reaches `NSTextView`'s real
+    // implementation directly, so there is nothing left to recurse through.
     override func insertNewline(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        blockDelegate?.blockTextViewDidPressEnter(self, atOffset: selectedRange().location)
     }
 
     override func deleteBackward(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.deleteBackward(_:)))
+        let selection = selectedRange()
+        if selection.location == 0 && selection.length == 0 {
+            blockDelegate?.blockTextViewDidBackspaceAtStart(self)
+            return
+        }
+        super.deleteBackward(sender)
     }
 
     override func insertTab(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.insertTab(_:)))
+        blockDelegate?.blockTextViewDidPressTab(self, backward: false)
     }
 
     override func insertBacktab(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.insertBacktab(_:)))
+        blockDelegate?.blockTextViewDidPressTab(self, backward: true)
     }
 
     override func moveUp(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.moveUp(_:)))
+        if isCaretOnFirstVisualLine {
+            blockDelegate?.blockTextView(self, moveFocusVertically: true, caretX: caretXPosition)
+            return
+        }
+        super.moveUp(sender)
     }
 
     override func moveDown(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.moveDown(_:)))
+        if isCaretOnLastVisualLine {
+            blockDelegate?.blockTextView(self, moveFocusVertically: false, caretX: caretXPosition)
+            return
+        }
+        super.moveDown(sender)
     }
 
     override func moveUpAndModifySelection(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.moveUpAndModifySelection(_:)))
+        if isCaretOnFirstVisualLine {
+            blockDelegate?.blockTextView(self, selectionEscapedBoundary: true)
+            return
+        }
+        super.moveUpAndModifySelection(sender)
     }
 
     override func moveDownAndModifySelection(_ sender: Any?) {
-        doCommand(by: #selector(NSResponder.moveDownAndModifySelection(_:)))
+        if isCaretOnLastVisualLine {
+            blockDelegate?.blockTextView(self, selectionEscapedBoundary: false)
+            return
+        }
+        super.moveDownAndModifySelection(sender)
     }
 
+    /// The real key-event path (`interpretKeyEvents(_:)`) reaches every command above only
+    /// through here, never through the concrete method directly -- so this just routes each
+    /// selector into its concrete override (see the comment above) and forwards anything else
+    /// (selectors this class doesn't care about) to `super.doCommand(by:)` unchanged.
     override func doCommand(by selector: Selector) {
         switch selector {
         case #selector(NSResponder.insertNewline(_:)):
-            blockDelegate?.blockTextViewDidPressEnter(self, atOffset: selectedRange().location)
-            return
-
+            insertNewline(nil)
         case #selector(NSResponder.deleteBackward(_:)):
-            let selection = selectedRange()
-            if selection.location == 0 && selection.length == 0 {
-                blockDelegate?.blockTextViewDidBackspaceAtStart(self)
-                return
-            }
-
+            deleteBackward(nil)
         case #selector(NSResponder.insertTab(_:)):
-            blockDelegate?.blockTextViewDidPressTab(self, backward: false)
-            return
-
+            insertTab(nil)
         case #selector(NSResponder.insertBacktab(_:)):
-            blockDelegate?.blockTextViewDidPressTab(self, backward: true)
-            return
-
+            insertBacktab(nil)
         case #selector(NSResponder.moveUp(_:)):
-            if isCaretOnFirstVisualLine {
-                blockDelegate?.blockTextView(self, moveFocusVertically: true, caretX: caretXPosition)
-                return
-            }
-
+            moveUp(nil)
         case #selector(NSResponder.moveDown(_:)):
-            if isCaretOnLastVisualLine {
-                blockDelegate?.blockTextView(self, moveFocusVertically: false, caretX: caretXPosition)
-                return
-            }
-
+            moveDown(nil)
         case #selector(NSResponder.moveUpAndModifySelection(_:)):
-            if isCaretOnFirstVisualLine {
-                blockDelegate?.blockTextView(self, selectionEscapedBoundary: true)
-                return
-            }
-
+            moveUpAndModifySelection(nil)
         case #selector(NSResponder.moveDownAndModifySelection(_:)):
-            if isCaretOnLastVisualLine {
-                blockDelegate?.blockTextView(self, selectionEscapedBoundary: false)
-                return
-            }
-
+            moveDownAndModifySelection(nil)
         default:
-            break
+            super.doCommand(by: selector)
         }
-
-        super.doCommand(by: selector)
     }
 
     /// The x-position (in the view's own coordinate space) of the caret's current insertion point

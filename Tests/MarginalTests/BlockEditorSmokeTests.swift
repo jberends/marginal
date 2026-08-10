@@ -54,14 +54,12 @@ final class BlockEditorSmokeTests: XCTestCase {
     /// shorthand-shaped state. Typing "x- " then deleting the "x" leaves the plain text at
     /// "- " via a *deletion*, which must NOT convert the block to a bullet list.
     ///
-    /// The deletion is driven via `insertText("", replacementRange:)` rather than
-    /// `deleteBackward(_:)` with a non-zero caret: `BlockTextView.doCommand(by:)` has a
-    /// pre-existing (unrelated to this fix round) infinite-recursion bug when `deleteBackward`
-    /// is invoked with the caret away from the block start -- it falls through to
-    /// `super.doCommand(by:)`, which redispatches to the overridden `deleteBackward(_:)`, which
-    /// calls `doCommand(by:)` again, forever. `insertText("", replacementRange:)` produces the
-    /// same net effect (a real character deletion, routed through `textDidChange` exactly like
-    /// `deleteBackward` would) without touching that broken path.
+    /// Uses a real `deleteBackward(nil)` with the caret positioned after "x" (not at the block
+    /// start) to remove it -- now that fix round 2 has removed `BlockTextView`'s
+    /// doCommand/deleteBackward recursion (see `testMidBlockBackspaceDeletesDefaultCharacter`),
+    /// this is safe and more honestly exercises the real deletion path than the
+    /// `insertText("", replacementRange:)` workaround fix round 1 used while that bug was still
+    /// unfixed.
     func testShorthandNotAppliedWhenTriggerTextReachedByDeletion() {
         let (vc, _) = makeEditor("")
         vc.focusBlock(vc.document.blocks[0].id, caretOffset: 0)
@@ -69,7 +67,8 @@ final class BlockEditorSmokeTests: XCTestCase {
         tv?.insertText("x- ", replacementRange: NSRange(location: 0, length: 0))
         XCTAssertEqual(vc.document.blocks[0].kind, .paragraph(InlineText("x- ")))
 
-        tv?.insertText("", replacementRange: NSRange(location: 0, length: 1))
+        tv?.setSelectedRange(NSRange(location: 1, length: 0))
+        tv?.deleteBackward(nil)
 
         XCTAssertEqual(vc.document.blocks[0].kind, .paragraph(InlineText("- ")))
     }
@@ -94,5 +93,36 @@ final class BlockEditorSmokeTests: XCTestCase {
         }
         XCTAssertEqual(newLanguage, "swift")
         XCTAssertTrue(newCode.contains("y"), "expected inserted 'y' to persist, got \(newCode)")
+    }
+
+    // MARK: - Fix round 2
+
+    /// Fix round 2 regression test for the recursion crash: `deleteBackward(nil)` with the caret
+    /// away from the block's start (offset 3 in "abc") must fall through to `super.deleteBackward`
+    /// -- NSTextView's real character-deletion behavior -- instead of recursing through
+    /// `doCommand(by:)` forever. Asserts both that this does not crash and that the default
+    /// delete actually happened (view text shrinks by one character) without any structural
+    /// change to the document (still a single paragraph).
+    func testMidBlockBackspaceDeletesDefaultCharacter() {
+        let (vc, _) = makeEditor("abc")
+        vc.focusBlock(vc.document.blocks[0].id, caretOffset: 3)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        tv?.deleteBackward(nil)
+
+        XCTAssertEqual(tv?.string, "ab")
+        XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText("ab"))])
+    }
+
+    /// Fix round 2: backspace-at-start (caret at offset 0) must still route to
+    /// `blockTextViewDidBackspaceAtStart` -- the block-merge delegate path -- and not fall
+    /// through to the default character-delete behavior. Same assertion as
+    /// `testBackspaceAtStartMerges`, kept here as an explicit round-2 regression check
+    /// alongside `testMidBlockBackspaceDeletesDefaultCharacter`.
+    func testBackspaceAtStartStillMergesAfterRecursionFix() {
+        let (vc, _) = makeEditor("one\n\ntwo")
+        vc.focusBlock(vc.document.blocks[1].id, caretOffset: 0)
+        (vc.view.window?.firstResponder as? BlockTextView)?.deleteBackward(nil)
+        XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText("onetwo"))])
     }
 }
