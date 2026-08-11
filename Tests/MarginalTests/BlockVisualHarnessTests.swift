@@ -73,7 +73,12 @@ final class BlockVisualHarnessTests: XCTestCase {
         vc.view.frame = NSRect(x: 0, y: 0, width: width, height: 600)
         vc.view.layoutSubtreeIfNeeded()
 
-        let totalHeight = max(ceil(vc.view.fittingSize.height), 600)
+        // The container's own fitting height is useless here: it holds a scroll view pinned to
+        // its edges, and a scroll view is happy at any size regardless of how tall its content
+        // is -- which silently cropped the top of the document out of the capture. The real
+        // document height is the *scrolled* document view's.
+        let documentHeight = vc.view.firstScrollViewDocumentView?.fittingSize.height ?? 0
+        let totalHeight = max(ceil(max(documentHeight, vc.view.fittingSize.height)), 600)
         window.setContentSize(NSSize(width: width, height: totalHeight))
         vc.view.frame = NSRect(x: 0, y: 0, width: width, height: totalHeight)
         vc.view.layoutSubtreeIfNeeded()
@@ -95,5 +100,18 @@ final class BlockVisualHarnessTests: XCTestCase {
         try pngData.write(to: URL(fileURLWithPath: outputPath))
         window.contentViewController = nil
         print("RENDER_PREVIEW_PATH: \(outputPath)")
+    }
+}
+
+private extension NSView {
+    /// The document view of the first `NSScrollView` anywhere in this view's subtree -- the view
+    /// whose height is the full laid-out block document, as opposed to the scroll view's own
+    /// (arbitrary) viewport height.
+    var firstScrollViewDocumentView: NSView? {
+        if let scrollView = self as? NSScrollView { return scrollView.documentView }
+        for subview in subviews {
+            if let found = subview.firstScrollViewDocumentView { return found }
+        }
+        return nil
     }
 }
