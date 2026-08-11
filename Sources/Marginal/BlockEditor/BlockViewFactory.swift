@@ -41,6 +41,47 @@ enum BlockViewFactory {
         }
     }
 
+    /// Notion's block rhythm (`specs/notion-design-tokens.md`, "Block rhythm"): blocks sit flush
+    /// against each other and the breathing room lives *inside* each block as top/bottom padding,
+    /// which is why a heading looks separated from the text above it but stays tight to its own
+    /// body text. The old single-text-view renderer could not do this -- a blank source line was
+    /// itself a rendered spacer line, so real padding doubled up -- but one view per block can, so
+    /// the values below are the spec's px-at-16pt expressed as ratios of the base font size.
+    ///
+    /// Returns the block's own top/bottom padding in points. `BlockEditorViewController` turns each
+    /// adjacent pair into the gap between them (previous block's bottom + next block's top), which
+    /// is how Notion's flush-blocks-with-inner-padding model actually reads on screen.
+    ///
+    /// This can't be expressed as `paragraphSpacingBefore`/`paragraphSpacing`: those only apply
+    /// *between* paragraphs sharing one text container, and every block here is its own text view
+    /// holding a single paragraph, so TextKit drops them entirely.
+    static func verticalPadding(for kind: BlockKind, baseFont: NSFont) -> (top: CGFloat, bottom: CGFloat) {
+        let em = baseFont.pointSize
+        // (top, bottom) in ems.
+        let padding: (CGFloat, CGFloat)
+        switch kind {
+        case .heading(let level, _):
+            switch min(max(level, 1), 6) {
+            case 1: padding = (1.875, 0.375)   // 30 / 6 at 16px
+            case 2: padding = (1.625, 0.375)   // 26 / 6
+            case 3: padding = (1.375, 0.375)   // 22 / 6
+            default: padding = (1.125, 0.375)  // h4-h6 keep shrinking toward body rhythm
+            }
+        case .listItem:
+            padding = (0.375, 0.0625)          // 6 / 1 -- tight between siblings
+        case .quote:
+            padding = (0.5, 0.5)               // 8 / 8
+        case .paragraph:
+            padding = (0.375, 0.375)           // 6 / 6
+        case .codeBlock, .table, .divider:
+            // These draw their own container (card, grid, rule) with its own insets, but still
+            // need to breathe against the text around them.
+            padding = (0.5, 0.5)
+        }
+
+        return (top: em * padding.0, bottom: em * padding.1)
+    }
+
     /// Builds the attributed string for `text` under `kind`'s block-level attributes, layering
     /// each run's inline style (bold/italic/strikethrough/underline/code/link) on top.
     static func attributedString(for text: InlineText, kind: BlockKind, baseFont: NSFont) -> NSAttributedString {

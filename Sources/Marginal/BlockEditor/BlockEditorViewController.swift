@@ -299,6 +299,7 @@ final class BlockEditorViewController: NSViewController {
         document = newDocument
         diffAndPatch(old: oldBlocks, new: document.blocks)
         updateListMarkers()
+        applyBlockSpacing()
         selectionController.clear()
         applySelectionOverlay()
         onDocumentChange?(document)
@@ -395,6 +396,7 @@ final class BlockEditorViewController: NSViewController {
             addArrangedSubview(wrapper, blockID: block.id)
         }
         updateListMarkers()
+        applyBlockSpacing()
     }
 
     private func makeView(for block: Block) -> NSView {
@@ -439,6 +441,7 @@ final class BlockEditorViewController: NSViewController {
         document = TableEditEngine.appendRow(document, blockID: blockID)
         diffAndPatch(old: oldBlocks, new: document.blocks)
         updateListMarkers()
+        applyBlockSpacing()
         onDocumentChange?(document)
         guard case .table(_, _, let rows) = document[blockID]?.kind else { return }
         tableView(for: blockID)?.focus(cell: TableEditEngine.Cell(row: rows.count - 1, column: 0))
@@ -470,6 +473,7 @@ final class BlockEditorViewController: NSViewController {
         document = outcome.document
         diffAndPatch(old: oldBlocks, new: document.blocks)
         updateListMarkers()
+        applyBlockSpacing()
         onDocumentChange?(document)
         focusBlock(outcome.caret.blockID, caretOffset: outcome.caret.offset)
     }
@@ -514,6 +518,23 @@ final class BlockEditorViewController: NSViewController {
                 blockViews[block.id] = wrapper
             }
             addArrangedSubview(wrapper, blockID: block.id)
+        }
+    }
+
+    /// Notion's vertical rhythm. Notion's blocks are flush and carry their spacing as internal
+    /// top/bottom padding, so the visible gap between two neighbours is the first block's bottom
+    /// padding plus the second's top padding -- which is exactly what `setCustomSpacing(_:after:)`
+    /// puts between two arranged subviews. That's why a heading gets a lot of air above it but
+    /// sits tight to the paragraph it introduces, and why list items pack together closely.
+    private func applyBlockSpacing() {
+        let blocks = document.blocks
+        guard blocks.count > 1 else { return }
+
+        for index in 0..<(blocks.count - 1) {
+            guard let upperView = blockViews[blocks[index].id] else { continue }
+            let bottom = BlockViewFactory.verticalPadding(for: blocks[index].kind, baseFont: baseFont).bottom
+            let top = BlockViewFactory.verticalPadding(for: blocks[index + 1].kind, baseFont: baseFont).top
+            stackView.setCustomSpacing(bottom + top, after: upperView)
         }
     }
 
@@ -654,6 +675,7 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
             document = BlockDocument(blocks: blocks)
             diffAndPatch(old: oldBlocks, new: document.blocks)
             updateListMarkers()
+        applyBlockSpacing()
             previousPlainText[blockID] = code
             onDocumentChange?(document)
             focusBlock(blockID, caretOffset: 0)
@@ -670,6 +692,7 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
             document = outcome.document
             diffAndPatch(old: oldBlocks, new: document.blocks)
             updateListMarkers()
+        applyBlockSpacing()
             onDocumentChange?(document)
             beginBlockSelection(anchor: outcome.caret.blockID, extendingTo: outcome.caret.blockID)
             return

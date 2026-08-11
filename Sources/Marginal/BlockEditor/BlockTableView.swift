@@ -154,6 +154,10 @@ final class BlockTableView: NSView {
         for column in 0..<columnCount {
             let text = column < texts.count ? texts[column] : InlineText()
             let cellTextView = BlockTextView()
+            // The default 5pt lineFragmentPadding on each side eats 10pt of the width that
+            // `computeColumnWidths` measured the text against, which is what wrapped "Supported"
+            // onto two lines inside a column that was supposedly wide enough for it.
+            cellTextView.textContainer?.lineFragmentPadding = 0
             cellTextView.blockID = blockID
             cellTextView.blockDelegate = self
             cellTextView.delegate = self
@@ -238,7 +242,11 @@ final class BlockTableView: NSView {
             for row in rows where column < row.count {
                 naturalWidth = max(naturalWidth, width(of: row[column].plainText, font: baseFont))
             }
-            widths[column] = max(minimumWidth, naturalWidth + horizontalPadding * 2)
+            // Round the measured text width UP (plus a hairline) before adding the padding: the
+            // cell's text view gets exactly `width - 2 * padding` to lay out in, so a fractional
+            // shortfall of even a third of a point wraps the last character onto its own line
+            // ("Supported" rendering as "Supporte/d").
+            widths[column] = max(minimumWidth, ceil(naturalWidth) + 1 + horizontalPadding * 2)
         }
         return widths
     }

@@ -78,6 +78,38 @@ final class BlockTextView: NSTextView {
         isRichText = true
     }
 
+    // MARK: - Auto Layout height
+
+    /// An `NSTextView` reports no useful height to Auto Layout on its own, so inside the block
+    /// editor's vertical `NSStackView` every block would collapse to nothing and the blocks would
+    /// all paint on top of each other. The block's real height is whatever TextKit actually laid
+    /// the text out to occupy, plus the container insets.
+    override var intrinsicContentSize: NSSize {
+        guard let layoutManager, let textContainer else { return super.intrinsicContentSize }
+        layoutManager.ensureLayout(for: textContainer)
+        let used = layoutManager.usedRect(for: textContainer)
+        return NSSize(width: NSView.noIntrinsicMetric,
+                      height: ceil(used.height) + textContainerInset.height * 2)
+    }
+
+    /// Text got longer or shorter (typing, or a re-render): the laid-out height changed with it.
+    override func didChangeText() {
+        super.didChangeText()
+        invalidateIntrinsicContentSize()
+    }
+
+    /// A width change re-wraps the text, which changes how many lines it occupies -- so the
+    /// height Auto Layout was given is stale until the new layout is measured.
+    override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = abs(newSize.width - frame.width) > 0.5
+        super.setFrameSize(newSize)
+        if widthChanged {
+            textContainer?.containerSize = CGSize(width: newSize.width,
+                                                  height: CGFloat.greatestFiniteMagnitude)
+            invalidateIntrinsicContentSize()
+        }
+    }
+
     // MARK: - Rendering
 
     /// Builds the attributed string for `text` under `kind`'s styling rules and installs it into
@@ -85,6 +117,9 @@ final class BlockTextView: NSTextView {
     func render(_ text: InlineText, asKind kind: BlockKind, baseFont: NSFont) {
         let attributed = BlockViewFactory.attributedString(for: text, kind: kind, baseFont: baseFont)
         textStorage?.setAttributedString(attributed)
+        // Setting the storage directly bypasses didChangeText(), so the new laid-out height has
+        // to be reported to Auto Layout here instead.
+        invalidateIntrinsicContentSize()
     }
 
     /// Reads the text storage's current attributes back into `InlineRun`s -- the inverse of

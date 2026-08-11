@@ -65,8 +65,15 @@ final class BlockVisualHarnessTests: XCTestCase {
 
         // Grow the view to fit its full stack of block content before capturing -- the scroll
         // view otherwise clips to the window's initial (arbitrary) height.
-        let fittingHeight = vc.view.fittingSize.height
-        let totalHeight = max(ceil(fittingHeight), 600)
+        //
+        // The width has to be pinned *first*: block text wraps to the view's width, so measuring
+        // the fitting height at the window's initial width under-measures once the real width
+        // re-wraps the text, and the top of the document ends up cropped out of the capture.
+        window.setContentSize(NSSize(width: width, height: 600))
+        vc.view.frame = NSRect(x: 0, y: 0, width: width, height: 600)
+        vc.view.layoutSubtreeIfNeeded()
+
+        let totalHeight = max(ceil(vc.view.fittingSize.height), 600)
         window.setContentSize(NSSize(width: width, height: totalHeight))
         vc.view.frame = NSRect(x: 0, y: 0, width: width, height: totalHeight)
         vc.view.layoutSubtreeIfNeeded()
