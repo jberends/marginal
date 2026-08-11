@@ -4,6 +4,43 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.8.0] — 2026-08-11
+
+### Added
+
+- **Notion-style block editor**: Live mode is now a true block editor over a
+  `BlockDocument` model instead of a single styled text view. Each block (heading,
+  paragraph, list item, quote, code block, divider, table) is its own view with
+  Notion's own vertical rhythm, heading scale, quote bar, list gutters, and rounded
+  code cards.
+- **Code mode**: a synced raw-markdown view. Switching Live → Code serialises the
+  document and puts the caret on the focused block's line; switching back parses the
+  source and focuses the block under the caret. Undo stacks reset on each switch.
+- **In-place table editing**: tables render as an editable grid. Tab/Shift-Tab walk the
+  cells, Enter moves down a column, and Tab past the last cell appends a row.
+- **Whole-block selection**: Escape, or Shift+Up/Down past a block's own bounds,
+  selects entire blocks. ⌫ deletes them and ⌘C copies them as canonical markdown.
+- **Style shortcuts**: ⌘B / ⌘I / ⌘U / ⌘⇧S toggle bold, italic, underline and
+  strikethrough over the selection, alongside live `**bold**`-as-you-type autoformat.
+- **Document-level undo** across structural edits, coalesced per typing burst.
+
+### Changed
+
+- Markdown is now canonicalised on save: the document is serialised from the block
+  model, so `1) x` is written back as `1. x`.
+- The old hidden-marker rendering path (`MarkdownStyler`, `MarkdownLayoutManager`,
+  `CursorRevealController`) has been removed.
+
+### Fixed
+
+- A table cell containing a literal `|` no longer drops the rest of the row when the
+  file is re-read.
+- Identifiers like `snake_case_word`, `__init__` and URLs containing underscores are no
+  longer rewritten to `*`-emphasis on save. Underscore emphasis now requires a word
+  boundary, matching CommonMark.
+- Caret positions are counted in characters rather than UTF-16 units, so blocks
+  containing emoji no longer split or autoformat one character off.
+
 ## [0.3.0] — 2026-07-29
 
 ### Added
