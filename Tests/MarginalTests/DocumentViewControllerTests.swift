@@ -9,7 +9,10 @@ final class DocumentViewControllerTests: XCTestCase {
         let viewController = DocumentViewController()
         _ = viewController.view
         viewController.loadInitialText("Hello **world**")
-        viewController.textView.setSelectedRange(NSRange(location: 6, length: 9)) // "**world**"
+        viewController.switchToCode()
+        let ns = viewController.textView.string as NSString
+        let range = ns.range(of: "**world**")
+        viewController.textView.setSelectedRange(range)
 
         viewController.copyCurrentSelectionAsMarkdown()
 
@@ -20,74 +23,50 @@ final class DocumentViewControllerTests: XCTestCase {
         let viewController = DocumentViewController()
         _ = viewController.view
         viewController.loadInitialText("Hello **world**")
-        viewController.textView.setSelectedRange(NSRange(location: 0, length: 16))
+        viewController.switchToCode()
+        let fullRange = NSRange(location: 0, length: (viewController.textView.string as NSString).length)
+        viewController.textView.setSelectedRange(fullRange)
 
         viewController.copyCurrentSelectionAsHTML()
 
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "<p>Hello <strong>world</strong></p>")
     }
 
-    func testToggleShowSourceRendersPlainMonospaceText() {
+    /// Code mode is now the old "Show Source" rendering unconditionally: a plain monospaced
+    /// text view with no per-character WYSIWYG attributes. Replaces the old
+    /// `testToggleShowSourceRendersPlainMonospaceText` (Show Source was a toggle on top of a
+    /// styled Code mode; now Code mode never styles at all).
+    func testSwitchToCodeShowsPlainMonospaceText() {
         let viewController = DocumentViewController()
         _ = viewController.view
         viewController.loadInitialText("# Title\n**bold**")
 
-        viewController.toggleShowSource()
+        viewController.switchToCode()
 
-        let font = viewController.textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.isFixedPitch ?? false)
+        XCTAssertTrue(viewController.textView.font?.isFixedPitch ?? false)
+        XCTAssertFalse(viewController.textView.isRichText)
     }
 
-    func testToggleShowSourceTwiceRestoresStyledRendering() {
+    /// Live is the default mode for a freshly loaded document.
+    func testLiveIsTheDefaultMode() {
         let viewController = DocumentViewController()
         _ = viewController.view
-        viewController.loadInitialText("**bold**")
+        viewController.loadInitialText("Hello")
 
-        viewController.toggleShowSource()
-        viewController.toggleShowSource()
-
-        let delimiterFont = viewController.textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertFalse(delimiterFont?.isFixedPitch ?? true)
-
-        // Regression guard: the bold *content* (not a hidden delimiter) must be restored at
-        // the real editor font size, not left at the near-invisible hidden-delimiter size a
-        // prior bug could leak into the restored render.
-        let contentFont = viewController.textView.textStorage?.attribute(.font, at: 2, effectiveRange: nil) as? NSFont
-        XCTAssertEqual(contentFont?.pointSize, 16)
+        XCTAssertEqual(viewController.mode, .live)
     }
 
-    func testShowSourceSurvivesSelectionChange() {
-        // Regression test: Show Source mode used to desync from the display, because
-        // textViewDidChangeSelection() called restyle() unconditionally, silently flipping
-        // the view back to styled WYSIWYG on the very next cursor move while isShowingSource
-        // stayed true.
+    /// Switching modes round-trips the document's plain text unchanged in content (module
+    /// canonical-form normalization, which `ModeSwitchTests` covers separately).
+    func testToggleModeTwiceReturnsToLive() {
         let viewController = DocumentViewController()
         _ = viewController.view
-        viewController.loadInitialText("# Title\n**bold**")
+        viewController.loadInitialText("Hello **world**")
 
-        viewController.toggleShowSource()
+        viewController.toggleMode(nil)
+        XCTAssertEqual(viewController.mode, .code)
 
-        // Simulate a cursor move / selection change while still in Show Source mode.
-        viewController.textView.setSelectedRange(NSRange(location: 2, length: 0))
-        viewController.textViewDidChangeSelection(Notification(name: NSTextView.didChangeSelectionNotification, object: viewController.textView))
-
-        let font = viewController.textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.isFixedPitch ?? false, "Show Source rendering should survive a selection change")
-    }
-
-    func testShowSourceSurvivesTextChange() {
-        // Regression test: textDidChange() also called restyle() unconditionally, so typing
-        // a character while in Show Source silently reverted to styled WYSIWYG rendering.
-        let viewController = DocumentViewController()
-        _ = viewController.view
-        viewController.loadInitialText("# Title\n**bold**")
-
-        viewController.toggleShowSource()
-
-        viewController.textView.string += "!"
-        viewController.textDidChange(Notification(name: NSText.didChangeNotification, object: viewController.textView))
-
-        let font = viewController.textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.isFixedPitch ?? false, "Show Source rendering should survive a text change")
+        viewController.toggleMode(nil)
+        XCTAssertEqual(viewController.mode, .live)
     }
 }

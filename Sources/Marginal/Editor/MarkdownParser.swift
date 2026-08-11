@@ -151,7 +151,10 @@ struct MarkdownParser {
         }
 
         func orderedMarkerRange(in line: Substring) -> Range<String.Index>? {
-            markerContentStart(of: line).range(of: "^[0-9]+\\.( |$)", options: .regularExpression)
+            // Accepts both "1." and "1)" markers (the latter a common alternate ordered-list
+            // syntax) -- canonical serialization (MarkdownSerializer) always re-emits "1.", so a
+            // document read with "1)" markers is normalized to "." on save.
+            markerContentStart(of: line).range(of: "^[0-9]+[.)]( |$)", options: .regularExpression)
         }
 
         func isListMarkerLine(_ line: Substring) -> Bool {

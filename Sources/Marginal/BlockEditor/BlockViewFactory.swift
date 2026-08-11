@@ -147,8 +147,7 @@ enum BlockViewFactory {
     /// Re-applies `MarkdownParser.parseCodeHighlightTokens` coloring over a code block's text
     /// storage -- shared between the initial factory render above and the document controller's
     /// re-render after every edit (Task 12), so the two paths can never drift. Token kind -> color
-    /// mirrors `MarkdownStyler`'s reference mapping exactly (`.string`/`.comment`/`.number`; any
-    /// other kind gets no color override).
+    /// mapping: `.string`/`.comment`/`.number`; any other kind gets no color override.
     static func applyCodeHighlighting(to textView: BlockTextView, code: String) {
         guard let storage = textView.textStorage else { return }
         for token in MarkdownParser.parseCodeHighlightTokens(in: code) {

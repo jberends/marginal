@@ -28,12 +28,21 @@ final class MarkdownTextViewTests: XCTestCase {
         )!
     }
 
+    /// Builds a plain text view and manually tags a "[ ] "/"[x] " checkbox marker with
+    /// `.marginalTaskCheckboxMarker`, exactly the shape the (now-retired) WYSIWYG styler used to
+    /// produce -- decoupled from that styler so this test targets `MarkdownTextView`'s
+    /// click-to-toggle mechanics directly, independent of however Live/Code mode currently render.
     @MainActor
     private func makeStyledTaskTextView(_ text: String) -> MarkdownTextView {
         let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
-        let model = MarkdownDocumentModel(listItems: MarkdownParser.parseListItems(in: text))
-        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: .systemFont(ofSize: 16), cursorLocation: nil)
-        textView.textStorage?.setAttributedString(attributed)
+        textView.string = text
+        let nsText = text as NSString
+        for marker in ["[ ] ", "[x] "] {
+            let range = nsText.range(of: marker)
+            if range.location != NSNotFound {
+                textView.textStorage?.addAttribute(.marginalTaskCheckboxMarker, value: marker == "[x] ", range: range)
+            }
+        }
         return textView
     }
 

@@ -179,6 +179,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         formatMenuItem.submenu = formatMenu
         mainMenu.addItem(formatMenuItem)
 
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        // ⌘⇧P (matches the legacy "Show Source" shortcut) -- routes to
+        // DocumentViewController.toggleMode(_:) through the normal responder chain, so it works
+        // regardless of which mode/child view (BlockTextView or the code text view) is focused.
+        viewMenu.addItem(withTitle: "Toggle Code/Live", action: #selector(DocumentViewController.toggleMode(_:)), keyEquivalent: "P")
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
+
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")

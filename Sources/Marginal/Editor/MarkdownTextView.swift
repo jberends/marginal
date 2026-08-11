@@ -1,5 +1,15 @@
 import AppKit
 
+/// A boolean (task-complete) attribute marking the "[ ] "/"[x] " range of a rendered task-list
+/// checkbox, so a click there can flip it (`MarkdownTextView.toggleTaskCheckbox`) instead of
+/// moving the caret. Formerly set by the old `MarkdownStyler` WYSIWYG pass; that pass is retired
+/// (Code mode is now a plain monospaced source view that never sets this attribute), but the key
+/// and the click-to-toggle mechanics stay here since `MarkdownTextViewTests` still exercises them
+/// directly against a hand-built attributed string.
+extension NSAttributedString.Key {
+    static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
+}
+
 @MainActor
 protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView)

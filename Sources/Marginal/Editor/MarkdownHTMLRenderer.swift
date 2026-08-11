@@ -1,6 +1,7 @@
 import Foundation
 
-/// Converts markdown source into HTML, reusing the same block/inline parsers MarkdownStyler uses
+/// Converts markdown source into HTML, reusing the same block/inline `MarkdownParser` parsers the
+/// block editor's canonical parser/serializer pipeline uses
 /// for on-screen rendering -- one parsing model, two consumers. Covers exactly the constructs this
 /// app supports (single-level lists/blockquotes, no tables, no nested lists), matching
 /// MarkdownParser's own "pragmatic single-pass, not full CommonMark" scope.
