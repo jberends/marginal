@@ -113,7 +113,21 @@ enum MarkdownSerializer {
     }
 
     private static func rowLine(_ cells: [InlineText]) -> String {
-        "| " + cells.map(InlineMarkdown.serialize).joined(separator: " | ") + " |"
+        "| " + cells.map(escapedCellMarkdown).joined(separator: " | ") + " |"
+    }
+
+    /// A cell's serialized markdown, made safe to sit between two `|` column separators.
+    /// `MarkdownBlockParser.tableBlockKind` unescapes `\|` back into a literal `|` when reading a
+    /// cell, so a literal `|` here must be re-escaped as `\|` -- otherwise it's indistinguishable
+    /// from a real column separator on the next parse, and the parser silently clamps/drops any
+    /// cell past the header's column count (content loss, not just a cosmetic misparse). A
+    /// newline would similarly split this row across two physical source lines and destroy the
+    /// table's structure, so it's collapsed to a single space (chosen over `<br>` since this
+    /// parser doesn't render HTML `<br>` -- a space is at least visually inert either way).
+    private static func escapedCellMarkdown(_ text: InlineText) -> String {
+        InlineMarkdown.serialize(text)
+            .replacingOccurrences(of: "|", with: "\\|")
+            .replacingOccurrences(of: "\n", with: " ")
     }
 
     private static func alignmentLine(_ alignments: [TableAlignment]) -> String {

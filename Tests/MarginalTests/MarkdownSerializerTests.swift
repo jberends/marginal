@@ -34,6 +34,29 @@ final class MarkdownSerializerTests: XCTestCase {
         XCTAssertEqual(MarkdownBlockParser.parse(MarkdownSerializer.serialize(doc).markdown).blocks.map(\.kind),
                        doc.blocks.map(\.kind))
     }
+    /// Blocking-2 regression: a table cell containing a literal `|` must survive a full
+    /// parse -> serialize -> parse round trip with the same cell contents and column count.
+    /// Before the fix, `rowLine` emitted the cell's `|` verbatim, so re-parsing saw it as an
+    /// extra column separator; the parser then clamps body cells to the header's column count,
+    /// silently dropping the last cell ("z" in the repro below).
+    func testTableCellContainingPipeSurvivesRoundTrip() {
+        let source = "| a | b |\n|---|---|\n| x \\| y | z |\n"
+        let doc = MarkdownBlockParser.parse(source)
+        guard case .table(_, _, let rows) = doc.blocks[0].kind else {
+            return XCTFail("expected a table, got \(doc.blocks[0].kind)")
+        }
+        XCTAssertEqual(rows[0].map(\.plainText), ["x | y", "z"], "expected the escaped pipe to unescape into the cell's plain text")
+
+        let reserialized = MarkdownSerializer.serialize(doc).markdown
+        let reparsed = MarkdownBlockParser.parse(reserialized)
+        guard case .table(_, _, let roundTrippedRows) = reparsed.blocks[0].kind else {
+            return XCTFail("expected a table after round-tripping, got \(reparsed.blocks[0].kind)")
+        }
+        XCTAssertEqual(roundTrippedRows.count, 1)
+        XCTAssertEqual(roundTrippedRows[0].count, 2, "column count must survive the round trip -- \"z\" must not be dropped")
+        XCTAssertEqual(roundTrippedRows[0].map(\.plainText), ["x | y", "z"])
+    }
+
     func testParseSerializeIsIdempotentAfterOnePass() {
         let messy = "1) weird\n*  spaced\n#TitleNoSpace\nplain"
         let once = MarkdownSerializer.serialize(MarkdownBlockParser.parse(messy)).markdown

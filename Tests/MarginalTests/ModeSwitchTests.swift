@@ -93,16 +93,44 @@ final class ModeSwitchTests: XCTestCase {
     // MARK: - Undo resets across a mode switch
 
     func testUndoStackResetsOnModeSwitch() {
-        let (vc, window) = makeVC("alpha")
+        let (vc, _) = makeVC("alpha")
         let blockID = vc.blockEditor.document.blocks[0].id
         vc.blockEditor.focusBlock(blockID, caretOffset: 0)
         let tv = vc.view.window?.firstResponder as? BlockTextView
         tv?.insertText("X", replacementRange: NSRange(location: 0, length: 0))
-        XCTAssertTrue(window.undoManager?.canUndo ?? false, "expected a pending undo step before switching modes")
+        // Live mode's edits register on the block editor's own undo manager (see
+        // `BlockEditorViewController.undoManager`), not the window/document's -- that manager is
+        // reserved for Code mode's `MarkdownTextView`.
+        let blockUndoManager = vc.blockEditor.blockEditorUndoManager
+        XCTAssertTrue(blockUndoManager.canUndo, "expected a pending undo step before switching modes")
 
         vc.switchToCode()
 
-        XCTAssertFalse(window.undoManager?.canUndo ?? true, "expected the undo stack to be cleared by the mode switch")
+        XCTAssertFalse(blockUndoManager.canUndo, "expected the undo stack to be cleared by the mode switch")
+    }
+
+    /// Blocking-5 regression: typing in Live mode must not leave the shared window/document undo
+    /// manager's `groupsByEvent` set to `false` -- a prior version of `BlockEditorViewController`
+    /// mutated `view.window?.undoManager` (the *same* manager Code mode's `MarkdownTextView` uses)
+    /// directly and never restored it, silently breaking Code mode's undo granularity for the
+    /// rest of the document's lifetime. The block editor now owns a private `UndoManager`
+    /// instead, so the window's manager must be left completely untouched by Live-mode typing.
+    func testLiveModeTypingDoesNotTouchSharedWindowUndoManager() {
+        let (vc, window) = makeVC("alpha")
+        let sharedManager = window.undoManager
+        XCTAssertNotNil(sharedManager)
+        XCTAssertTrue(sharedManager?.groupsByEvent ?? false,
+                      "expected the shared window undo manager to still group by event before any edit")
+
+        let blockID = vc.blockEditor.document.blocks[0].id
+        vc.blockEditor.focusBlock(blockID, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+        tv?.insertText("X", replacementRange: NSRange(location: 0, length: 0))
+
+        XCTAssertTrue(sharedManager?.groupsByEvent ?? false,
+                      "Live-mode typing must not flip the shared window undo manager's groupsByEvent")
+        XCTAssertFalse(sharedManager?.canUndo ?? true,
+                       "Live-mode typing must register on the block editor's own undo manager, not the window's")
     }
 
     // MARK: - Document I/O canonicalizes on save

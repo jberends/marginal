@@ -4,9 +4,12 @@ import Foundation
 /// HTML `<u>...</u>` — valid CommonMark (raw inline HTML is permitted) and
 /// rendered as underlined by other tools (e.g. GitHub).
 ///
-/// This is a pragmatic single-pass parser, not a full CommonMark
-/// implementation: it does not apply CommonMark's intraword-emphasis
-/// flanking rules (so `snake_case_like_this` can be misdetected as italic).
+/// This is a pragmatic single-pass parser, not a full CommonMark implementation: it does not
+/// implement CommonMark's general flanking-run algorithm. It does, however, apply a simple
+/// word-character guard to the underscore delimiters specifically (see the `_`/`__` patterns
+/// below), since without it `snake_case_like_this` misdetects as italic and `__dunder__`-shaped
+/// identifiers misdetect as bold -- and, unlike a cosmetic misparse, the block editor's canonical
+/// serializer would silently rewrite the file's `_`/`__` into `*`/`**` on save.
 struct MarkdownParser {
 
     static func parseInlineStyles(in text: String) -> [InlineStyleSpan] {
@@ -26,8 +29,15 @@ struct MarkdownParser {
             claimedRanges.contains { claimed in
                 let overlaps = range.lowerBound < claimed.upperBound && range.upperBound > claimed.lowerBound
                 guard overlaps else { return false }
-                let fullyContainsClaimed = range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound
-                return !fullyContainsClaimed
+                // Nesting means *strictly* containing: an identical range is not a wrapper around
+                // the claimed span, it's the same span re-matched by a lower-priority delimiter,
+                // and letting it through emits two overlapping styles for one piece of text.
+                // `___world___` is the case: the boldItalic pattern claims the whole span, and the
+                // bold pattern's flanking guard makes its own match end at exactly the same
+                // boundaries rather than one character short, so "contains" alone would admit it.
+                let strictlyContainsClaimed = (range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound)
+                    && !(range.lowerBound == claimed.lowerBound && range.upperBound == claimed.upperBound)
+                return !strictlyContainsClaimed
             }
         }
 
@@ -102,11 +112,32 @@ struct MarkdownParser {
         findMatches(pattern: "\\*\\*\\*(.+?)\\*\\*\\*", kind: .boldItalic, openLength: 3, closeLength: 3)
         findMatches(pattern: "___(.+?)___", kind: .boldItalic, openLength: 3, closeLength: 3)
         findMatches(pattern: "\\*\\*(.+?)\\*\\*", kind: .bold, openLength: 2, closeLength: 2)
-        findMatches(pattern: "__(.+?)__", kind: .bold, openLength: 2, closeLength: 2)
+        // Underscore delimiters get a flanking guard `*` doesn't need: CommonMark never treats an
+        // intraword `_`/`__` as emphasis (only `*`/`**` can emphasize inside a word), but this
+        // parser has no real flanking-rule implementation (see the type doc comment), so without
+        // a guard `snake_case_word` misdetects as italic and `__init__` misdetects as bold.
+        //
+        // The bold guard is intentionally *stricter* than the italic one below: it requires an
+        // actual non-word character on each outer side, not merely "no word character" (a
+        // positive lookaround, `(?<=[^\w_])`/`(?=[^\w_])`, rather than italic's negative one).
+        // A single stray underscore's own two neighboring letters (`my_function_name`) always
+        // give the italic pattern a real character to test, so a negative lookaround is enough
+        // there. A dunder identifier like `__init__` has no such internal tell -- both `__` runs
+        // sit at the very edges of the whole token, so if that token is the entirety of a block's
+        // text (a paragraph that's just `__init__`, exactly the corruption repro), there is no
+        // character *at all* on the outside to test, and a negative lookaround (which trivially
+        // succeeds when there's nothing there) would still treat it as bold, silently rewriting
+        // the file to `**init**` on save. Requiring a *real* boundary character instead correctly
+        // leaves an isolated `__word__`-shaped identifier alone while still bolding it when it's
+        // genuinely embedded in prose with real characters around it, e.g. "Hello __world__
+        // today" (unaffected -- see `testParsesBoldWithUnderscores`). This is still a pure
+        // tightening (strictly fewer matches than before), so it can't newly emphasize anything
+        // that wasn't already bold.
+        findMatches(pattern: "(?<=[^\\w_])__(.+?)__(?=[^\\w_])", kind: .bold, openLength: 2, closeLength: 2)
         findMatches(pattern: "~~(.+?)~~", kind: .strikethrough, openLength: 2, closeLength: 2)
         findMatches(pattern: "<u>(.+?)</u>", kind: .underline, openLength: 3, closeLength: 4)
         findMatches(pattern: "(?<!\\*)\\*([^*\\n]+?)\\*(?!\\*)", kind: .italic, openLength: 1, closeLength: 1)
-        findMatches(pattern: "(?<!_)_([^_\\n]+?)_(?!_)", kind: .italic, openLength: 1, closeLength: 1)
+        findMatches(pattern: "(?<![\\w_])_([^_\\n]+?)_(?![\\w_])", kind: .italic, openLength: 1, closeLength: 1)
 
         return spans.sorted { $0.contentRange.lowerBound < $1.contentRange.lowerBound }
     }

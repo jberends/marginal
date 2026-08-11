@@ -177,9 +177,58 @@ final class BlockTextView: NSTextView {
         return InlineText(runs: runs)
     }
 
+    /// Character offset (not UTF-16 code-unit offset) into `string`. `NSTextView.selectedRange()`
+    /// reports UTF-16 locations, but the block model (`InlineText.length`/`split(at:)`, `Caret`,
+    /// `InlineAutoformat`) counts in `Character`s -- the two diverge as soon as the text contains
+    /// any codepoint outside the BMP (this app promotes emoji shortcodes like `:tada:` to their
+    /// literal 🎉 at parse time, so this is common, not exotic). This getter/setter is the single
+    /// conversion point so every other caller of `caretOffset` gets/sets a plain Character offset
+    /// uniformly, regardless of what's actually in the text. `limitedBy`/`samePosition` guards
+    /// make a malformed offset fail safe (clamp to the string's end) instead of crashing.
     var caretOffset: Int {
-        get { selectedRange().location }
-        set { setSelectedRange(NSRange(location: newValue, length: 0)) }
+        get { characterOffset(fromUTF16: selectedRange().location) }
+        set {
+            let text = string
+            let clampedCharacterOffset = max(0, newValue)
+            guard let index = text.index(text.startIndex, offsetBy: clampedCharacterOffset, limitedBy: text.endIndex),
+                  let utf16Index = index.samePosition(in: text.utf16) else {
+                setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+                return
+            }
+            let utf16Offset = text.utf16.distance(from: text.utf16.startIndex, to: utf16Index)
+            setSelectedRange(NSRange(location: utf16Offset, length: 0))
+        }
+    }
+
+    /// Converts a UTF-16 code-unit offset into `string` (the indexing convention of
+    /// `selectedRange().location` and, e.g., `characterIndexForInsertion(at:)`) into a Character
+    /// offset. Shared by `caretOffset`'s getter and by callers that get a UTF-16 index from some
+    /// other AppKit API (see `BlockEditorViewController.blockTextView(_:moveFocusVertically:caretX:)`,
+    /// which does exactly that with `characterIndexForInsertion(at:)`).
+    func characterOffset(fromUTF16 utf16Location: Int) -> Int {
+        let text = string
+        let clampedLocation = max(0, utf16Location)
+        guard let utf16Index = text.utf16.index(text.utf16.startIndex, offsetBy: clampedLocation, limitedBy: text.utf16.endIndex),
+              let index = utf16Index.samePosition(in: text) else {
+            return text.count
+        }
+        return text.distance(from: text.startIndex, to: index)
+    }
+
+    /// Converts a UTF-16 `NSRange` (as reported by `selectedRange()`) into a `Range<Int>` of
+    /// Character offsets into `string` -- the same UTF-16/Character mismatch `caretOffset` guards
+    /// against, but for a length-bearing selection (used by the style-toggle path below, which
+    /// hands a selection straight to `InlineAutoformat.toggling`'s `Range<Int>` of Characters).
+    /// Returns nil if either endpoint doesn't land on a Character boundary.
+    private func characterRange(from nsRange: NSRange) -> Range<Int>? {
+        let text = string
+        guard let startUTF16 = text.utf16.index(text.utf16.startIndex, offsetBy: nsRange.location, limitedBy: text.utf16.endIndex),
+              let endUTF16 = text.utf16.index(startUTF16, offsetBy: nsRange.length, limitedBy: text.utf16.endIndex),
+              let startIndex = startUTF16.samePosition(in: text),
+              let endIndex = endUTF16.samePosition(in: text) else {
+            return nil
+        }
+        return text.distance(from: text.startIndex, to: startIndex)..<text.distance(from: text.startIndex, to: endIndex)
     }
 
     // MARK: - Style toggles (⌘B / ⌘I / ⌘U / ⌘⇧S)
@@ -203,8 +252,10 @@ final class BlockTextView: NSTextView {
         let selection = selectedRange()
         guard selection.length > 0 else { return }
         let text = currentInlineText
-        guard selection.location >= 0, selection.location + selection.length <= text.length else { return }
-        let range = selection.location..<(selection.location + selection.length)
+        // `selection` is a UTF-16 NSRange; `text.length` (InlineText) counts Characters -- must
+        // convert before comparing/indexing, same UTF-16-vs-Character mismatch `caretOffset`
+        // guards against elsewhere in this file.
+        guard let range = characterRange(from: selection), range.upperBound <= text.length else { return }
         let toggled = InlineAutoformat.toggling(text, range: range, style: style)
         blockDelegate?.blockTextView(self, didToggleStyle: toggled, selection: selection)
     }
@@ -231,7 +282,10 @@ final class BlockTextView: NSTextView {
     // back to `super.<concreteMethod>(sender)` here instead reaches `NSTextView`'s real
     // implementation directly, so there is nothing left to recurse through.
     override func insertNewline(_ sender: Any?) {
-        blockDelegate?.blockTextViewDidPressEnter(self, atOffset: selectedRange().location)
+        // `atOffset` feeds straight into `BlockEditEngine.split` -> `InlineText.split(at:)`, which
+        // counts Characters, not UTF-16 code units -- `caretOffset` (not `selectedRange().location`)
+        // is the Character-offset conversion of the caret position (see its doc comment).
+        blockDelegate?.blockTextViewDidPressEnter(self, atOffset: caretOffset)
     }
 
     override func deleteBackward(_ sender: Any?) {

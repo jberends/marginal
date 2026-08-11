@@ -67,24 +67,39 @@ final class BlockEditorViewController: NSViewController {
     /// starts a fresh undo step, per the brief's "1s pause" coalescence rule.
     private static let typingCoalescenceWindow: TimeInterval = 1.0
 
-    /// The window's `NSUndoManager`, falling back to the responder chain's default -- and, on
-    /// first use, switched out of `groupsByEvent` mode. AppKit's default coalesces every undo
+    /// This controller's own `NSUndoManager`, entirely separate from `view.window?.undoManager`.
+    ///
+    /// `view.window?.undoManager` in a document-based app is the *NSDocument's* undo manager --
+    /// the same one Code mode's `MarkdownTextView` (`allowsUndo = true`) registers into. Live is
+    /// the default mode, so mutating that shared manager's `groupsByEvent` (as a prior version of
+    /// this controller did, on first use) flipped it off for the whole window *permanently* the
+    /// moment the user typed one character -- `switchToCode()` only calls `removeAllActions()`,
+    /// it never restores `groupsByEvent`, so Code mode's undo granularity broke (or worse) for
+    /// the rest of the document's lifetime. Owning a private manager avoids touching shared state
+    /// at all.
+    ///
+    /// `groupsByEvent = false` is still required here: AppKit's default coalesces every undo
     /// registration made during a single `NSEvent` dispatch into one group, which is the wrong
-    /// granularity here (this controller already does its own explicit typing-burst
-    /// coalescescing, see `pushTypingCoalescenceSnapshotIfNeeded`) and, more importantly, makes
-    /// undo non-deterministic for anything that registers snapshots outside a live AppKit run
-    /// loop (as the smoke tests below do) -- `groupsByEvent = false` plus this controller's own
-    /// coalescing logic is what makes each `undo()`/`redo()` call step exactly one burst/op at a
-    /// time, in both the app and the tests.
-    private var didConfigureUndoManager = false
-    private var undoManager_: UndoManager? {
-        let manager = view.window?.undoManager ?? undoManager
-        if let manager, !didConfigureUndoManager {
-            manager.groupsByEvent = false
-            didConfigureUndoManager = true
-        }
+    /// granularity (this controller already does its own explicit typing-burst coalescing, see
+    /// `pushTypingCoalescenceSnapshotIfNeeded`) and, more importantly, makes undo
+    /// non-deterministic for anything that registers snapshots outside a live AppKit run loop (as
+    /// the smoke tests do) -- `groupsByEvent = false` plus this controller's own coalescing logic
+    /// is what makes each `undo()`/`redo()` call step exactly one burst/op at a time, in both the
+    /// app and the tests.
+    private let blockUndoManager: UndoManager = {
+        let manager = UndoManager()
+        manager.groupsByEvent = false
         return manager
-    }
+    }()
+
+    /// Exposes this controller's own undo manager -- tests drive undo/redo through this (not
+    /// `view.window?.undoManager`, which is the document's *separate*, untouched manager) exactly
+    /// like a real ⌘Z/⌘⇧Z keystroke routed to this controller would.
+    var blockEditorUndoManager: UndoManager { blockUndoManager }
+
+    override var undoManager: UndoManager? { blockUndoManager }
+
+    private var undoManager_: UndoManager? { blockUndoManager }
 
     init(document: BlockDocument, baseFont: NSFont) {
         self.document = document
@@ -508,6 +523,15 @@ final class BlockEditorViewController: NSViewController {
             stackView.removeArrangedSubview(arranged)
             arranged.removeFromSuperview()
         }
+        // `removeFromSuperview()` above drops every constraint that referenced the removed view,
+        // including the width constraint `addArrangedSubview(_:blockID:)` installed against
+        // `stackView` -- that applies to every surviving wrapper too, not just the ones just
+        // deleted/kind-changed above, since ALL arranged subviews just got torn down. Without
+        // this, a surviving block (kind unchanged, e.g. Enter splitting a paragraph leaves block
+        // 1 untouched) gets re-added to the stack with no width constraint and never regains one
+        // (`widthConstrainedIDs` would still think it's constrained), leaving it ambiguously/
+        // zero-width forever -- mirrors `renderAll()`'s teardown, which already clears this set.
+        widthConstrainedIDs.removeAll()
 
         for block in new {
             let wrapper: NSView
@@ -651,10 +675,15 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
     /// routes into `blockTextView(_:didEditInlineText:)`'s `.codeBlock` branch above to persist
     /// the new string and re-run syntax highlighting -- the same path ordinary typing uses, so
     /// there is nothing extra to reconcile here.
+    ///
+    /// `offset` (from `BlockTextView.caretOffset`) is a *Character* offset -- correct for
+    /// `BlockEditEngine.split`/`Caret`, but `insertText(_:replacementRange:)` wants a UTF-16
+    /// `NSRange`, so the code-block branch inserts at `view.selectedRange()` (the view's own live
+    /// UTF-16 selection) instead of re-deriving one from `offset`.
     func blockTextViewDidPressEnter(_ view: BlockTextView, atOffset offset: Int) {
         guard let blockID = view.blockID, let index = document.index(of: blockID) else { return }
         if case .codeBlock = document.blocks[index].kind {
-            view.insertText("\n", replacementRange: NSRange(location: offset, length: 0))
+            view.insertText("\n", replacementRange: view.selectedRange())
             return
         }
         apply(BlockEditEngine.split(document, at: Caret(blockID: blockID, offset: offset)))
@@ -715,8 +744,10 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
                 let pointInWindow = view.convert(CGPoint(x: caretX, y: 0), to: nil)
                 let localX = targetView.convert(pointInWindow, from: nil).x
                 let localY: CGFloat = up ? targetView.bounds.maxY - 1 : 1
+                // `characterIndexForInsertion(at:)` indexes in UTF-16 (like `selectedRange()`),
+                // but `focusBlock`/`caretOffset` want a Character offset -- convert.
                 let charIndex = targetView.characterIndexForInsertion(at: CGPoint(x: localX, y: localY))
-                focusBlock(candidate.id, caretOffset: charIndex)
+                focusBlock(candidate.id, caretOffset: targetView.characterOffset(fromUTF16: charIndex))
                 return
             }
             targetIndex += up ? -1 : 1

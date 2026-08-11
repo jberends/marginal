@@ -296,7 +296,13 @@ final class DocumentViewController: NSViewController {
         view.window?.makeFirstResponder(textView)
         textView.setSelectedRange(NSRange(location: offset, length: 0))
 
+        // The window/document undo manager is Code mode's (`MarkdownTextView.allowsUndo = true`
+        // registers into it); the block editor has its own, separate manager (see
+        // `BlockEditorViewController.undoManager`) that Live mode's edits registered into instead
+        // -- both need resetting so leftover Live-mode undo history doesn't dangle once Code mode
+        // starts registering its own steps.
         view.window?.undoManager?.removeAllActions()
+        blockEditor.blockEditorUndoManager.removeAllActions()
         updateCursorChrome()
     }
 
@@ -324,7 +330,9 @@ final class DocumentViewController: NSViewController {
             blockEditor.focusBlock(targetID, caretOffset: 0)
         }
 
+        // Symmetric reset -- see the comment in `switchToCode()`.
         view.window?.undoManager?.removeAllActions()
+        blockEditor.blockEditorUndoManager.removeAllActions()
         updateCursorChrome()
     }
 

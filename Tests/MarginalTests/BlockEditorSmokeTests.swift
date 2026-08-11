@@ -12,6 +12,29 @@ final class BlockEditorSmokeTests: XCTestCase {
         vc.view.layoutSubtreeIfNeeded()
         return (vc, window)
     }
+    // MARK: - Blocking 4: caret offsets must be Character offsets, not UTF-16
+
+    /// `🎉` is outside the BMP (2 UTF-16 code units, 1 Character) -- placing the caret right after
+    /// "hi" in "🎉 hi there" is Character offset 4 (🎉, space, h, i) but UTF-16 location 5. Before
+    /// the fix, `BlockTextView.caretOffset` returned the raw UTF-16 `selectedRange().location`,
+    /// which flowed straight into `InlineText.split(at:)` (a Character-counting API) and split one
+    /// character too far right. This is the emoji-bearing repro from the blocking review.
+    func testEnterAfterEmojiSplitsAtCorrectCharacterOffset() {
+        let (vc, _) = makeEditor("\u{1F389} hi there")
+        let firstID = vc.document.blocks[0].id
+        // Character offset 4 is right after "hi" ("🎉", " ", "h", "i").
+        vc.focusBlock(firstID, caretOffset: 4)
+        guard let tv = vc.view.window?.firstResponder as? BlockTextView else {
+            return XCTFail("expected a focused BlockTextView")
+        }
+        XCTAssertEqual(tv.caretOffset, 4, "expected caretOffset to be a stable Character offset")
+
+        tv.insertNewline(nil)
+
+        XCTAssertEqual(vc.document.blocks.map(\.kind),
+                       [.paragraph(InlineText("\u{1F389} hi")), .paragraph(InlineText(" there"))])
+    }
+
     func testEnterMidParagraphSplitsAndFocusMoves() {
         let (vc, _) = makeEditor("alphabeta")
         let firstID = vc.document.blocks[0].id
@@ -463,17 +486,19 @@ final class BlockEditorSmokeTests: XCTestCase {
     /// Typing a burst of text into an empty paragraph, then splitting it with Enter, must undo
     /// back through the intermediate (pre-split, post-typing) state to the original empty
     /// document, and redo must replay the split. Drives undo/redo through the exact
-    /// `NSUndoManager` the controller registers with (`vc.view.window?.undoManager`), matching
-    /// how a real ⌘Z/⌘⇧Z keystroke would reach it -- not by calling any private restore API.
+    /// `NSUndoManager` the controller registers with (`vc.blockEditorUndoManager` -- the
+    /// controller's own private manager, see `BlockEditorViewController.undoManager`, not
+    /// `vc.view.window?.undoManager`, which belongs to the document/Code mode and this controller
+    /// never touches), matching how a real ⌘Z/⌘⇧Z keystroke would reach it -- not by calling any
+    /// private restore API.
     ///
     /// `groupsByEvent = false` is required here: AppKit's default groups every undo registration
     /// made during one `NSEvent` dispatch into a single step, which would otherwise coalesce
     /// unrelated registrations made back-to-back outside a real run loop (as this test does) into
-    /// one undo, making the two-step assertion below flaky. The controller itself sets this the
-    /// first time it touches the window's undo manager (see `undoManager_`), so no extra setup is
-    /// needed here beyond fetching the same manager instance.
+    /// one undo, making the two-step assertion below flaky. The controller's own manager is
+    /// always configured this way (see `blockUndoManager`), so no extra setup is needed here.
     func testUndoRedoThroughTypingAndSplit() {
-        let (vc, window) = makeEditor("")
+        let (vc, _) = makeEditor("")
         let firstID = vc.document.blocks[0].id
         vc.focusBlock(firstID, caretOffset: 0)
         let tv = vc.view.window?.firstResponder as? BlockTextView
@@ -491,8 +516,8 @@ final class BlockEditorSmokeTests: XCTestCase {
                        [.paragraph(InlineText("al")), .paragraph(InlineText("pha"))])
         XCTAssertEqual(vc.document.blocks.count, 2)
 
-        let undoManager = window.undoManager
-        XCTAssertNotNil(undoManager, "expected the controller to have registered undo steps on the window's undo manager")
+        let undoManager: UndoManager? = vc.blockEditorUndoManager
+        XCTAssertNotNil(undoManager, "expected the controller to have registered undo steps on its own undo manager")
         XCTAssertTrue(undoManager?.canUndo ?? false)
 
         // First undo: revert the split, landing back on the single "alpha" paragraph typed above.
@@ -520,7 +545,7 @@ final class BlockEditorSmokeTests: XCTestCase {
     /// -- undoing it must remove exactly the bold styling and nothing else, leaving the plain
     /// text untouched.
     func testUndoRevertsStyleToggle() {
-        let (vc, window) = makeEditor("ab")
+        let (vc, _) = makeEditor("ab")
         let blockID = vc.document.blocks[0].id
         vc.focusBlock(blockID, caretOffset: 0)
         let tv = vc.view.window?.firstResponder as? BlockTextView
@@ -532,7 +557,7 @@ final class BlockEditorSmokeTests: XCTestCase {
         }
         XCTAssertTrue(boldedText.runs.contains { $0.text == "a" && $0.style.contains(.bold) })
 
-        window.undoManager?.undo()
+        vc.blockEditorUndoManager.undo()
 
         guard case .paragraph(let revertedText) = vc.document.blocks[0].kind else {
             return XCTFail("expected paragraph, got \(vc.document.blocks[0].kind)")
