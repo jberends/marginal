@@ -314,7 +314,7 @@ extension BlockTableView: @preconcurrency BlockTextViewDelegate {
 
 // MARK: - NSTextViewDelegate
 
-extension BlockTableView: @preconcurrency NSTextViewDelegate {
+extension BlockTableView: NSTextViewDelegate {
     /// Bridges plain character insertion/deletion (which never goes through
     /// `BlockTextViewDelegate`'s command-interception hooks) into `didEditInlineText` -- mirrors
     /// `BlockEditorViewController.textDidChange(_:)` exactly, but scoped to this table's own

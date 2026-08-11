@@ -411,6 +411,13 @@ final class BlockEditorSmokeTests: XCTestCase {
     /// Any click clears an active block selection and returns to normal text editing --
     /// `BlockTextView.mouseDown(_:)` reports the click to the delegate before falling through to
     /// `super.mouseDown`.
+    ///
+    /// This drives the delegate hook rather than dispatching a real `mouseDown`: `NSTextView`'s
+    /// own `mouseDown` implementation enters AppKit's *modal* mouse-tracking loop, which sits in
+    /// `nextEvent(matching:)` waiting for a mouse-up that never arrives in a headless test run --
+    /// calling it here hangs the whole suite indefinitely (it did). The production override is a
+    /// two-liner (`blockDelegate?.blockTextViewDidReceiveClick(self)` then `super.mouseDown`), so
+    /// the only part that can regress is the delegate call this test pins.
     func testClickClearsBlockSelection() {
         let (vc, _) = makeEditor("alpha\n\nbeta")
         let ids = vc.document.blocks.map(\.id)
@@ -418,24 +425,119 @@ final class BlockEditorSmokeTests: XCTestCase {
         XCTAssertEqual(vc.selectionController.selectedBlockIDs.count, 2)
 
         vc.focusBlock(ids[0], caretOffset: 0)
-        let tv = vc.view.window?.firstResponder as? BlockTextView
-        let event = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [],
-                                        timestamp: 0, windowNumber: vc.view.window?.windowNumber ?? 0,
-                                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
-        tv?.mouseDown(with: event)
+        guard let tv = vc.view.window?.firstResponder as? BlockTextView else {
+            return XCTFail("expected a focused BlockTextView to click in")
+        }
+        vc.blockTextViewDidReceiveClick(tv)
 
         XCTAssertEqual(vc.selectionController.selectedBlockIDs, [])
     }
 
-    /// A typed character clears an active block selection too.
+    /// A real typed keystroke -- dispatched as an actual `NSEvent` through the responder chain,
+    /// not the delegate method called directly -- clears an active block selection and lands the
+    /// character in the first selected block's text, rather than being silently dropped by
+    /// `super.keyDown` (there is no `BlockTextView` in the chain while the controller itself is
+    /// first responder during a block selection).
     func testTypingClearsBlockSelection() {
-        let (vc, _) = makeEditor("alpha\n\nbeta")
+        let (vc, window) = makeEditor("alpha\n\nbeta")
         let ids = vc.document.blocks.map(\.id)
         vc.beginBlockSelection(anchor: ids[0], extendingTo: ids[1])
         XCTAssertEqual(vc.selectionController.selectedBlockIDs.count, 2)
+        XCTAssertTrue(vc.view.window?.firstResponder === vc, "expected the controller itself to be first responder during block selection")
 
-        vc.blockTextView(BlockTextView(), didEditInlineText: InlineText("x"))
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                      windowNumber: window.windowNumber, context: nil,
+                                      characters: "x", charactersIgnoringModifiers: "x",
+                                      isARepeat: false, keyCode: 7)!
+        window.firstResponder?.keyDown(with: event)
 
         XCTAssertEqual(vc.selectionController.selectedBlockIDs, [])
+        guard case .paragraph(let text) = vc.document[ids[0]]?.kind else {
+            return XCTFail("expected the first selected block to remain a paragraph")
+        }
+        XCTAssertEqual(text.plainText, "alphax")
+    }
+
+    // MARK: - Task 15: document-level undo
+
+    /// Typing a burst of text into an empty paragraph, then splitting it with Enter, must undo
+    /// back through the intermediate (pre-split, post-typing) state to the original empty
+    /// document, and redo must replay the split. Drives undo/redo through the exact
+    /// `NSUndoManager` the controller registers with (`vc.view.window?.undoManager`), matching
+    /// how a real ⌘Z/⌘⇧Z keystroke would reach it -- not by calling any private restore API.
+    ///
+    /// `groupsByEvent = false` is required here: AppKit's default groups every undo registration
+    /// made during one `NSEvent` dispatch into a single step, which would otherwise coalesce
+    /// unrelated registrations made back-to-back outside a real run loop (as this test does) into
+    /// one undo, making the two-step assertion below flaky. The controller itself sets this the
+    /// first time it touches the window's undo manager (see `undoManager_`), so no extra setup is
+    /// needed here beyond fetching the same manager instance.
+    func testUndoRedoThroughTypingAndSplit() {
+        let (vc, window) = makeEditor("")
+        let firstID = vc.document.blocks[0].id
+        vc.focusBlock(firstID, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+
+        // One typing burst: "alpha" typed as a single insertText call, so it coalesces into one
+        // undo step regardless of the 1s pause window (no real delay happens in a test).
+        tv?.insertText("alpha", replacementRange: NSRange(location: 0, length: 0))
+        XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText("alpha"))])
+
+        // Split "alpha" into "al" / "pha" with Enter at offset 2 -- a structural op, which always
+        // pushes its own undo step regardless of the typing burst still notionally "in progress".
+        vc.focusBlock(firstID, caretOffset: 2)
+        (vc.view.window?.firstResponder as? BlockTextView)?.insertNewline(nil)
+        XCTAssertEqual(vc.document.blocks.map(\.kind),
+                       [.paragraph(InlineText("al")), .paragraph(InlineText("pha"))])
+        XCTAssertEqual(vc.document.blocks.count, 2)
+
+        let undoManager = window.undoManager
+        XCTAssertNotNil(undoManager, "expected the controller to have registered undo steps on the window's undo manager")
+        XCTAssertTrue(undoManager?.canUndo ?? false)
+
+        // First undo: revert the split, landing back on the single "alpha" paragraph typed above.
+        undoManager?.undo()
+        XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText("alpha"))])
+        XCTAssertEqual(vc.document.blocks.count, 1)
+
+        // Second undo: revert the whole typing burst, landing back on the original empty paragraph.
+        undoManager?.undo()
+        XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText(""))])
+        XCTAssertEqual(vc.document.blocks.count, 1)
+
+        // Redo replays the split (through the intermediate "alpha" state).
+        XCTAssertTrue(undoManager?.canRedo ?? false)
+        undoManager?.redo()
+        XCTAssertEqual(vc.document.blocks.map(\.kind), [.paragraph(InlineText("alpha"))])
+
+        undoManager?.redo()
+        XCTAssertEqual(vc.document.blocks.map(\.kind),
+                       [.paragraph(InlineText("al")), .paragraph(InlineText("pha"))])
+        XCTAssertEqual(vc.document.blocks.count, 2)
+    }
+
+    /// A style toggle (⌘B) is its own discrete undo step, distinct from surrounding typing bursts
+    /// -- undoing it must remove exactly the bold styling and nothing else, leaving the plain
+    /// text untouched.
+    func testUndoRevertsStyleToggle() {
+        let (vc, window) = makeEditor("ab")
+        let blockID = vc.document.blocks[0].id
+        vc.focusBlock(blockID, caretOffset: 0)
+        let tv = vc.view.window?.firstResponder as? BlockTextView
+        tv?.setSelectedRange(NSRange(location: 0, length: 1))
+
+        tv?.toggleStyleBold(nil)
+        guard case .paragraph(let boldedText) = vc.document.blocks[0].kind else {
+            return XCTFail("expected paragraph, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertTrue(boldedText.runs.contains { $0.text == "a" && $0.style.contains(.bold) })
+
+        window.undoManager?.undo()
+
+        guard case .paragraph(let revertedText) = vc.document.blocks[0].kind else {
+            return XCTFail("expected paragraph, got \(vc.document.blocks[0].kind)")
+        }
+        XCTAssertEqual(revertedText.plainText, "ab")
+        XCTAssertFalse(revertedText.runs.contains { $0.text.contains("a") && $0.style.contains(.bold) })
     }
 }
