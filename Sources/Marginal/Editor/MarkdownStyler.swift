@@ -76,7 +76,10 @@ struct MarkdownStyler {
         let inlineCodeRanges = model.inlineStyles
             .filter { $0.kind == .code }
             .map { $0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound }
-        let ruleRanges = model.horizontalRules.map(\.lineRange)
+        // A table's "| --- |:---:|" alignment row is pure syntax that is always hidden -- without
+        // this it matched the em-dash rule and got a dash *drawn* over the hidden row, leaving
+        // stray marks under each table's header.
+        let ruleRanges = model.horizontalRules.map(\.lineRange) + model.tables.map(\.separatorRowRange)
         let substitutions = (MarkdownParser.parseHTMLEntities(in: text)
                              + MarkdownParser.parseTypographicSubstitutions(in: text))
             .filter { span in
