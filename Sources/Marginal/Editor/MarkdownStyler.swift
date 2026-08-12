@@ -77,6 +77,21 @@ struct MarkdownStyler {
 
             let markerRange = NSRange(header.markerRange, in: text)
             result.addAttribute(.font, value: revealedHeaders.contains(header) ? headerFont : hiddenFont, range: markerRange)
+
+            // Notion's block rhythm: a heading carries much more air above it than below, so it
+            // reads as introducing the text that follows instead of floating between two equal
+            // gaps. Notion's own figures are 30/26/22px above at a 16px body -- but those assume
+            // blocks sit flush, whereas here a blank source line is itself a rendered spacer line
+            // (roughly one line height) that already supplies most of that gap. So this adds only
+            // the *difference*, scaled by heading level; applying the full padding on top of the
+            // blank line would nearly double it. See "Block rhythm" in
+            // specs/notion-design-tokens.md.
+            let headingStyle = NSMutableParagraphStyle()
+            headingStyle.paragraphSpacingBefore = baseFont.pointSize * headerExtraSpaceAbove(for: header.level)
+            headingStyle.paragraphSpacing = baseFont.pointSize * 0.125
+            result.addAttribute(.paragraphStyle,
+                                value: headingStyle,
+                                range: (text as NSString).paragraphRange(for: markerRange))
         }
 
         let revealedBlockquotes = cursorLocation.map {
@@ -601,6 +616,15 @@ struct MarkdownStyler {
             .font: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
             .foregroundColor: NSColor.labelColor
         ])
+    }
+
+    /// Extra space above a heading, as a multiple of the body font size, on top of the blank
+    /// source line that already separates it from the previous block. Bigger headings get more
+    /// air, which is what makes the document's hierarchy readable at a glance; h4-h6 sit at body
+    /// scale already and need none.
+    private static func headerExtraSpaceAbove(for level: Int) -> CGFloat {
+        let extra: [Int: CGFloat] = [1: 0.75, 2: 0.5, 3: 0.25]
+        return extra[level] ?? 0
     }
 
     private static func headerPointSize(for level: Int, baseSize: CGFloat) -> CGFloat {
