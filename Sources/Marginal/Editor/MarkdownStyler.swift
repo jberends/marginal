@@ -307,6 +307,13 @@ struct MarkdownStyler {
             let textRange = NSRange(link.textRange, in: text)
             result.addAttribute(.foregroundColor, value: DesignPalette.accent, range: textRange)
             result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: textRange)
+            // Notion underlines a link with a hairline in a much lighter tint than the text
+            // itself, which reads as a quiet affordance rather than a shout. Drawing the
+            // underline in the accent at full strength (the default -- it inherits the
+            // foreground color) made every link look heavily ruled.
+            result.addAttribute(.underlineColor,
+                                value: DesignPalette.accent.withAlphaComponent(0.35),
+                                range: textRange)
             result.addAttribute(.link, value: link.url, range: textRange)
 
             let delimiterFont = revealedLinks.contains(link) ? baseFont : hiddenFont

@@ -24,6 +24,8 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Changed
 
+- Links keep their purple accent colour but are underlined with a hairline in a lighter
+  tint of it, the way Notion does — a quiet affordance instead of a heavily ruled line.
 - Headings carry Notion's vertical rhythm — more air above than below, scaled by level, so a
   heading reads as introducing the text beneath it.
 - A URL containing underscores (`…/some_path/file_name`) is no longer mis-read as italic
