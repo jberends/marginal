@@ -306,6 +306,10 @@ extension BlockTableView: @preconcurrency BlockTextViewDelegate {
     /// Out of scope for this task (whole-block selection escalation for table cells).
     func blockTextViewDidReceiveClick(_ view: BlockTextView) {}
 
+    /// Out of scope for a table cell: ⌘A stays within the cell rather than escalating to
+    /// whole-document block selection.
+    func blockTextViewDidSelectAllInBlock(_ view: BlockTextView) {}
+
     /// A ⌘B/⌘I/⌘U/⌘⇧S toggle inside a cell: re-render the cell's own storage (mirroring
     /// `BlockEditorViewController`'s handling for ordinary blocks) and report the edit the same
     /// way live typing does.

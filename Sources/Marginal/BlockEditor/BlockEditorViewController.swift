@@ -124,7 +124,11 @@ final class BlockEditorViewController: NSViewController {
         // view (so blocks reflow on window resize) and whose height is whatever autolayout
         // computes from the stack's arranged subviews -- the stack itself sits inset by 40pt
         // horizontal / 24pt vertical, matching the old markdown editor's textContainerInset.
-        let documentView = NSView()
+        // Must be flipped: AppKit's default (non-flipped) coordinate space puts the origin at the
+        // bottom, so a document shorter than the viewport gets pinned to the BOTTOM of the scroll
+        // view -- an empty file opened its one paragraph at the bottom edge of the window with the
+        // caret down there, instead of at the top where the user is looking.
+        let documentView = FlippedView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
 
         let stackView = NSStackView()
@@ -136,7 +140,7 @@ final class BlockEditorViewController: NSViewController {
 
         NSLayoutConstraint.activate([
             stackView.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 24),
-            stackView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -24),
+            stackView.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor, constant: -24),
             stackView.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 40),
             stackView.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -40)
         ])
@@ -773,6 +777,13 @@ extension BlockEditorViewController: @preconcurrency BlockTextViewDelegate {
     }
 
     /// Any click clears an active whole-block selection and returns to normal text editing.
+    /// ⌘A escalated out of a fully-selected block: select every block in the document, so the
+    /// next ⌫ clears the file and ⌘C copies all of it as canonical markdown.
+    func blockTextViewDidSelectAllInBlock(_ view: BlockTextView) {
+        guard let first = document.blocks.first, let last = document.blocks.last else { return }
+        beginBlockSelection(anchor: first.id, extendingTo: last.id)
+    }
+
     func blockTextViewDidReceiveClick(_ view: BlockTextView) {
         clearBlockSelection()
     }
@@ -807,4 +818,11 @@ extension BlockEditorViewController: NSTextViewDelegate {
         guard let textView = notification.object as? BlockTextView else { return }
         blockTextView(textView, didEditInlineText: textView.currentInlineText)
     }
+}
+
+/// A top-left-origin container for the block stack. `NSScrollView` positions a document view
+/// shorter than its viewport at the *bottom* in AppKit's default bottom-left coordinate space,
+/// which put a short document (and its caret) at the bottom edge of the window.
+final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }

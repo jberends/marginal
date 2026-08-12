@@ -189,7 +189,39 @@ final class DocumentViewController: NSViewController {
         let isLive = mode == .live
         blockEditor.view.isHidden = !isLive
         scrollView.isHidden = isLive
-        gutterView.isHidden = isLive
+        // The gutter belongs to both modes: in Code it tracks the caret's line, in Live it shows
+        // the focused block's line in the canonical serialization (0.3.0 always had a gutter, and
+        // losing it in the default mode read as a regression).
+        gutterView.isHidden = false
+    }
+
+    /// Live mode's chrome. There is no single text view to count lines in, so the focused block's
+    /// first line in the canonical serialization is the line number, and the status bar shows the
+    /// block's kind as its breadcrumb.
+    private func updateLiveCursorChrome(gutterView: LineNumberGutterView, statusBar: StatusBarView) {
+        guard let focusedID = blockEditor.focusedBlockID else {
+            gutterView.lineNumber = nil
+            statusBar.update(with: nil)
+            return
+        }
+        let (_, lineMap) = MarkdownSerializer.serialize(blockEditor.document)
+        guard let lineRange = lineMap[focusedID] else {
+            gutterView.lineNumber = nil
+            statusBar.update(with: nil)
+            return
+        }
+        gutterView.lineNumber = lineRange.lowerBound
+        let kindName: String
+        switch blockEditor.document[focusedID]?.kind {
+        case .heading(let level, _): kindName = "Heading \(level)"
+        case .listItem: kindName = "List item"
+        case .quote: kindName = "Quote"
+        case .codeBlock: kindName = "Code block"
+        case .table: kindName = "Table"
+        case .divider: kindName = "Divider"
+        case .paragraph, .none: kindName = "Paragraph"
+        }
+        statusBar.update(with: CursorStatus(line: lineRange.lowerBound, column: 1, path: [kindName]))
     }
 
     /// Recomputes the gutter's line number/position and the status bar's breadcrumb. Only
@@ -198,8 +230,7 @@ final class DocumentViewController: NSViewController {
     private func updateCursorChrome() {
         guard let gutterView, let statusBar else { return }
         guard mode == .code else {
-            gutterView.lineNumber = nil
-            statusBar.update(with: nil)
+            updateLiveCursorChrome(gutterView: gutterView, statusBar: statusBar)
             return
         }
         let text = textView.string

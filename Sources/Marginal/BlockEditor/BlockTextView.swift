@@ -25,6 +25,9 @@ protocol BlockTextViewDelegate: AnyObject {
     /// `mouseDown(with:)` below) so the delegate can clear an active whole-block selection and
     /// return to normal text editing.
     func blockTextViewDidReceiveClick(_ view: BlockTextView)
+    /// ⌘A pressed when this block's text is already fully selected -- escalate to whole-document
+    /// block selection (see `selectAll(_:)`).
+    func blockTextViewDidSelectAllInBlock(_ view: BlockTextView)
     /// A ⌘B/⌘I/⌘U/⌘⇧S style toggle (see `BlockTextView.toggleStyleBold(_:)` etc.) already
     /// computed `text` (the block's `InlineText` with `style` toggled over the selection) --
     /// the delegate persists it into the document model, re-renders `view` through
@@ -343,6 +346,23 @@ final class BlockTextView: NSTextView {
 
     /// Any click clears an active whole-block selection (see `BlockSelectionController`) before
     /// falling through to `super.mouseDown`, which does the real hit-testing/caret placement.
+    /// ⌘A: first press selects this block's own text; a second press (i.e. when the block's text
+    /// is already fully selected) escalates to selecting every block in the document, which is
+    /// what makes "select all, then delete" work at all. Without the escalation ⌘A could only ever
+    /// reach the focused block, so there was no way to select a whole document.
+    override func selectAll(_ sender: Any?) {
+        let wholeBlock = NSRange(location: 0, length: (string as NSString).length)
+        if selectedRange() == wholeBlock && !string.isEmpty {
+            blockDelegate?.blockTextViewDidSelectAllInBlock(self)
+            return
+        }
+        super.selectAll(sender)
+        if string.isEmpty {
+            // Nothing to select inside an empty block, so ⌘A there means "the document".
+            blockDelegate?.blockTextViewDidSelectAllInBlock(self)
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         blockDelegate?.blockTextViewDidReceiveClick(self)
         super.mouseDown(with: event)
