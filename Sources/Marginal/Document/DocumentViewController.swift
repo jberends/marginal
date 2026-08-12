@@ -66,6 +66,9 @@ final class DocumentViewController: NSViewController {
             .underlineColor: DesignPalette.accent.withAlphaComponent(0.35),
             .cursor: NSCursor.pointingHand
         ]
+        textView.linkActivationHandler = { [weak self] value in
+            self?.activateLink(value) ?? false
+        }
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
         editorFontSize = savedSize > 0 ? savedSize : 16
@@ -255,6 +258,71 @@ final class DocumentViewController: NSViewController {
         // unguarded and stomp the render this method just applied.
         textView.setSelectedRange(selectedRange)
         isApplyingProgrammaticEdit = false
+    }
+
+    /// AppKit's own link click. Always reports the link as handled so NSTextView never falls
+    /// back to opening it with LaunchServices.
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        activateLink(link)
+    }
+
+    /// Handles a link the user activated (⌘-click, or AppKit's own link click). Returns true
+    /// when it dealt with the link, which also stops AppKit falling back to LaunchServices --
+    /// that fallback is what produced a "The application can't be opened. -50" dialog for an
+    /// in-document "#anchor", which is not something the Finder can open.
+    @discardableResult
+    func activateLink(_ value: Any) -> Bool {
+        let raw: String
+        switch value {
+        case let url as URL: raw = url.absoluteString
+        case let string as String: raw = string
+        default: return false
+        }
+
+        // In-document anchor: scroll to the heading whose GitHub-style slug matches.
+        if raw.hasPrefix("#") {
+            let wanted = String(raw.dropFirst()).lowercased()
+            let text = textView.string
+            for header in MarkdownParser.parseHeaders(in: text)
+            where Self.anchorSlug(for: String(text[header.contentRange])) == wanted {
+                let target = NSRange(header.contentRange, in: text)
+                textView.setSelectedRange(NSRange(location: target.location, length: 0))
+                textView.scrollRangeToVisible(target)
+                textView.window?.makeFirstResponder(textView)
+                return true
+            }
+            // Unknown anchor: swallow it anyway rather than handing "#missing" to the Finder.
+            return true
+        }
+
+        if let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
+           ["http", "https", "mailto"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+            return true
+        }
+
+        // A relative path (./notes.md, ../parent) resolves against the document on disk.
+        if let documentURL = (view.window?.windowController?.document as? NSDocument)?.fileURL {
+            let resolved = URL(fileURLWithPath: raw, relativeTo: documentURL.deletingLastPathComponent()).standardizedFileURL
+            if FileManager.default.fileExists(atPath: resolved.path) {
+                NSWorkspace.shared.open(resolved)
+                return true
+            }
+        }
+        return true
+    }
+
+    /// GitHub's heading-anchor slug: lowercased, punctuation dropped, spaces to hyphens. This is
+    /// the form "[Heading Level 1](#heading-level-1)" in a hand-written table of contents assumes.
+    static func anchorSlug(for headingText: String) -> String {
+        let lowered = headingText.trimmingCharacters(in: .whitespaces).lowercased()
+        let stripped = lowered.map { character -> Character in
+            if character.isLetter || character.isNumber { return character }
+            if character == "-" || character == " " { return character }
+            return "\u{0}"
+        }
+        return String(stripped).replacingOccurrences(of: "\u{0}", with: "")
+            .replacingOccurrences(of: " ", with: "-")
     }
 
     private func restyle(cursorLocation: String.Index?) {

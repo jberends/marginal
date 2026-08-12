@@ -14,6 +14,11 @@ final class MarkdownTextView: NSTextView {
 
     weak var shortcutDelegate: MarkdownTextViewShortcutDelegate?
 
+    /// Decides what a link activation means -- an external URL to hand to the browser, or an
+    /// in-document "#anchor" to scroll to. Owned by DocumentViewController, which is the only
+    /// object that knows the document's heading structure. Returns true when it handled the link.
+    var linkActivationHandler: ((Any) -> Bool)?
+
     private func droppedMarkdownFileURL(from draggingInfo: NSDraggingInfo) -> URL? {
         guard let url = NSURL(from: draggingInfo.draggingPasteboard) as URL?,
               markdownFileExtensions.contains(url.pathExtension.lowercased()) else { return nil }
@@ -65,17 +70,7 @@ final class MarkdownTextView: NSTextView {
         guard characterIndex < textStorage.length else { return false }
         guard let value = textStorage.attribute(.link, at: characterIndex, effectiveRange: nil) else { return false }
 
-        let url: URL?
-        switch value {
-        case let value as URL: url = value
-        case let value as String: url = URL(string: value)
-        default: url = nil
-        }
-        guard let url, let scheme = url.scheme?.lowercased(),
-              ["http", "https", "mailto"].contains(scheme) else { return false }
-
-        NSWorkspace.shared.open(url)
-        return true
+        return linkActivationHandler?(value) ?? false
     }
 
     /// The character index of a task-checkbox marker under `point` (view coordinates),

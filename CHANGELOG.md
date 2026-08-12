@@ -15,6 +15,10 @@ All notable changes to Marginal are documented here. The format follows
   `…/Markdown_(markup_language)` — keeps them. Emails link as `mailto:`.
 - **⌘-click opens a link** in the default browser. A plain click still just moves the
   caret, so a link remains editable text.
+- **In-document anchor links** (`[Heading Level 1](#heading-level-1)`, as a hand-written
+  table of contents uses) scroll to the matching heading, resolved with GitHub's slug
+  rules. Relative paths resolve against the document's own folder. Previously an anchor
+  was handed to LaunchServices, which answered with "The application can't be opened. -50".
 - **Typographic substitution**: `"` `'` `...` `--` and `---` display as `“ ” ‘ ’ … – —`.
 - **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` all display as the
   character they stand for — named, decimal and hexadecimal.
