@@ -67,6 +67,40 @@ struct MarkdownStyler {
             result.addAttribute(.marginalEmojiShortcode, value: EmojiGlyphInfo(emoji: shortcode.emoji, fontSize: emojiFontSize), range: firstCharRange)
         }
 
+        // Display substitutions: HTML entities and typographic replacements are shown as the
+        // character they stand for while the file keeps exactly what the user typed. This reuses
+        // the emoji-shortcode drawing path above -- hide the source run, reserve the replacement's
+        // width with kerning on its last character, and let MarkdownLayoutManager draw the
+        // replacement. Skipped inside code (fenced or inline), where the literal text is the
+        // point, and on horizontal-rule lines, where "---" is a rule rather than an em dash.
+        let inlineCodeRanges = model.inlineStyles
+            .filter { $0.kind == .code }
+            .map { $0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound }
+        let ruleRanges = model.horizontalRules.map(\.lineRange)
+        let substitutions = (MarkdownParser.parseHTMLEntities(in: text)
+                             + MarkdownParser.parseTypographicSubstitutions(in: text))
+            .filter { span in
+                !overlapsAnyCodeBlock(span.range)
+                    && !inlineCodeRanges.contains { $0.lowerBound < span.range.upperBound && $0.upperBound > span.range.lowerBound }
+                    && !ruleRanges.contains { $0.lowerBound < span.range.upperBound && $0.upperBound > span.range.lowerBound }
+            }
+
+        for substitution in substitutions {
+            let fullNSRange = NSRange(substitution.range, in: text)
+            guard fullNSRange.length > 0 else { continue }
+            result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
+            result.addAttribute(.foregroundColor, value: NSColor.clear, range: fullNSRange)
+
+            let width = (substitution.replacement as NSString).size(withAttributes: [.font: baseFont]).width
+            let lastCharRange = NSRange(location: fullNSRange.location + fullNSRange.length - 1, length: 1)
+            result.addAttribute(.kern, value: width, range: lastCharRange)
+
+            let firstCharRange = NSRange(location: fullNSRange.location, length: 1)
+            result.addAttribute(.marginalEmojiShortcode,
+                                value: EmojiGlyphInfo(emoji: substitution.replacement, fontSize: baseFont.pointSize),
+                                range: firstCharRange)
+        }
+
         for header in headers {
             // Semibold, not full bold -- Notion's heading weight (600).
             let headerFont = NSFont.systemFont(

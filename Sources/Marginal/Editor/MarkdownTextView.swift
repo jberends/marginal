@@ -38,10 +38,44 @@ final class MarkdownTextView: NSTextView {
     // Clicking a drawn task checkbox toggles it ([ ] <-> [x]) instead of moving the caret.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if event.modifierFlags.contains(.command), openLink(at: point) {
+            return
+        }
         if let characterIndex = taskCheckboxCharacterIndex(at: point), toggleTaskCheckbox(atCharacterIndex: characterIndex) {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    /// ⌘-click opens the link under `point` in the default browser. A plain click deliberately
+    /// still just moves the caret: this is an editor, and in an editable text view a bare click on
+    /// a link has to remain a way to put the cursor inside it -- ⌘-click is the same gesture Xcode
+    /// and VS Code use for exactly that reason. Returns false when there is no link under the
+    /// point, so the normal click handling continues.
+    private func openLink(at point: NSPoint) -> Bool {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else { return false }
+
+        // Reject points past the end of the line's glyphs, so clicking the empty space to the
+        // right of a link-terminated line doesn't open it.
+        let glyphIndex = layoutManager.glyphIndex(for: point, in: textContainer, fractionOfDistanceThroughGlyph: nil)
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+        guard glyphRect.contains(point) else { return false }
+
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard characterIndex < textStorage.length else { return false }
+        guard let value = textStorage.attribute(.link, at: characterIndex, effectiveRange: nil) else { return false }
+
+        let url: URL?
+        switch value {
+        case let value as URL: url = value
+        case let value as String: url = URL(string: value)
+        default: url = nil
+        }
+        guard let url, let scheme = url.scheme?.lowercased(),
+              ["http", "https", "mailto"].contains(scheme) else { return false }
+
+        NSWorkspace.shared.open(url)
+        return true
     }
 
     /// The character index of a task-checkbox marker under `point` (view coordinates),

@@ -4,6 +4,31 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.9.0] — unreleased
+
+### Added
+
+- **Autolinks**: bare URLs and email addresses written straight into the prose become real
+  links, without needing `[text](url)` syntax. Trailing punctuation follows GFM's rules, so
+  `https://example.com.` links without the full stop, `(https://example.com/path).` drops
+  the wrapping paren *and* the stop, and a URL whose own parentheses balance —
+  `…/Markdown_(markup_language)` — keeps them. Emails link as `mailto:`.
+- **⌘-click opens a link** in the default browser. A plain click still just moves the
+  caret, so a link remains editable text.
+- **Typographic substitution**: `"` `'` `...` `--` and `---` display as `“ ” ‘ ’ … – —`.
+- **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` all display as the
+  character they stand for — named, decimal and hexadecimal.
+
+  Both substitutions are display-only: the file on disk keeps exactly what you typed, and
+  neither applies inside code blocks, inline code, or on a `---` horizontal-rule line.
+
+### Changed
+
+- Headings carry Notion's vertical rhythm — more air above than below, scaled by level, so a
+  heading reads as introducing the text beneath it.
+- A URL containing underscores (`…/some_path/file_name`) is no longer mis-read as italic
+  emphasis and no longer has its underscores hidden.
+
 ## [0.3.0] — 2026-07-29
 
 ### Added

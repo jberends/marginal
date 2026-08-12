@@ -249,11 +249,29 @@ final class DocumentViewController: NSViewController {
 
     private func restyle(cursorLocation: String.Index?) {
         let text = textView.string
+        // Explicit [text](url) links first, then bare URLs/emails in the prose. An autolink also
+        // suppresses any inline emphasis the parser found *inside* it: a URL like
+        // ".../some_path/file_name" otherwise reads as italic to the underscore rule, which both
+        // mis-styles it and hides the underscores as if they were delimiters.
+        let explicitLinks = MarkdownParser.parseLinks(in: text)
+        let allInlineStyles = MarkdownParser.parseInlineStyles(in: text)
+        let inlineCodeRanges = allInlineStyles
+            .filter { $0.kind == .code }
+            .map { $0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound }
+        let autolinks = MarkdownParser.parseAutolinks(
+            in: text,
+            excluding: explicitLinks.map(\.fullRange) + inlineCodeRanges
+        )
+        let inlineStyles = allInlineStyles.filter { style in
+            let styleRange = style.openingDelimiterRange.lowerBound..<style.closingDelimiterRange.upperBound
+            return !autolinks.contains { $0.fullRange.lowerBound < styleRange.upperBound && $0.fullRange.upperBound > styleRange.lowerBound }
+        }
+
         let model = MarkdownDocumentModel(
-            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            inlineStyles: inlineStyles,
             headers: MarkdownParser.parseHeaders(in: text),
             listItems: MarkdownParser.parseListItems(in: text),
-            links: MarkdownParser.parseLinks(in: text),
+            links: explicitLinks + autolinks,
             blockquotes: MarkdownParser.parseBlockquotes(in: text),
             horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
             codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),

@@ -464,3 +464,202 @@ struct MarkdownParser {
         return spans
     }
 }
+
+// MARK: - Autolinks
+
+extension MarkdownParser {
+    /// Bare URLs and email addresses written straight into the prose -- no `[text](url)` syntax.
+    /// Returns them as `LinkSpan`s whose text/url/full ranges are all the URL itself, so the
+    /// styler and the HTML renderer can treat them exactly like an explicit markdown link that
+    /// happens to have no delimiters to hide.
+    ///
+    /// `claimed` ranges are skipped: pass the `fullRange`s of the explicit markdown links (so the
+    /// URL inside `[text](url)` isn't linked twice) and of inline code spans (a URL inside
+    /// backticks is sample text, not a link).
+    ///
+    /// Trailing punctuation follows GFM's autolink rules, which exist because a URL at the end of
+    /// a sentence is far more common than a URL that genuinely ends in punctuation:
+    /// `https://example.com.` links without the full stop, `(https://example.com/path).` drops
+    /// both the paren and the stop, but `…/Markdown_(markup_language)` keeps its closing paren
+    /// because the parens inside the URL balance.
+    static func parseAutolinks(in text: String, excluding claimed: [Range<String.Index>] = []) -> [LinkSpan] {
+        var spans: [LinkSpan] = []
+
+        func isClaimed(_ range: Range<String.Index>) -> Bool {
+            claimed.contains { $0.lowerBound < range.upperBound && $0.upperBound > range.lowerBound }
+        }
+
+        func appendMatches(pattern: String, isEmail: Bool) {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+            let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+            regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+                guard let match, var range = Range(match.range, in: text) else { return }
+                guard let trimmed = trimmingAutolinkTrailingPunctuation(range, in: text) else { return }
+                range = trimmed
+                guard !isClaimed(range) else { return }
+                let raw = String(text[range])
+                spans.append(LinkSpan(textRange: range,
+                                      urlRange: range,
+                                      fullRange: range,
+                                      url: isEmail ? "mailto:\(raw)" : raw))
+            }
+        }
+
+        // A scheme'd URL runs to the first whitespace or angle bracket; the trailing-punctuation
+        // pass below decides where it really ends. The lookbehind keeps it from starting midway
+        // through a longer token.
+        appendMatches(pattern: "(?<![A-Za-z0-9._%+-])https?://[^\\s<>]+", isEmail: false)
+        // Email: local@domain.tld. Requires a dotted domain so "a@b" in prose isn't linked.
+        appendMatches(pattern: "(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}", isEmail: true)
+
+        return spans.sorted { $0.fullRange.lowerBound < $1.fullRange.lowerBound }
+    }
+
+    /// Walks back off the end of an autolink candidate while the last character is punctuation
+    /// that reads as sentence punctuation rather than part of the address. A closing bracket is
+    /// only dropped when it is unbalanced within the candidate -- that is what lets a Wikipedia
+    /// URL keep its `(markup_language)` suffix while `(https://example.com/path)` loses the paren
+    /// that was wrapping it. Returns nil if nothing is left.
+    private static func trimmingAutolinkTrailingPunctuation(_ range: Range<String.Index>,
+                                                            in text: String) -> Range<String.Index>? {
+        // Not "_" or "~": those are legitimate, common URL characters (…/some_path/file_name).
+        let sentencePunctuation: Set<Character> = [".", ",", ";", ":", "!", "?", "\"", "'", "*"]
+        let brackets: [Character: Character] = [")": "(", "]": "[", "}": "{"]
+
+        var end = range.upperBound
+        while end > range.lowerBound {
+            let last = text[text.index(before: end)]
+            if sentencePunctuation.contains(last) {
+                end = text.index(before: end)
+                continue
+            }
+            if let opener = brackets[last] {
+                let candidate = text[range.lowerBound..<end]
+                let opens = candidate.filter { $0 == opener }.count
+                let closes = candidate.filter { $0 == last }.count
+                if closes > opens {
+                    end = text.index(before: end)
+                    continue
+                }
+            }
+            break
+        }
+
+        guard end > range.lowerBound else { return nil }
+        let trimmed = range.lowerBound..<end
+        // "https://" on its own isn't a link.
+        return String(text[trimmed]).hasSuffix("//") ? nil : trimmed
+    }
+}
+
+// MARK: - Display substitutions
+
+/// A run of source characters that should *display* as something else while the file on disk keeps
+/// the literal characters the user typed -- HTML entities (`&copy;` shown as ©) and typographic
+/// replacements (`--` shown as –). The same idea as the existing `:shortcode:` → emoji handling,
+/// and it reuses that drawing path in MarkdownLayoutManager.
+struct DisplaySubstitutionSpan: Equatable {
+    let range: Range<String.Index>
+    let replacement: String
+}
+
+extension MarkdownParser {
+    private static let namedEntities: [String: String] = [
+        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00A0}",
+        "copy": "©", "reg": "®", "trade": "™", "deg": "°", "plusmn": "±", "times": "×",
+        "divide": "÷", "frac12": "½", "frac14": "¼", "frac34": "¾", "sup2": "²", "sup3": "³",
+        "micro": "µ", "para": "¶", "sect": "§", "dagger": "†", "Dagger": "‡", "bull": "•",
+        "middot": "·", "hellip": "…", "mdash": "—", "ndash": "–", "lsquo": "\u{2018}",
+        "rsquo": "\u{2019}", "ldquo": "\u{201C}", "rdquo": "\u{201D}", "laquo": "«", "raquo": "»",
+        "euro": "€", "pound": "£", "yen": "¥", "cent": "¢", "permil": "‰",
+        "larr": "←", "uarr": "↑", "rarr": "→", "darr": "↓", "harr": "↔",
+        "ne": "≠", "le": "≤", "ge": "≥", "infin": "∞", "asymp": "≈", "equiv": "≡", "radic": "√"
+    ]
+
+    /// HTML entities -- named (`&copy;`), decimal (`&#169;`) and hexadecimal (`&#x00A9;`).
+    static func parseHTMLEntities(in text: String) -> [DisplaySubstitutionSpan] {
+        guard let regex = try? NSRegularExpression(pattern: "&(#[Xx][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]{1,31});") else { return [] }
+        var spans: [DisplaySubstitutionSpan] = []
+        let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+        regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+            guard let match,
+                  let full = Range(match.range, in: text),
+                  let body = Range(match.range(at: 1), in: text) else { return }
+            let token = String(text[body])
+            var replacement: String?
+            if token.hasPrefix("#x") || token.hasPrefix("#X") {
+                if let value = UInt32(token.dropFirst(2), radix: 16), let scalar = Unicode.Scalar(value) {
+                    replacement = String(Character(scalar))
+                }
+            } else if token.hasPrefix("#") {
+                if let value = UInt32(token.dropFirst()), let scalar = Unicode.Scalar(value) {
+                    replacement = String(Character(scalar))
+                }
+            } else {
+                replacement = namedEntities[token]
+            }
+            guard let replacement else { return }
+            spans.append(DisplaySubstitutionSpan(range: full, replacement: replacement))
+        }
+        return spans
+    }
+
+    /// Typographic substitution: straight quotes become curly, `...` becomes an ellipsis, `--` an
+    /// en dash and `---` an em dash. Done at *display* time only -- AppKit's own automatic
+    /// substitution is deliberately disabled on the text view because it rewrites the buffer
+    /// before the parser ever sees it, which silently turned a typed `---` into an em dash and
+    /// broke horizontal rules.
+    static func parseTypographicSubstitutions(in text: String) -> [DisplaySubstitutionSpan] {
+        var spans: [DisplaySubstitutionSpan] = []
+        let characters = Array(text)
+        let indices = Array(text.indices)
+        var i = 0
+
+        func character(at offset: Int) -> Character? {
+            (offset >= 0 && offset < characters.count) ? characters[offset] : nil
+        }
+        /// A quote opens when what precedes it is nothing, whitespace, or an opening bracket.
+        func isOpening(before offset: Int) -> Bool {
+            guard let previous = character(at: offset - 1) else { return true }
+            return previous.isWhitespace || "([{-–—/".contains(previous)
+        }
+
+        while i < characters.count {
+            let c = characters[i]
+            let start = indices[i]
+
+            /// The index `count` characters after `i`, clamped to the end of the text.
+            func end(after count: Int) -> String.Index {
+                i + count < indices.count ? indices[i + count] : text.endIndex
+            }
+
+            if c == ".", character(at: i + 1) == ".", character(at: i + 2) == "." {
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: 3), replacement: "…"))
+                i += 3
+                continue
+            }
+            if c == "-", character(at: i + 1) == "-" {
+                let isEmDash = character(at: i + 2) == "-"
+                let length = isEmDash ? 3 : 2
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: length),
+                                                    replacement: isEmDash ? "—" : "–"))
+                i += length
+                continue
+            }
+            if c == "\"" {
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: 1),
+                                                    replacement: isOpening(before: i) ? "\u{201C}" : "\u{201D}"))
+                i += 1
+                continue
+            }
+            if c == "'" {
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: 1),
+                                                    replacement: isOpening(before: i) ? "\u{2018}" : "\u{2019}"))
+                i += 1
+                continue
+            }
+            i += 1
+        }
+        return spans
+    }
+}
