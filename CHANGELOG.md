@@ -19,13 +19,19 @@ All notable changes to Marginal are documented here. The format follows
 - **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` all display as the
   character they stand for — named, decimal and hexadecimal.
 
+  Neither substitution applies inside the hidden parts of a link, so a link title's
+  quotes (`[text](url "Title")`) no longer get drawn as stray curly quotes after the link.
+
   Both substitutions are display-only: the file on disk keeps exactly what you typed, and
   neither applies inside code blocks, inline code, or on a `---` horizontal-rule line.
 
 ### Changed
 
-- Links keep their purple accent colour but are underlined with a hairline in a lighter
-  tint of it, the way Notion does — a quiet affordance instead of a heavily ruled line.
+- Links render in Marginal's purple accent — previously the text came out system blue,
+  because `NSTextView` paints its own link attributes over any range carrying a `.link`
+  attribute and won against the styler. They are underlined with a hairline in a lighter
+  tint of the accent, the way Notion does: a quiet affordance instead of a heavily ruled
+  line. The pointer becomes a hand over a link.
 - Headings carry Notion's vertical rhythm — more air above than below, scaled by level, so a
   heading reads as introducing the text beneath it.
 - A URL containing underscores (`…/some_path/file_name`) is no longer mis-read as italic

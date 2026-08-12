@@ -79,7 +79,16 @@ struct MarkdownStyler {
         // A table's "| --- |:---:|" alignment row is pure syntax that is always hidden -- without
         // this it matched the em-dash rule and got a dash *drawn* over the hidden row, leaving
         // stray marks under each table's header.
-        let ruleRanges = model.horizontalRules.map(\.lineRange) + model.tables.map(\.separatorRowRange)
+        // The hidden parts of a link -- "[", "](url \"Title\")" -- are syntax the reader never
+        // sees, but the quotes around a link title still matched the smart-quote rule and got
+        // curly quotes *drawn* after the link text.
+        let linkSyntaxRanges = model.links.flatMap { link in
+            [link.fullRange.lowerBound..<link.textRange.lowerBound,
+             link.textRange.upperBound..<link.fullRange.upperBound]
+        }.filter { !$0.isEmpty }
+        let ruleRanges = model.horizontalRules.map(\.lineRange)
+            + model.tables.map(\.separatorRowRange)
+            + linkSyntaxRanges
         let substitutions = (MarkdownParser.parseHTMLEntities(in: text)
                              + MarkdownParser.parseTypographicSubstitutions(in: text))
             .filter { span in

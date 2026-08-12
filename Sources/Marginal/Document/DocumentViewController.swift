@@ -56,6 +56,16 @@ final class DocumentViewController: NSViewController {
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = self
         textView.shortcutDelegate = self
+        // NSTextView paints its own attributes over any range carrying `.link` -- blue text with
+        // a full-strength underline by default -- which overrode the accent colour the styler
+        // applies and left links reading as system-blue with a purple underline. Restating the
+        // link appearance here keeps AppKit's rendering identical to MarkdownStyler's.
+        textView.linkTextAttributes = [
+            .foregroundColor: DesignPalette.accent,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .underlineColor: DesignPalette.accent.withAlphaComponent(0.35),
+            .cursor: NSCursor.pointingHand
+        ]
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
         editorFontSize = savedSize > 0 ? savedSize : 16
