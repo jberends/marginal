@@ -141,7 +141,7 @@ final class DocumentViewController: NSViewController {
 
         // Counts describe the whole document, so they stay accurate even when the caret is
         // elsewhere -- the status bar keeps showing whichever readout the user clicked to.
-        let counts = DocumentCounts(text: text)
+        let counts = DocumentCounts(text: text, selectedRange: textView.selectedRange())
 
         guard cursorInText, let cursor = currentCursorIndex() else {
             gutterView.lineNumber = nil

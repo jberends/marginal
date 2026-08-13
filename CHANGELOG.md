@@ -23,8 +23,10 @@ All notable changes to Marginal are documented here. The format follows
   type, so macOS did not believe it could open plain text — dragging a `.txt` (or a `.md`)
   onto the Dock icon did nothing. Plain text is now a declared type, and a dropped `.txt`
   opens as its own document in a new tab, exactly like a `.md`.
-- **Word and character counts.** Click the `L · C` indicator in the status bar to swap it
-  for `Chars … · Words …`, and click again to swap back — the caret's position is what you
+- **Word and character counts.** Click the `L · C` indicator in the status bar to swap it for
+  counts, and click again to swap back. It shows where you are, not just how big the file is:
+  `Chars 23 / 26374 · Words 4 / 3995`. Select text and it reports the selection instead —
+  `Selected 120 / 26374 chars · 22 / 3995 words` — the caret's position is what you
   want while editing, the document's size while writing to a length. Words are counted the
   way a word processor counts them; characters count the text as written, markup included.
 - **Leaving without saving.** Holding ⌘Q or ⌘W — or pressing it again while the "do you
