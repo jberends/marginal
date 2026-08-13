@@ -11,23 +11,52 @@ struct MarkdownParser {
 
     static func parseInlineStyles(in text: String) -> [InlineStyleSpan] {
         var spans: [InlineStyleSpan] = []
-        var claimedRanges: [Range<String.Index>] = []
+        /// A claimed range, its content (what sits between the delimiters), and whether anything
+        /// may be styled inside it.
+        struct Claim {
+            let range: Range<String.Index>
+            let contentRange: Range<String.Index>
+            let isOpaque: Bool
+        }
+        var claimedRanges: [Claim] = []
 
-        func claim(_ range: Range<String.Index>) {
-            claimedRanges.append(range)
+        func claim(_ range: Range<String.Index>, content: Range<String.Index>? = nil, opaque: Bool = false) {
+            claimedRanges.append(Claim(range: range, contentRange: content ?? range, isOpaque: opaque))
         }
 
-        // A later (lower-priority) pattern is allowed to match a range that fully contains an
-        // already-claimed range -- that's legitimate nesting (e.g. **bold with `code` inside**,
-        // where code claims first per the priority order below, and bold's full range
-        // necessarily spans across it). It is rejected only when it partially overlaps a claimed
-        // range without containing it -- a real conflict between two same-level delimiters.
+        /// Decides whether a span conflicts with something already claimed.
+        ///
+        /// Emphasis nests: `**~~struck~~**` is legitimately bold *and* struck, and since bold
+        /// claims the outer range first, rejecting everything inside it threw the strikethrough
+        /// away completely -- the tildes vanished and no line was ever drawn.
+        ///
+        /// But nesting only counts when the inner span sits within the claim's *content*. In
+        /// `***world***` the bold pattern also matches, starting on the very same asterisks the
+        /// boldItalic claim owns -- that is two delimiters fighting over one run, not one style
+        /// inside another, and it has to lose.
+        ///
+        /// Code and emoji shortcodes are opaque: their content is literal, so `` `**not bold**` ``
+        /// keeps its asterisks and stays unstyled.
         func isClaimed(_ range: Range<String.Index>) -> Bool {
-            claimedRanges.contains { claimed in
+            claimedRanges.contains { claim in
+                let claimed = claim.range
                 let overlaps = range.lowerBound < claimed.upperBound && range.upperBound > claimed.lowerBound
                 guard overlaps else { return false }
-                let fullyContainsClaimed = range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound
-                return !fullyContainsClaimed
+
+                // The same run re-matched by a lower-priority delimiter.
+                if range == claimed { return true }
+
+                let claimWrapsRange = claimed.lowerBound <= range.lowerBound && claimed.upperBound >= range.upperBound
+                if claimWrapsRange {
+                    if claim.isOpaque { return true }
+                    // Nesting is only real when it stays inside the delimiters.
+                    let insideContent = range.lowerBound >= claim.contentRange.lowerBound
+                        && range.upperBound <= claim.contentRange.upperBound
+                    return !insideContent
+                }
+
+                let rangeWrapsClaim = range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound
+                return !rangeWrapsClaim
             }
         }
 
@@ -51,7 +80,7 @@ struct MarkdownParser {
                     openingDelimiterRange: openStart..<openEnd,
                     closingDelimiterRange: closeStart..<closeEnd
                 ))
-                claim(fullRange)
+                claim(fullRange, content: contentRange)
             }
         }
 
@@ -60,7 +89,7 @@ struct MarkdownParser {
         // italic pattern below (this parser doesn't implement CommonMark's intraword-emphasis
         // flanking rules -- see the type doc comment).
         for shortcode in parseEmojiShortcodes(in: text) {
-            claim(shortcode.fullRange)
+            claim(shortcode.fullRange, opaque: true)
         }
 
         // Order matters: higher-priority (longer/more specific) delimiters
@@ -91,7 +120,7 @@ struct MarkdownParser {
                     openingDelimiterRange: openStart..<openEnd,
                     closingDelimiterRange: closeStart..<closeEnd
                 ))
-                claim(fullRange)
+                claim(fullRange, opaque: true)
             }
         }
         // Triple delimiters claim next, before plain bold: **/__ would otherwise absorb two of

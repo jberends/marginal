@@ -59,6 +59,18 @@ final class MarkdownLayoutManager: NSLayoutManager {
     /// emoji) drifted upward off its own line the moment body line height went to 1.55. Deriving
     /// the rect from the glyph baseline and the font's ascender/descender keeps decorations
     /// aligned to the text no matter what the line height is.
+    /// The y of the text baseline on the line containing `range`, in container coordinates.
+    ///
+    /// Anything *textual* drawn beside the text -- a list number, an emoji standing in for a
+    /// shortcode, an ellipsis or dash standing in for its source characters -- has to sit on this
+    /// baseline. Centring such a string vertically in the line instead leaves it visibly low,
+    /// because a string's bounding box is taller than the distance from its baseline to its top.
+    func textBaselineY(forGlyphRange range: NSRange) -> CGFloat? {
+        guard range.location < numberOfGlyphs else { return nil }
+        let fragment = lineFragmentRect(forGlyphAt: range.location, effectiveRange: nil)
+        return fragment.minY + location(forGlyphAt: range.location).y
+    }
+
     func textLineRect(forGlyphRange range: NSRange, in container: NSTextContainer) -> NSRect {
         let bounding = boundingRect(forGlyphRange: range, in: container)
         guard range.location < numberOfGlyphs, let storage = textStorage else { return bounding }
@@ -193,7 +205,9 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
             let markerSize = (displayText as NSString).size(withAttributes: markerAttributes)
             let rightEdge = origin.x + paragraphStyle.headIndent - MarkdownStyler.orderedMarkerContentGap(for: font)
-            let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + charRect.midY - markerSize.height / 2)
+            let markerBaseline = textBaselineY(forGlyphRange: glyphRange).map { $0 - font.ascender }
+                ?? (charRect.midY - markerSize.height / 2)
+            let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + markerBaseline)
             (displayText as NSString).draw(at: drawPoint, withAttributes: markerAttributes)
         }
 
@@ -273,7 +287,10 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let emojiAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: info.fontSize)]
             let emojiSize = (info.emoji as NSString).size(withAttributes: emojiAttributes)
-            let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + charRect.midY - emojiSize.height / 2)
+            let emojiFont = (emojiAttributes[.font] as? NSFont) ?? NSFont.systemFont(ofSize: info.fontSize)
+            let emojiBaseline = textBaselineY(forGlyphRange: glyphRange).map { $0 - emojiFont.ascender }
+                ?? (charRect.midY - emojiSize.height / 2)
+            let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + emojiBaseline)
             (info.emoji as NSString).draw(at: drawPoint, withAttributes: emojiAttributes)
         }
     }

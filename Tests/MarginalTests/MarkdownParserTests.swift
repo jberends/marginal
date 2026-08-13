@@ -33,6 +33,19 @@ final class MarkdownParserInlineStyleTests: XCTestCase {
         XCTAssertEqual(spans[0].kind, .italic)
     }
 
+    /// Emphasis composes: bold wrapping a strikethrough must yield *both*, because bold claims
+    /// the outer range first and rejecting everything inside it dropped the strikethrough
+    /// entirely -- the tildes were hidden and no line was ever drawn.
+    func testStrikethroughNestedInsideBoldYieldsBothSpans() {
+        let text = "Strikethrough and bold: **~~bold deleted text~~**"
+        let spans = MarkdownParser.parseInlineStyles(in: text)
+        XCTAssertEqual(spans.count, 2, "expected a bold span and a strikethrough span, got \(spans.map(\.kind))")
+        XCTAssertTrue(spans.contains { $0.kind == .bold })
+        XCTAssertTrue(spans.contains { $0.kind == .strikethrough })
+        let struck = spans.first { $0.kind == .strikethrough }
+        XCTAssertEqual(struck.map { String(text[$0.contentRange]) }, "bold deleted text")
+    }
+
     func testTripleAsteriskDelimiterYieldsBoldItalicSpan() {
         let text = "Hello ***world*** today"
         let spans = MarkdownParser.parseInlineStyles(in: text)

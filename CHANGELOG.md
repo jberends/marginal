@@ -43,6 +43,14 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Fixed
 
+- Strikethrough inside bold (`**~~deleted~~**`) now renders as both. Bold claimed the outer
+  range first and anything inside a claim was rejected, so the strikethrough was dropped —
+  the tildes disappeared but no line was ever drawn. Emphasis now nests, while inline code
+  stays literal, so `` `**not bold**` `` keeps its asterisks.
+- Substituted characters (`…`, `–`, `—`) and list numbers sit on the text baseline instead of
+  hanging below it. They are drawn rather than typed, and were being centred in the line — a
+  string's box is taller than its baseline-to-top distance, so centring always reads as low.
+
 - Selecting text inside a code block now shows the selection. The card's background was
   painted *after* the selection highlight and covered it completely, so the status bar knew
   text was selected but the page gave no sign of it.
