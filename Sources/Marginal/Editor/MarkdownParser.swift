@@ -258,11 +258,16 @@ struct MarkdownParser {
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
-            if let markerRange = line.range(of: "^> ?", options: .regularExpression) {
+            // The whole run of markers, not just the first: ">> Level 2" is one blockquote line
+            // at depth 2, and matching only "^> ?" left the second ">" sitting in the content as
+            // literal text with a single bar drawn beside it.
+            if let markerRange = line.range(of: "^(?:>[ \t]?)+", options: .regularExpression) {
+                let depth = line[markerRange].filter { $0 == ">" }.count
                 blockquotes.append(BlockquoteSpan(
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
-                    lineRange: lineStart..<lineEnd
+                    lineRange: lineStart..<lineEnd,
+                    depth: max(1, depth)
                 ))
             }
             lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex

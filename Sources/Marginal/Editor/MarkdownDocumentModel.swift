@@ -58,6 +58,9 @@ struct BlockquoteSpan: Equatable {
     let markerRange: Range<String.Index>
     let contentRange: Range<String.Index>
     let lineRange: Range<String.Index>
+    /// How many ">" markers this line carries. ">> quoted" is depth 2 and draws two bars, each
+    /// indented one step further, the way every markdown renderer shows a reply-to-a-reply.
+    let depth: Int
 }
 
 struct HorizontalRuleSpan: Equatable {

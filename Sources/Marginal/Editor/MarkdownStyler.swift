@@ -182,12 +182,15 @@ struct MarkdownStyler {
 
         for blockquote in blockquotes {
             let markerRange = NSRange(blockquote.markerRange, in: text)
-            result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
+            result.addAttribute(.marginalBlockquoteMarker, value: blockquote.depth, range: NSRange(blockquote.lineRange, in: text))
 
             let quoteParagraphStyle = NSMutableParagraphStyle()
             quoteParagraphStyle.lineHeightMultiple = bodyLineHeightMultiple
-            quoteParagraphStyle.firstLineHeadIndent = blockquoteContentIndent
-            quoteParagraphStyle.headIndent = blockquoteContentIndent
+            // Each nesting level steps the content in, so the bars stack visibly rather than
+            // overprinting each other at the same x.
+            let quoteIndent = blockquoteContentIndent * CGFloat(blockquote.depth)
+            quoteParagraphStyle.firstLineHeadIndent = quoteIndent
+            quoteParagraphStyle.headIndent = quoteIndent
             result.addAttribute(.paragraphStyle, value: quoteParagraphStyle, range: NSRange(blockquote.lineRange, in: text))
 
             let markerFont = revealedBlockquotes.contains(blockquote) ? baseFont : hiddenFont

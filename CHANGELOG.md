@@ -43,6 +43,10 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Fixed
 
+- Nested blockquotes render as nested. Only the first ">" of a marker run was consumed, so
+  ">> Level 2" drew a single bar with a stray ">" left sitting in the text. Each level now
+  draws its own bar, stepped in, and the content is indented per level.
+
 - Strikethrough inside bold (`**~~deleted~~**`) now renders as both. Bold claimed the outer
   range first and anything inside a claim was rejected, so the strikethrough was dropped —
   the tildes disappeared but no line was ever drawn. Emphasis now nests, while inline code

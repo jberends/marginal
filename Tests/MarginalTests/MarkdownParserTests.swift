@@ -347,13 +347,28 @@ final class MarkdownParserBlockquoteTests: XCTestCase {
         XCTAssertTrue(MarkdownParser.parseBlockquotes(in: "Just a normal sentence.").isEmpty)
     }
 
-    func testNestedMarkerIsNotSpeciallyDetected() {
-        // Known v1 limitation: ">> nested" is parsed as ONE blockquote level whose content
-        // literally starts with the second ">" -- not detected as a nested level.
+    /// Nesting is detected now. This test previously documented the opposite as a known v1
+    /// limitation: the whole marker run was not consumed, so ">> nested" came out as one level
+    /// whose content literally began with the second ">" -- one bar, and a stray marker sitting
+    /// in the text.
+    func testNestedMarkersCountAsDepth() {
         let text = ">> nested"
         let blockquotes = MarkdownParser.parseBlockquotes(in: text)
         XCTAssertEqual(blockquotes.count, 1)
-        XCTAssertEqual(String(text[blockquotes[0].contentRange]), "> nested")
+        XCTAssertEqual(blockquotes[0].depth, 2)
+        XCTAssertEqual(String(text[blockquotes[0].contentRange]), "nested")
+    }
+
+    func testSingleMarkerIsDepthOne() {
+        let text = "> quoted"
+        let blockquotes = MarkdownParser.parseBlockquotes(in: text)
+        XCTAssertEqual(blockquotes.first?.depth, 1)
+        XCTAssertEqual(blockquotes.first.map { String(text[$0.contentRange]) }, "quoted")
+    }
+
+    func testThreeLevelsOfNesting() {
+        let text = ">>> deep"
+        XCTAssertEqual(MarkdownParser.parseBlockquotes(in: text).first?.depth, 3)
     }
 }
 

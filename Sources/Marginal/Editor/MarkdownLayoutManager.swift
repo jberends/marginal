@@ -87,6 +87,10 @@ final class MarkdownLayoutManager: NSLayoutManager {
                       height: font.ascender - font.descender)
     }
 
+    /// Horizontal distance between the bars of nested blockquotes. Matches the per-level content
+    /// indent the styler applies, so each bar lands just left of the text it encloses.
+    var blockquoteBarStep: CGFloat = 14
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         guard let textStorage, let textContainer = textContainers.first else {
             super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
@@ -128,13 +132,18 @@ final class MarkdownLayoutManager: NSLayoutManager {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
 
         textStorage.enumerateAttribute(.marginalBlockquoteMarker, in: fullRange) { value, range, _ in
-            guard value != nil else { return }
+            // The value is the nesting depth: ">> quoted" draws two bars, one per level, each a
+            // content-indent step further in, so a quoted reply reads as nested.
+            let depth = (value as? Int) ?? (value != nil ? 1 : 0)
+            guard depth > 0 else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             // Solid text color, matching Notion's quote bar (border-left: 3px solid currentColor).
             NSColor.labelColor.setFill()
             enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, _, _ in
-                let barRect = NSRect(x: origin.x + lineRect.minX, y: origin.y + lineRect.minY, width: 3, height: lineRect.height)
-                barRect.fill()
+                for level in 0..<depth {
+                    let x = origin.x + lineRect.minX + CGFloat(level) * self.blockquoteBarStep
+                    NSRect(x: x, y: origin.y + lineRect.minY, width: 3, height: lineRect.height).fill()
+                }
             }
         }
 
