@@ -457,7 +457,19 @@ struct MarkdownStyler {
 
             func measuredWidth(_ range: Range<String.Index>) -> CGFloat {
                 guard !range.isEmpty else { return 0 }
-                return result.attributedSubstring(from: NSRange(range, in: text)).size().width
+                // Re-hide the ">" markers on lines that turned out to be inside a fenced code block.
+        // The blockquote pass hides them, but the code-block pass then repaints those lines in
+        // the mono face and code colour, which brings the marker back -- so a fence written
+        // inside a quote showed "> " in front of every line of the card's contents.
+        for blockquote in blockquotes where !revealedBlockquotes.contains(blockquote) {
+            guard overlapsAnyCodeBlock(blockquote.lineRange) else { continue }
+            let markerRange = NSRange(blockquote.markerRange, in: text)
+            guard markerRange.length > 0 else { continue }
+            result.addAttribute(.font, value: hiddenFont, range: markerRange)
+            result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
+        }
+
+        return result.attributedSubstring(from: NSRange(range, in: text)).size().width
             }
 
             let rowCellWidths = pending.rowCellRanges.map { $0.map(measuredWidth) }
@@ -662,7 +674,13 @@ struct MarkdownStyler {
 
                 // Each nesting level reserves one more indentWidth-sized slot: the marker itself
                 // shifts right by level * indentWidth, and content starts one slot further in.
-                let levelOffset = CGFloat(item.level) * indentWidth
+                // A list inside a blockquote has to start where the quote's text starts, not at
+                // the container edge: the item's own indent replaces the quote paragraph style
+                // entirely, so without adding it back the bullets sat on top of the quote bar.
+                let quoteIndent = model.blockquotes
+                    .first { $0.lineRange.contains(item.markerRange.lowerBound) }
+                    .map { blockquoteContentIndent * CGFloat($0.depth) } ?? 0
+                let levelOffset = CGFloat(item.level) * indentWidth + quoteIndent
 
                 // item.lineRange may span multiple source lines when a lazily-continued paragraph
                 // line follows with no blank line between them. TextKit treats each "\n"-delimited
