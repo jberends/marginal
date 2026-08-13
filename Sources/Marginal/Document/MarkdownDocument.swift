@@ -40,6 +40,11 @@ final class MarkdownDocument: NSDocument {
     }
 
     override func read(from data: Data, ofType typeName: String) throws {
+        // UTF-8 only, deliberately. Marginal now opens .txt as well as .md, so falling back to
+        // encoding sniffing for older Latin-1 files is tempting -- but Latin-1 decodes *any* byte
+        // sequence without loss, so a sniffing fallback cannot tell a Latin-1 document from a
+        // binary file that happens to be named .txt. It would open the latter as mojibake instead
+        // of reporting it as unreadable. Refusing is the better failure.
         guard let string = String(data: data, encoding: .utf8) else {
             throw CocoaError(.fileReadCorruptFile)
         }

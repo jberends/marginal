@@ -19,6 +19,10 @@ All notable changes to Marginal are documented here. The format follows
   table of contents uses) scroll to the matching heading, resolved with GitHub's slug
   rules. Relative paths resolve against the document's own folder. Previously an anchor
   was handed to LaunchServices, which answered with "The application can't be opened. -50".
+- **`.txt` files open in Marginal.** The app only ever declared markdown as a document
+  type, so macOS did not believe it could open plain text — dragging a `.txt` (or a `.md`)
+  onto the Dock icon did nothing. Plain text is now a declared type, and a dropped `.txt`
+  opens as its own document in a new tab, exactly like a `.md`.
 - **Word and character counts.** Click the `L · C` indicator in the status bar to swap it
   for `Chars … · Words …`, and click again to swap back — the caret's position is what you
   want while editing, the document's size while writing to a length. Words are counted the
@@ -27,10 +31,6 @@ All notable changes to Marginal are documented here. The format follows
   want to save?" sheet is up — closes the document, or quits, **discarding the unsaved
   changes**. The second gesture matters because that sheet appears in response to ⌘Q/⌘W,
   so pressing the same keys again is the natural reflex, and previously nothing happened.
-- **Dropping a `.txt` file** into the window inserts its text at the point you dropped it,
-  rather than opening it as a separate document — a plain-text file is markdown without any
-  markup, so its contents belong in the document you are writing. The insertion is a normal
-  undoable edit. Dropping a `.md` file still opens it as its own document.
 - **Typographic substitution**: `"` `'` `...` `--` and `---` display as `“ ” ‘ ’ … – —`.
 - **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` all display as the
   character they stand for — named, decimal and hexadecimal.

@@ -12,7 +12,52 @@ This file tests the following features:
 
 1. Document headings from level 1 through level 6
 2. Paragraphs and line wrapping
-3. Forced line breaks
+3. Forced line breaks0:00:00.297 INFO   :       Logged into <pyke Scope 'WCR-Full-trailer-2026-08-07-09:31:48' id c71df937>.
+0:00:00.388 INFO   :          Loading English translation mapping table for trailers.
+0:00:03.851 INFO   :       Retrieved support project: Support.
+0:00:04.241 INFO   :        Adding request part "REQ-0579" in Support scope.
+Traceback (most recent call last):
+  File "/kecrunch/manage.py", line 93, in <module>
+    sys.exit(manage())
+             ^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1524, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1445, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1308, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/click/core.py", line 877, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/click/decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/kecrunch/manage.py", line 89, in manage
+    return run_app_entry_point()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/src/services/generic/request_support.py", line 215, in main
+    email_msg.send_email()
+  File "/workspace/src/core/support_module/models/email.py", line 110, in send_email
+    server = smtplib.SMTP(SMTP_INFO['SERVER'], SMTP_INFO['PORT'])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/smtplib.py", line 341, in connect
+    self.sock = self._get_socket(host, port, self.timeout)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/smtplib.py", line 312, in _get_socket
+    return socket.create_connection((host, port), timeout,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/socket.py", line 865, in create_connection
+    raise exceptions[0]
+  File "/usr/local/lib/python3.12/socket.py", line 850, in create_connection
+    sock.connect(sa)
+TimeoutError: [Errno 110] Connection timed out
+
 4. Horizontal rules
 5. Bold text
 6. Italic text

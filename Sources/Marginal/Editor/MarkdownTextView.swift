@@ -8,10 +8,9 @@ protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL)
 }
 
-private let markdownFileExtensions: Set<String> = ["md", "markdown"]
-/// Plain-text files are dropped *into* the document rather than opened as their own: a .txt is
-/// markdown without any markup, so its contents can be inserted verbatim.
-private let plainTextFileExtensions: Set<String> = ["txt", "text"]
+/// Every extension Marginal opens as a document. A .txt is markdown without markup, so it opens
+/// in its own tab exactly like a .md rather than being treated as different in kind.
+private let markdownFileExtensions: Set<String> = ["md", "markdown", "txt", "text"]
 
 final class MarkdownTextView: NSTextView {
 
@@ -28,40 +27,8 @@ final class MarkdownTextView: NSTextView {
         return url
     }
 
-    private func droppedPlainTextFileURL(from draggingInfo: NSDraggingInfo) -> URL? {
-        guard let url = NSURL(from: draggingInfo.draggingPasteboard) as URL?,
-              plainTextFileExtensions.contains(url.pathExtension.lowercased()) else { return nil }
-        return url
-    }
-
-    /// Reads a dropped .txt and inserts it at the character position it was dropped on. Goes
-    /// through `insertText(_:replacementRange:)` rather than touching the storage directly so the
-    /// insertion is a normal, undoable edit that re-styles like anything else the user types.
-    private func insertDroppedPlainText(from url: URL, at point: NSPoint) -> Bool {
-        let contents: String
-        do {
-            contents = try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            // Not UTF-8 (a Windows-era .txt is often Latin-1): let Foundation sniff the encoding
-            // rather than refusing the drop.
-            var encoding: String.Encoding = .utf8
-            guard let sniffed = try? String(contentsOf: url, usedEncoding: &encoding) else {
-                NSApp.presentError(error)
-                return false
-            }
-            contents = sniffed
-        }
-        guard !contents.isEmpty else { return true }
-
-        let insertionIndex = characterIndexForInsertion(at: point)
-        setSelectedRange(NSRange(location: insertionIndex, length: 0))
-        insertText(contents, replacementRange: NSRange(location: insertionIndex, length: 0))
-        window?.makeFirstResponder(self)
-        return true
-    }
-
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if droppedMarkdownFileURL(from: sender) != nil || droppedPlainTextFileURL(from: sender) != nil {
+        if droppedMarkdownFileURL(from: sender) != nil {
             return .copy
         }
         return super.draggingEntered(sender)
@@ -71,11 +38,6 @@ final class MarkdownTextView: NSTextView {
         if let url = droppedMarkdownFileURL(from: sender) {
             shortcutDelegate?.markdownTextView(self, didReceiveDroppedMarkdownFileAt: url)
             return true
-        }
-        // A .txt is inserted into this document instead of opened as its own -- it is markdown
-        // without markup, so its text belongs wherever the user dropped it.
-        if let url = droppedPlainTextFileURL(from: sender) {
-            return insertDroppedPlainText(from: url, at: convert(sender.draggingLocation, from: nil))
         }
         return super.performDragOperation(sender)
     }
