@@ -19,6 +19,10 @@ All notable changes to Marginal are documented here. The format follows
   table of contents uses) scroll to the matching heading, resolved with GitHub's slug
   rules. Relative paths resolve against the document's own folder. Previously an anchor
   was handed to LaunchServices, which answered with "The application can't be opened. -50".
+- **Leaving without saving.** Holding ⌘Q or ⌘W — or pressing it again while the "do you
+  want to save?" sheet is up — closes the document, or quits, **discarding the unsaved
+  changes**. The second gesture matters because that sheet appears in response to ⌘Q/⌘W,
+  so pressing the same keys again is the natural reflex, and previously nothing happened.
 - **Dropping a `.txt` file** into the window inserts its text at the point you dropped it,
   rather than opening it as a separate document — a plain-text file is markdown without any
   markup, so its contents belong in the document you are writing. The insertion is a normal

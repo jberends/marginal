@@ -7,8 +7,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private var preferencesWindowController: NSWindowController?
 
+    /// When the current ⌘Q/⌘W keypress started, so a *held* shortcut can be told apart from a
+    /// tapped one. Cleared on key-up and whenever the shortcut is not the one being held.
+    private var discardShortcutHeldSince: Date?
+    private var discardShortcutMonitor: Any?
+
+    /// How long ⌘Q/⌘W must be held before it means "leave without saving". Long enough that a
+    /// normal quit never trips it, short enough to feel like an answer to a stuck dialog.
+    private static let discardHoldDuration: TimeInterval = 0.6
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.buildMainMenu(target: self)
+        installDiscardShortcutMonitor()
+    }
+
+    // MARK: - Leave without saving
+
+    /// Two ways out of an unsaved document, both of which *discard* the unsaved changes:
+    /// hold ⌘Q/⌘W, or press it a second time while the "do you want to save?" sheet is up.
+    /// The second is the important one -- that sheet appears in response to ⌘Q/⌘W, so pressing
+    /// the same keys again is the natural reflex, and until now it did nothing at all.
+    private func installDiscardShortcutMonitor() {
+        discardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self else { return event }
+            guard event.modifierFlags.contains(.command),
+                  let key = event.charactersIgnoringModifiers?.lowercased(),
+                  key == "q" || key == "w" else {
+                self.discardShortcutHeldSince = nil
+                return event
+            }
+
+            if event.type == .keyUp {
+                self.discardShortcutHeldSince = nil
+                return event
+            }
+
+            let quitting = (key == "q")
+
+            // Pressed again while the save sheet is showing: answer it with "don't save".
+            if self.isShowingSaveSheet {
+                self.discardChanges(quittingApp: quitting)
+                return nil
+            }
+
+            if event.isARepeat {
+                if let since = self.discardShortcutHeldSince,
+                   Date().timeIntervalSince(since) >= Self.discardHoldDuration {
+                    self.discardShortcutHeldSince = nil
+                    self.discardChanges(quittingApp: quitting)
+                    return nil
+                }
+            } else {
+                self.discardShortcutHeldSince = Date()
+            }
+            return event
+        }
+    }
+
+    private var isShowingSaveSheet: Bool {
+        NSApp.windows.contains { $0.attachedSheet != nil }
+    }
+
+    /// Throws away unsaved changes and closes -- the whole app for ⌘Q, just the front document
+    /// for ⌘W. Clearing each document's change count first is what stops AppKit putting the save
+    /// sheet straight back up as it closes.
+    private func discardChanges(quittingApp: Bool) {
+        let documents = NSDocumentController.shared.documents
+        let frontDocument = (NSApp.keyWindow ?? NSApp.mainWindow)?.windowController?.document as? NSDocument
+        let targets: [NSDocument] = quittingApp ? documents : [frontDocument].compactMap { $0 }
+
+        for window in NSApp.windows {
+            if let sheet = window.attachedSheet {
+                window.endSheet(sheet, returnCode: .abort)
+            }
+        }
+
+        for document in targets {
+            document.updateChangeCount(.changeCleared)
+        }
+
+        if quittingApp {
+            NSApp.terminate(nil)
+        } else {
+            for document in targets {
+                document.close()
+            }
+            (NSApp.keyWindow ?? NSApp.mainWindow)?.performClose(nil)
+        }
     }
 
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
