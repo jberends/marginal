@@ -41,6 +41,12 @@ All notable changes to Marginal are documented here. The format follows
   Both substitutions are display-only: the file on disk keeps exactly what you typed, and
   neither applies inside code blocks, inline code, or on a `---` horizontal-rule line.
 
+### Fixed
+
+- Selecting text inside a code block now shows the selection. The card's background was
+  painted *after* the selection highlight and covered it completely, so the status bar knew
+  text was selected but the page gave no sign of it.
+
 ### Changed
 
 - Links render in Marginal's purple accent — previously the text came out system blue,

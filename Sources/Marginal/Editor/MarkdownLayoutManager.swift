@@ -76,13 +76,19 @@ final class MarkdownLayoutManager: NSLayoutManager {
     }
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
-
-        guard let textStorage, let textContainer = textContainers.first else { return }
+        guard let textStorage, let textContainer = textContainers.first else {
+            super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
         let fullRange = NSRange(location: 0, length: textStorage.length)
 
-        // Drawn first so every other decoration (blockquote bar, bullets, grid lines) layers on
-        // top of the card, never underneath it.
+        // The code block card is painted BEFORE super, and everything else after it.
+        //
+        // super.drawBackground is what paints the selection highlight. Filling the card after it
+        // covered that highlight completely, so selecting text inside a code block looked like
+        // nothing had been selected at all -- the status bar knew, the page didn't show it.
+        // Drawing the card first puts the selection on top of it, while the decorations below
+        // still layer on top of the card.
         textStorage.enumerateAttribute(.marginalCodeBlockMarker, in: fullRange) { value, range, _ in
             guard value != nil else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
@@ -105,6 +111,9 @@ final class MarkdownLayoutManager: NSLayoutManager {
             DesignPalette.surfaceCode.setFill()
             NSBezierPath(roundedRect: cardRect, xRadius: 10, yRadius: 10).fill()
         }
+
+        // Selection highlight and any .backgroundColor runs -- now above the card.
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
 
         textStorage.enumerateAttribute(.marginalBlockquoteMarker, in: fullRange) { value, range, _ in
             guard value != nil else { return }
