@@ -179,8 +179,6 @@ struct MarkdownStyler {
         // 14px at its 16px body size. Notion quotes keep the regular weight and the normal text
         // color (they are NOT italic or gray -- an earlier version did both).
         let blockquoteContentIndent = baseFont.pointSize * 0.875
-        // Keep in step with MarkdownLayoutManager.blockquoteBarStep.
-        let blockquoteBarStep = baseFont.pointSize * 1.25
 
         for blockquote in blockquotes {
             let markerRange = NSRange(blockquote.markerRange, in: text)
@@ -190,10 +188,7 @@ struct MarkdownStyler {
             quoteParagraphStyle.lineHeightMultiple = bodyLineHeightMultiple
             // Each nesting level steps the content in, so the bars stack visibly rather than
             // overprinting each other at the same x.
-            // Each extra level steps in by the bar step (matching MarkdownLayoutManager's), and the
-            // text always sits the same gap right of its own bar -- so nested levels separate
-            // visibly instead of the bars crowding into one thick rule.
-            let quoteIndent = blockquoteBarStep * CGFloat(blockquote.depth - 1) + blockquoteContentIndent
+            let quoteIndent = blockquoteContentIndent * CGFloat(blockquote.depth)
             quoteParagraphStyle.firstLineHeadIndent = quoteIndent
             quoteParagraphStyle.headIndent = quoteIndent
             result.addAttribute(.paragraphStyle, value: quoteParagraphStyle, range: NSRange(blockquote.lineRange, in: text))

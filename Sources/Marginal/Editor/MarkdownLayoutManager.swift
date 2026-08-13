@@ -87,11 +87,9 @@ final class MarkdownLayoutManager: NSLayoutManager {
                       height: font.ascender - font.descender)
     }
 
-    /// Horizontal distance between the bars of nested blockquotes. Matches the per-level step the
-    /// styler indents by, so each bar lands a consistent gap left of the text it encloses. Wider
-    /// than the single-level text inset: bars a bare 14pt apart read as one thick rule rather than
-    /// as separate levels.
-    var blockquoteBarStep: CGFloat = 20
+    /// Horizontal distance between the bars of nested blockquotes. Matches the per-level content
+    /// indent the styler applies, so each bar lands just left of the text it encloses.
+    var blockquoteBarStep: CGFloat = 14
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         guard let textStorage, let textContainer = textContainers.first else {
@@ -141,21 +139,10 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             // Solid text color, matching Notion's quote bar (border-left: 3px solid currentColor).
             NSColor.labelColor.setFill()
-            // The bar is shifted down by the line's leading rather than filling the whole line
-            // fragment. A 1.32 line height adds its extra space *above* the glyphs, so a bar drawn
-            // over the full fragment starts well above the text it encloses -- which read as the
-            // bar having no headroom under the heading. Shifting by that offset (instead of
-            // shrinking the bar) keeps it continuous down a multi-line quote, aligns its top with
-            // the text, and lets it protrude just below the last baseline.
-            let leading = self.textLineRect(forGlyphRange: glyphRange, in: textContainer).minY
-                - self.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil).minY
             enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, _, _ in
                 for level in 0..<depth {
                     let x = origin.x + lineRect.minX + CGFloat(level) * self.blockquoteBarStep
-                    NSRect(x: x,
-                           y: origin.y + lineRect.minY + max(0, leading),
-                           width: 3,
-                           height: lineRect.height).fill()
+                    NSRect(x: x, y: origin.y + lineRect.minY, width: 3, height: lineRect.height).fill()
                 }
             }
         }

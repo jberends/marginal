@@ -45,8 +45,6 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Fixed
 
-- Blockquote bars align with their text instead of starting above it, and nested levels sit
-  further apart so three levels read as three rather than as one thick rule.
 - Nested blockquotes render as nested. Only the first ">" of a marker run was consumed, so
   ">> Level 2" drew a single bar with a stray ">" left sitting in the text. Each level now
   draws its own bar, stepped in, and the content is indented per level.
