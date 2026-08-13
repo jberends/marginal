@@ -4,6 +4,65 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.9.0] — 2026-08-13
+
+### Added
+
+- **Autolinks**: bare URLs and email addresses written straight into the prose become real
+  links, without needing `[text](url)` syntax. Trailing punctuation follows GFM's rules, so
+  `https://example.com.` links without the full stop, `(https://example.com/path).` drops the
+  wrapping paren *and* the stop, and a URL whose own parentheses balance —
+  `…/Markdown_(markup_language)` — keeps them. Emails link as `mailto:`.
+- **⌘-click opens a link** in the default browser, with a pointing-hand cursor over links. A
+  plain click still just moves the caret, so a link stays editable text.
+- **In-document anchor links** (`[Heading](#heading)`, as a hand-written table of contents
+  uses) scroll to the matching heading, resolved with GitHub's slug rules. Relative paths
+  resolve against the document's own folder.
+- **Typographic substitution**: `"` `'` `...` `--` and `---` display as `“ ” ‘ ’ … – —`.
+- **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` display as the character
+  they stand for — named, decimal and hexadecimal.
+  Both substitutions are display-only: the file on disk keeps exactly what you typed, and
+  neither applies inside code, on a `---` rule line, in a table's alignment row, or in the
+  hidden parts of a link.
+- **Word and character counts** in the status bar. Click the `L · C` indicator to swap it for
+  counts and click again to swap back. It shows where you are, not just how big the file is —
+  `Chars 23 / 26374 · Words 4 / 3995` — and reports the selection when text is selected.
+- **File ▸ Open Recent**, holding the last ten documents.
+- **`.txt` files open in Marginal**, from the Dock, from Finder and by dropping one on the
+  window — plain text is now a declared document type, and a dropped `.txt` opens in its own
+  tab exactly like a `.md`.
+- **Leaving without saving**: hold ⌘Q or ⌘W, or press it again while the save sheet is up, to
+  close or quit and **discard** the unsaved changes.
+
+### Changed
+
+- **Typography.** The editor sets in Avenir Next — the typeface behind Bear's feel, a humanist
+  sans whose open letterforms read far warmer at length than the system UI font, which is drawn
+  for interface chrome rather than prose. Body text sets at a 1.32 line height and the blank
+  lines markdown puts between blocks render at half height. (The usual 1.5–1.6 advice assumes
+  HTML, where a blank line between paragraphs does not exist in the output; here the document
+  *is* the markdown, so that multiple inflated the text and every gap at once.)
+- Headings carry more air above than below — 1.1/0.85/0.6em above, 0.45em below — so a heading
+  binds to the text it introduces instead of floating between two blocks.
+- Links render in Marginal's purple accent, underlined with a hairline in a lighter tint of it,
+  the way Notion does.
+- Markdown is unchanged on disk unless you edit it: a URL containing underscores
+  (`…/some_path/file_name`) is no longer read as italic emphasis and rewritten on save.
+
+### Fixed
+
+- **Nested blockquotes** render as nested, one bar per level with the content indented.
+- **Lists and fenced code blocks inside a blockquote** render properly instead of showing their
+  literal `-` and ``` ``` ``` markers. Quoted lists indent to the quote's text, and a quoted code
+  block keeps the quote bar to its left with the `>` markers hidden inside the card.
+- **Strikethrough inside bold** (`**~~deleted~~**`) renders as both. Markdown written inside
+  backticks stays literal.
+- Selecting text inside a code block shows the selection.
+- Substituted characters (`…`, `–`, `—`), list numbers and emoji sit on the text baseline
+  instead of hanging below it.
+- Blocks no longer collapse on top of one another, and a document opens with its first line —
+  and the caret — at the top of the window rather than the bottom.
+
 ## [0.3.0] — 2026-07-29
 
 ### Added

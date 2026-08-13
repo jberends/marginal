@@ -7,8 +7,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private var preferencesWindowController: NSWindowController?
 
+    /// When the current ⌘Q/⌘W keypress started, so a *held* shortcut can be told apart from a
+    /// tapped one. Cleared on key-up and whenever the shortcut is not the one being held.
+    private var discardShortcutHeldSince: Date?
+    private var discardShortcutMonitor: Any?
+
+    /// How long ⌘Q/⌘W must be held before it means "leave without saving". Long enough that a
+    /// normal quit never trips it, short enough to feel like an answer to a stuck dialog.
+    private static let discardHoldDuration: TimeInterval = 0.6
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.buildMainMenu(target: self)
+        // Ten recent documents, the macOS default, stated explicitly so it does not drift with
+        // whatever the system-wide preference happens to be.
+        UserDefaults.standard.register(defaults: ["NSRecentDocumentsLimit": 10])
+        installDiscardShortcutMonitor()
+    }
+
+    // MARK: - Leave without saving
+
+    /// Two ways out of an unsaved document, both of which *discard* the unsaved changes:
+    /// hold ⌘Q/⌘W, or press it a second time while the "do you want to save?" sheet is up.
+    /// The second is the important one -- that sheet appears in response to ⌘Q/⌘W, so pressing
+    /// the same keys again is the natural reflex, and until now it did nothing at all.
+    private func installDiscardShortcutMonitor() {
+        discardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self else { return event }
+            guard event.modifierFlags.contains(.command),
+                  let key = event.charactersIgnoringModifiers?.lowercased(),
+                  key == "q" || key == "w" else {
+                self.discardShortcutHeldSince = nil
+                return event
+            }
+
+            if event.type == .keyUp {
+                self.discardShortcutHeldSince = nil
+                return event
+            }
+
+            let quitting = (key == "q")
+
+            // Pressed again while the save sheet is showing: answer it with "don't save".
+            if self.isShowingSaveSheet {
+                self.discardChanges(quittingApp: quitting)
+                return nil
+            }
+
+            if event.isARepeat {
+                if let since = self.discardShortcutHeldSince,
+                   Date().timeIntervalSince(since) >= Self.discardHoldDuration {
+                    self.discardShortcutHeldSince = nil
+                    self.discardChanges(quittingApp: quitting)
+                    return nil
+                }
+            } else {
+                self.discardShortcutHeldSince = Date()
+            }
+            return event
+        }
+    }
+
+    private var isShowingSaveSheet: Bool {
+        NSApp.windows.contains { $0.attachedSheet != nil }
+    }
+
+    /// Throws away unsaved changes and closes -- the whole app for ⌘Q, just the front document
+    /// for ⌘W. Clearing each document's change count first is what stops AppKit putting the save
+    /// sheet straight back up as it closes.
+    private func discardChanges(quittingApp: Bool) {
+        let documents = NSDocumentController.shared.documents
+        let frontDocument = (NSApp.keyWindow ?? NSApp.mainWindow)?.windowController?.document as? NSDocument
+        let targets: [NSDocument] = quittingApp ? documents : [frontDocument].compactMap { $0 }
+
+        // Clear the change count first: dismissing the sheet lets the close it belonged to carry
+        // on, and if the document still looks dirty at that moment AppKit simply asks again.
+        for document in targets {
+            document.updateChangeCount(.changeCleared)
+        }
+
+        for window in NSApp.windows {
+            if let sheet = window.attachedSheet {
+                window.endSheet(sheet, returnCode: .abort)
+            }
+        }
+
+        if quittingApp {
+            NSApp.terminate(nil)
+        } else {
+            // Close the front document itself rather than its window: with tabs, one document owns
+            // one tab, and closing the document takes that tab away without disturbing its
+            // siblings in the same window.
+            for document in targets {
+                document.close()
+            }
+        }
     }
 
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
@@ -135,6 +227,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         fileMenu.addItem(withTitle: "New", action: #selector(NSDocumentController.newDocument(_:)), keyEquivalent: "n")
         fileMenu.addItem(withTitle: "New Tab", action: #selector(NSWindow.newWindowForTab(_:)), keyEquivalent: "t")
         fileMenu.addItem(withTitle: "Open…", action: #selector(NSDocumentController.openDocument(_:)), keyEquivalent: "o")
+
+        // AppKit fills this in itself -- and keeps it across launches -- as long as the submenu
+        // carries the identifier it looks for. Building the list by hand would mean duplicating
+        // the tracking NSDocumentController already does every time a document is opened or saved.
+        let openRecentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
+        let openRecentMenu = NSMenu(title: "Open Recent")
+        openRecentMenu.identifier = NSUserInterfaceItemIdentifier("NSRecentDocumentsMenu")
+        openRecentItem.submenu = openRecentMenu
+        fileMenu.addItem(openRecentItem)
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileMenu.addItem(withTitle: "Save…", action: #selector(NSDocument.save(_:)), keyEquivalent: "s")

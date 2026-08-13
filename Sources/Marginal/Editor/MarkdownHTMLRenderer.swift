@@ -158,7 +158,16 @@ struct MarkdownHTMLRenderer {
             skipRanges.append(style.closingDelimiterRange)
         }
 
-        for link in MarkdownParser.parseLinks(in: line) {
+        let explicitLinks = MarkdownParser.parseLinks(in: line)
+        // Bare URLs/emails become real anchors in exported HTML and PDF too, matching what the
+        // editor shows. Explicit links and inline code are excluded so a URL is never linked
+        // twice and a URL shown as sample code stays literal.
+        let inlineCodeRanges = MarkdownParser.parseInlineStyles(in: line)
+            .filter { $0.kind == .code }
+            .map { $0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound }
+        let autolinks = MarkdownParser.parseAutolinks(in: line,
+                                                      excluding: explicitLinks.map(\.fullRange) + inlineCodeRanges)
+        for link in explicitLinks + autolinks {
             insertions.append(TagInsertion(index: link.textRange.lowerBound, isClosing: false, tag: "<a href=\"\(htmlAttributeEscape(link.url))\">"))
             insertions.append(TagInsertion(index: link.textRange.upperBound, isClosing: true, tag: "</a>"))
             skipRanges.append(link.fullRange.lowerBound..<link.textRange.lowerBound)

@@ -50,16 +50,66 @@ struct EmojiGlyphInfo: Equatable {
 ///    therefore drawn starting exactly at the container's left edge, not to the left of it.
 final class MarkdownLayoutManager: NSLayoutManager {
 
-    override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
 
-        guard let textStorage, let textContainer = textContainers.first else { return }
+    /// The rect that actually hugs the glyphs on a line, for aligning anything drawn beside text.
+    ///
+    /// `boundingRect(forGlyphRange:in:)` returns the *line fragment*, and a paragraph style with a
+    /// `lineHeightMultiple` inflates that fragment above the glyphs -- so its `midY` sits higher
+    /// than the text does, and every marker drawn against it (bullets, list numbers, checkboxes,
+    /// emoji) drifted upward off its own line the moment body line height went to 1.55. Deriving
+    /// the rect from the glyph baseline and the font's ascender/descender keeps decorations
+    /// aligned to the text no matter what the line height is.
+    /// The y of the text baseline on the line containing `range`, in container coordinates.
+    ///
+    /// Anything *textual* drawn beside the text -- a list number, an emoji standing in for a
+    /// shortcode, an ellipsis or dash standing in for its source characters -- has to sit on this
+    /// baseline. Centring such a string vertically in the line instead leaves it visibly low,
+    /// because a string's bounding box is taller than the distance from its baseline to its top.
+    func textBaselineY(forGlyphRange range: NSRange) -> CGFloat? {
+        guard range.location < numberOfGlyphs else { return nil }
+        let fragment = lineFragmentRect(forGlyphAt: range.location, effectiveRange: nil)
+        return fragment.minY + location(forGlyphAt: range.location).y
+    }
+
+    func textLineRect(forGlyphRange range: NSRange, in container: NSTextContainer) -> NSRect {
+        let bounding = boundingRect(forGlyphRange: range, in: container)
+        guard range.location < numberOfGlyphs, let storage = textStorage else { return bounding }
+        let characterIndex = characterIndexForGlyph(at: range.location)
+        guard characterIndex < storage.length else { return bounding }
+
+        let font = (storage.attribute(.font, at: characterIndex, effectiveRange: nil) as? NSFont)
+            ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let fragment = lineFragmentRect(forGlyphAt: range.location, effectiveRange: nil)
+        let baseline = fragment.minY + location(forGlyphAt: range.location).y
+        return NSRect(x: bounding.minX,
+                      y: baseline - font.ascender,
+                      width: bounding.width,
+                      height: font.ascender - font.descender)
+    }
+
+    /// Horizontal distance between the bars of nested blockquotes. Matches the per-level content
+    /// indent the styler applies, so each bar lands just left of the text it encloses.
+    var blockquoteBarStep: CGFloat = 14
+
+    override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage, let textContainer = textContainers.first else {
+            super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
         let fullRange = NSRange(location: 0, length: textStorage.length)
 
-        // Drawn first so every other decoration (blockquote bar, bullets, grid lines) layers on
-        // top of the card, never underneath it.
+        // The code block card is painted BEFORE super, and everything else after it.
+        //
+        // super.drawBackground is what paints the selection highlight. Filling the card after it
+        // covered that highlight completely, so selecting text inside a code block looked like
+        // nothing had been selected at all -- the status bar knew, the page didn't show it.
+        // Drawing the card first puts the selection on top of it, while the decorations below
+        // still layer on top of the card.
         textStorage.enumerateAttribute(.marginalCodeBlockMarker, in: fullRange) { value, range, _ in
             guard value != nil else { return }
+            // The value carries how far the card is inset -- non-zero when the fence sits inside a
+            // blockquote, so the quote bar has room to its left instead of overlapping the card.
+            let quoteInset = (value as? CGFloat) ?? 0
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             // boundingRect only returns ONE line fragment's rect (see the type doc comment) --
             // the card's vertical extent must be unioned from every fragment, including the
@@ -72,23 +122,31 @@ final class MarkdownLayoutManager: NSLayoutManager {
             }
             guard top < bottom else { return }
             let cardRect = NSRect(
-                x: origin.x + textContainer.lineFragmentPadding,
+                x: origin.x + textContainer.lineFragmentPadding + quoteInset,
                 y: origin.y + top,
-                width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2),
+                width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2 - quoteInset),
                 height: bottom - top
             )
             DesignPalette.surfaceCode.setFill()
             NSBezierPath(roundedRect: cardRect, xRadius: 10, yRadius: 10).fill()
         }
 
+        // Selection highlight and any .backgroundColor runs -- now above the card.
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+
         textStorage.enumerateAttribute(.marginalBlockquoteMarker, in: fullRange) { value, range, _ in
-            guard value != nil else { return }
+            // The value is the nesting depth: ">> quoted" draws two bars, one per level, each a
+            // content-indent step further in, so a quoted reply reads as nested.
+            let depth = (value as? Int) ?? (value != nil ? 1 : 0)
+            guard depth > 0 else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             // Solid text color, matching Notion's quote bar (border-left: 3px solid currentColor).
             NSColor.labelColor.setFill()
             enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, _, _ in
-                let barRect = NSRect(x: origin.x + lineRect.minX, y: origin.y + lineRect.minY, width: 3, height: lineRect.height)
-                barRect.fill()
+                for level in 0..<depth {
+                    let x = origin.x + lineRect.minX + CGFloat(level) * self.blockquoteBarStep
+                    NSRect(x: x, y: origin.y + lineRect.minY, width: 3, height: lineRect.height).fill()
+                }
             }
         }
 
@@ -113,7 +171,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // The marker character is still laid out at normal size (just transparent), so its own
             // bounding rect already reflects this exact line's real vertical geometry -- centering
             // the shape within it, sized from the font's own xHeight, needs no guessed offsets.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let diameter = font.xHeight * 0.85
             let shapeRect = NSRect(
                 x: origin.x + charRect.midX - diameter / 2,
@@ -155,11 +213,13 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // headIndent: relying on a trailing space's advance width for the gap (an earlier
             // version) is not guaranteed by NSString measurement and read as the number nearly
             // colliding with the following text.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
             let markerSize = (displayText as NSString).size(withAttributes: markerAttributes)
             let rightEdge = origin.x + paragraphStyle.headIndent - MarkdownStyler.orderedMarkerContentGap(for: font)
-            let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + charRect.midY - markerSize.height / 2)
+            let markerBaseline = textBaselineY(forGlyphRange: glyphRange).map { $0 - font.ascender }
+                ?? (charRect.midY - markerSize.height / 2)
+            let drawPoint = NSPoint(x: rightEdge - markerSize.width, y: origin.y + markerBaseline)
             (displayText as NSString).draw(at: drawPoint, withAttributes: markerAttributes)
         }
 
@@ -171,7 +231,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // rect reflects this exact line's real geometry -- the checkbox is anchored at its
             // left edge (where the bullet would otherwise sit) and sized from xHeight, same
             // principle as the bullet/ordered-number markers.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let side = font.xHeight * 1.35
             let boxRect = NSRect(x: origin.x + charRect.minX, y: origin.y + charRect.midY - side / 2, width: side, height: side)
             let boxPath = NSBezierPath(roundedRect: boxRect, xRadius: 3, yRadius: 3)
@@ -236,10 +296,13 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // The whole ":shortcode:" run is hidden (tiny font) with a kern on its last character
             // reserving exactly the emoji's own rendered width (see MarkdownStyler), so this
             // first character's own position marks the left edge of that reserved space.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let emojiAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: info.fontSize)]
             let emojiSize = (info.emoji as NSString).size(withAttributes: emojiAttributes)
-            let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + charRect.midY - emojiSize.height / 2)
+            let emojiFont = (emojiAttributes[.font] as? NSFont) ?? NSFont.systemFont(ofSize: info.fontSize)
+            let emojiBaseline = textBaselineY(forGlyphRange: glyphRange).map { $0 - emojiFont.ascender }
+                ?? (charRect.midY - emojiSize.height / 2)
+            let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + emojiBaseline)
             (info.emoji as NSString).draw(at: drawPoint, withAttributes: emojiAttributes)
         }
     }

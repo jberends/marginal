@@ -10,9 +10,16 @@ struct MarkdownStyler {
         baseFont: NSFont,
         cursorLocation: String.Index?
     ) -> NSAttributedString {
+        // 1.55 line height for body text. Anything below ~1.5 reads cramped at long-form
+        // lengths; this is the range every typographic guide lands on for screen reading.
+        let bodyStyle = NSMutableParagraphStyle()
+        bodyStyle.lineHeightMultiple = bodyLineHeightMultiple
+        bodyStyle.paragraphSpacing = baseFont.pointSize * 0.35
+
         let result = NSMutableAttributedString(string: text, attributes: [
             .font: baseFont,
-            .foregroundColor: NSColor.labelColor
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: bodyStyle
         ])
 
         let revealedStyles = cursorLocation.map {
@@ -67,16 +74,101 @@ struct MarkdownStyler {
             result.addAttribute(.marginalEmojiShortcode, value: EmojiGlyphInfo(emoji: shortcode.emoji, fontSize: emojiFontSize), range: firstCharRange)
         }
 
+        // Display substitutions: HTML entities and typographic replacements are shown as the
+        // character they stand for while the file keeps exactly what the user typed. This reuses
+        // the emoji-shortcode drawing path above -- hide the source run, reserve the replacement's
+        // width with kerning on its last character, and let MarkdownLayoutManager draw the
+        // replacement. Skipped inside code (fenced or inline), where the literal text is the
+        // point, and on horizontal-rule lines, where "---" is a rule rather than an em dash.
+        let inlineCodeRanges = model.inlineStyles
+            .filter { $0.kind == .code }
+            .map { $0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound }
+        // A table's "| --- |:---:|" alignment row is pure syntax that is always hidden -- without
+        // this it matched the em-dash rule and got a dash *drawn* over the hidden row, leaving
+        // stray marks under each table's header.
+        // The hidden parts of a link -- "[", "](url \"Title\")" -- are syntax the reader never
+        // sees, but the quotes around a link title still matched the smart-quote rule and got
+        // curly quotes *drawn* after the link text.
+        let linkSyntaxRanges = model.links.flatMap { link in
+            [link.fullRange.lowerBound..<link.textRange.lowerBound,
+             link.textRange.upperBound..<link.fullRange.upperBound]
+        }.filter { !$0.isEmpty }
+        let ruleRanges = model.horizontalRules.map(\.lineRange)
+            + model.tables.map(\.separatorRowRange)
+            + linkSyntaxRanges
+        let substitutions = (MarkdownParser.parseHTMLEntities(in: text)
+                             + MarkdownParser.parseTypographicSubstitutions(in: text))
+            .filter { span in
+                !overlapsAnyCodeBlock(span.range)
+                    && !inlineCodeRanges.contains { $0.lowerBound < span.range.upperBound && $0.upperBound > span.range.lowerBound }
+                    && !ruleRanges.contains { $0.lowerBound < span.range.upperBound && $0.upperBound > span.range.lowerBound }
+            }
+
+        for substitution in substitutions {
+            let fullNSRange = NSRange(substitution.range, in: text)
+            guard fullNSRange.length > 0 else { continue }
+            result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
+            result.addAttribute(.foregroundColor, value: NSColor.clear, range: fullNSRange)
+
+            let width = (substitution.replacement as NSString).size(withAttributes: [.font: baseFont]).width
+            let lastCharRange = NSRange(location: fullNSRange.location + fullNSRange.length - 1, length: 1)
+            result.addAttribute(.kern, value: width, range: lastCharRange)
+
+            let firstCharRange = NSRange(location: fullNSRange.location, length: 1)
+            result.addAttribute(.marginalEmojiShortcode,
+                                value: EmojiGlyphInfo(emoji: substitution.replacement, fontSize: baseFont.pointSize),
+                                range: firstCharRange)
+        }
+
+        // Collapse blank separator lines. Markdown puts a blank line between blocks, and this
+        // editor renders the source, so each of those costs a full line of height on screen --
+        // stacked on top of the heading spacing above, that is what made the document feel like
+        // it was swimming. Shrinking the empty line keeps the block separation without the void.
+        // Blank lines *inside* a fenced code block are content and keep their full height.
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let lineEnd = text.lineRange(for: lineStart..<lineStart).upperBound
+            let contentEnd = text[lineStart..<lineEnd].last == "\n" ? text.index(before: lineEnd) : lineEnd
+            let line = text[lineStart..<contentEnd]
+            if line.allSatisfy({ $0 == " " || $0 == "\t" }), !overlapsAnyCodeBlock(lineStart..<lineEnd) {
+                let blankStyle = NSMutableParagraphStyle()
+                blankStyle.lineHeightMultiple = bodyLineHeightMultiple * blankLineScale
+                let blankRange = NSRange(lineStart..<lineEnd, in: text)
+                result.addAttribute(.paragraphStyle, value: blankStyle, range: blankRange)
+                result.addAttribute(.font, value: baseFont, range: blankRange)
+            }
+            if lineEnd == lineStart { break }
+            lineStart = lineEnd
+        }
+
         for header in headers {
             // Semibold, not full bold -- Notion's heading weight (600).
-            let headerFont = NSFont.systemFont(
-                ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize),
-                weight: .semibold
-            )
+            let headerFont = EditorFont.semibold(headerPointSize(for: header.level, baseSize: baseFont.pointSize))
             result.addAttribute(.font, value: headerFont, range: NSRange(header.contentRange, in: text))
 
             let markerRange = NSRange(header.markerRange, in: text)
             result.addAttribute(.font, value: revealedHeaders.contains(header) ? headerFont : hiddenFont, range: markerRange)
+
+            // Notion's block rhythm: a heading carries much more air above it than below, so it
+            // reads as introducing the text that follows instead of floating between two equal
+            // gaps. Notion's own figures are 30/26/22px above at a 16px body -- but those assume
+            // blocks sit flush, whereas here a blank source line is itself a rendered spacer line
+            // (roughly one line height) that already supplies most of that gap. So this adds only
+            // the *difference*, scaled by heading level; applying the full padding on top of the
+            // blank line would nearly double it. See "Block rhythm" in
+            // specs/notion-design-tokens.md.
+            let headingStyle = NSMutableParagraphStyle()
+            headingStyle.paragraphSpacingBefore = baseFont.pointSize * headerExtraSpaceAbove(for: header.level)
+            // A real gap below the heading, but still clearly smaller than the one above, so the
+            // heading binds to the text it introduces instead of floating between two blocks.
+            // 0.125em was far too tight: a heading followed *immediately* by its bullets (no blank
+            // source line, which is how most documents are written) had almost nothing between them.
+            headingStyle.paragraphSpacing = baseFont.pointSize * 0.45
+            // Headings set tighter than body text -- long headings should hold together as a unit.
+            headingStyle.lineHeightMultiple = 1.15
+            result.addAttribute(.paragraphStyle,
+                                value: headingStyle,
+                                range: (text as NSString).paragraphRange(for: markerRange))
         }
 
         let revealedBlockquotes = cursorLocation.map {
@@ -90,11 +182,15 @@ struct MarkdownStyler {
 
         for blockquote in blockquotes {
             let markerRange = NSRange(blockquote.markerRange, in: text)
-            result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
+            result.addAttribute(.marginalBlockquoteMarker, value: blockquote.depth, range: NSRange(blockquote.lineRange, in: text))
 
             let quoteParagraphStyle = NSMutableParagraphStyle()
-            quoteParagraphStyle.firstLineHeadIndent = blockquoteContentIndent
-            quoteParagraphStyle.headIndent = blockquoteContentIndent
+            quoteParagraphStyle.lineHeightMultiple = bodyLineHeightMultiple
+            // Each nesting level steps the content in, so the bars stack visibly rather than
+            // overprinting each other at the same x.
+            let quoteIndent = blockquoteContentIndent * CGFloat(blockquote.depth)
+            quoteParagraphStyle.firstLineHeadIndent = quoteIndent
+            quoteParagraphStyle.headIndent = quoteIndent
             result.addAttribute(.paragraphStyle, value: quoteParagraphStyle, range: NSRange(blockquote.lineRange, in: text))
 
             let markerFont = revealedBlockquotes.contains(blockquote) ? baseFont : hiddenFont
@@ -173,7 +269,7 @@ struct MarkdownStyler {
                         // Medium (500), not bold -- Notion's measured header row weight. A
                         // **bold** span nested in a header cell still layers real bold on top
                         // (inlineStyles runs after this).
-                        result.addAttribute(.font, value: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .medium), range: NSRange(cellRange, in: text))
+                        result.addAttribute(.font, value: EditorFont.medium(baseFont.pointSize), range: NSRange(cellRange, in: text))
                     }
                 }
                 if let lastPipe = row.pipeRanges.last {
@@ -216,7 +312,7 @@ struct MarkdownStyler {
             // would shrink the nested span back down to editor-content size.
             let spanBaseFont: NSFont
             if let header = headers.first(where: { $0.contentRange.contains(span.contentRange.lowerBound) }) {
-                spanBaseFont = NSFont.systemFont(ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize))
+                spanBaseFont = EditorFont.semibold(headerPointSize(for: header.level, baseSize: baseFont.pointSize))
             } else {
                 spanBaseFont = baseFont
             }
@@ -224,11 +320,11 @@ struct MarkdownStyler {
             case .bold:
                 // Semibold (600), not full bold -- 600 is the heaviest weight in the product
                 // (same rule as headings; the design system never uses 700).
-                result.addAttribute(.font, value: NSFont.systemFont(ofSize: spanBaseFont.pointSize, weight: .semibold), range: contentRange)
+                result.addAttribute(.font, value: EditorFont.semibold(spanBaseFont.pointSize), range: contentRange)
             case .italic:
                 result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .italicFontMask), range: contentRange)
             case .boldItalic:
-                let semibold = NSFont.systemFont(ofSize: spanBaseFont.pointSize, weight: .semibold)
+                let semibold = EditorFont.semibold(spanBaseFont.pointSize)
                 result.addAttribute(.font, value: NSFontManager.shared.convert(semibold, toHaveTrait: .italicFontMask), range: contentRange)
             case .strikethrough:
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
@@ -255,6 +351,13 @@ struct MarkdownStyler {
             let textRange = NSRange(link.textRange, in: text)
             result.addAttribute(.foregroundColor, value: DesignPalette.accent, range: textRange)
             result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: textRange)
+            // Notion underlines a link with a hairline in a much lighter tint than the text
+            // itself, which reads as a quiet affordance rather than a shout. Drawing the
+            // underline in the accent at full strength (the default -- it inherits the
+            // foreground color) made every link look heavily ruled.
+            result.addAttribute(.underlineColor,
+                                value: DesignPalette.accent.withAlphaComponent(0.35),
+                                range: textRange)
             result.addAttribute(.link, value: link.url, range: textRange)
 
             let delimiterFont = revealedLinks.contains(link) ? baseFont : hiddenFont
@@ -304,7 +407,12 @@ struct MarkdownStyler {
             // given a fixed line height below, so they render as the card's top/bottom padding
             // bands, and the content is inset from the card's left edge via paragraph indent.
             let blockNSRange = NSRange(codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound, in: text)
-            result.addAttribute(.marginalCodeBlockMarker, value: true, range: blockNSRange)
+            // A code block inside a quote is inset past the quote bar, so the bar reads as
+            // enclosing the card rather than running through its left edge.
+            let cardQuoteIndent = model.blockquotes
+                .first { $0.lineRange.overlaps(codeBlock.openingFenceRange) }
+                .map { blockquoteContentIndent * CGFloat($0.depth) } ?? 0
+            result.addAttribute(.marginalCodeBlockMarker, value: cardQuoteIndent, range: blockNSRange)
 
             let contentInset = codeBlockContentInset(for: baseFont)
             let contentStyle = NSMutableParagraphStyle()
@@ -354,7 +462,26 @@ struct MarkdownStyler {
 
             func measuredWidth(_ range: Range<String.Index>) -> CGFloat {
                 guard !range.isEmpty else { return 0 }
-                return result.attributedSubstring(from: NSRange(range, in: text)).size().width
+                // Re-hide the ">" markers on lines that turned out to be inside a fenced code block.
+        // The blockquote pass hides them, but the code-block pass then repaints those lines in
+        // the mono face and code colour, which brings the marker back -- so a fence written
+        // inside a quote showed "> " in front of every line of the card's contents.
+        // `blockquotes` above deliberately excludes lines inside a fenced code block, so that a
+        // ">" appearing in sample code is never styled as a quote. A fence written *inside* a
+        // quote is the opposite case: those lines really are quoted, so they need their bar drawn
+        // and their markers hidden. Walk the unfiltered spans for exactly that.
+        for blockquote in model.blockquotes where !revealedBlockquotes.contains(blockquote) {
+            guard overlapsAnyCodeBlock(blockquote.lineRange) else { continue }
+            result.addAttribute(.marginalBlockquoteMarker,
+                                value: blockquote.depth,
+                                range: NSRange(blockquote.lineRange, in: text))
+            let markerRange = NSRange(blockquote.markerRange, in: text)
+            guard markerRange.length > 0 else { continue }
+            result.addAttribute(.font, value: hiddenFont, range: markerRange)
+            result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
+        }
+
+        return result.attributedSubstring(from: NSRange(range, in: text)).size().width
             }
 
             let rowCellWidths = pending.rowCellRanges.map { $0.map(measuredWidth) }
@@ -559,7 +686,13 @@ struct MarkdownStyler {
 
                 // Each nesting level reserves one more indentWidth-sized slot: the marker itself
                 // shifts right by level * indentWidth, and content starts one slot further in.
-                let levelOffset = CGFloat(item.level) * indentWidth
+                // A list inside a blockquote has to start where the quote's text starts, not at
+                // the container edge: the item's own indent replaces the quote paragraph style
+                // entirely, so without adding it back the bullets sat on top of the quote bar.
+                let quoteIndent = model.blockquotes
+                    .first { $0.lineRange.contains(item.markerRange.lowerBound) }
+                    .map { blockquoteContentIndent * CGFloat($0.depth) } ?? 0
+                let levelOffset = CGFloat(item.level) * indentWidth + quoteIndent
 
                 // item.lineRange may span multiple source lines when a lazily-continued paragraph
                 // line follows with no blank line between them. TextKit treats each "\n"-delimited
@@ -577,6 +710,7 @@ struct MarkdownStyler {
                 let hasContinuation = markerLineEnd < item.lineRange.upperBound
 
                 let markerLineStyle = NSMutableParagraphStyle()
+                markerLineStyle.lineHeightMultiple = bodyLineHeightMultiple
                 markerLineStyle.firstLineHeadIndent = levelOffset
                 markerLineStyle.headIndent = levelOffset + indentWidth
                 if !hasContinuation { markerLineStyle.paragraphSpacing = itemSpacing }
@@ -584,6 +718,7 @@ struct MarkdownStyler {
 
                 if hasContinuation {
                     let continuationStyle = NSMutableParagraphStyle()
+                    continuationStyle.lineHeightMultiple = bodyLineHeightMultiple
                     continuationStyle.firstLineHeadIndent = levelOffset + indentWidth
                     continuationStyle.headIndent = levelOffset + indentWidth
                     continuationStyle.paragraphSpacing = itemSpacing
@@ -601,6 +736,30 @@ struct MarkdownStyler {
             .font: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
             .foregroundColor: NSColor.labelColor
         ])
+    }
+
+    /// Extra space above a heading, as a multiple of the body font size, on top of the blank
+    /// source line that already separates it from the previous block. Bigger headings get more
+    /// air, which is what makes the document's hierarchy readable at a glance; h4-h6 sit at body
+    /// scale already and need none.
+    /// Body line height.
+    ///
+    /// The usual advice for screen reading is 1.5-1.6, but that assumes HTML, where the blank
+    /// line between two paragraphs does not exist in the output and the gap comes from margins.
+    /// Here the document *is* the markdown: a blank source line is a real, rendered line, so a
+    /// 1.55 multiple inflated the text and every separator between blocks at the same time and
+    /// the page came out swimming. 1.32 with collapsed blank lines (see `blankLineScale`) gives
+    /// the same amount of air between blocks with text that still reads as a paragraph.
+    static let bodyLineHeightMultiple: CGFloat = 1.32
+
+    /// How tall a blank separator line renders, relative to a normal line. A blank line's job
+    /// here is to separate blocks, and a full empty line of Avenir Next at 1.32 is far more space
+    /// than that needs -- especially under a heading, which already carries its own spacing.
+    static let blankLineScale: CGFloat = 0.5
+
+    private static func headerExtraSpaceAbove(for level: Int) -> CGFloat {
+        let extra: [Int: CGFloat] = [1: 1.1, 2: 0.85, 3: 0.6]
+        return extra[level] ?? 0
     }
 
     private static func headerPointSize(for level: Int, baseSize: CGFloat) -> CGFloat {

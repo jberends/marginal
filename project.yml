@@ -11,8 +11,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: 2ZP4KRYYZ5  # KE-works BV -- applies to app and test targets alike
-    MARKETING_VERSION: "0.3.0"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "0.9.0"
+    CURRENT_PROJECT_VERSION: "9"
     GENERATE_INFOPLIST_FILE: NO
 targets:
   Marginal:

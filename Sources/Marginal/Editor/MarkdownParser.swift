@@ -11,23 +11,52 @@ struct MarkdownParser {
 
     static func parseInlineStyles(in text: String) -> [InlineStyleSpan] {
         var spans: [InlineStyleSpan] = []
-        var claimedRanges: [Range<String.Index>] = []
+        /// A claimed range, its content (what sits between the delimiters), and whether anything
+        /// may be styled inside it.
+        struct Claim {
+            let range: Range<String.Index>
+            let contentRange: Range<String.Index>
+            let isOpaque: Bool
+        }
+        var claimedRanges: [Claim] = []
 
-        func claim(_ range: Range<String.Index>) {
-            claimedRanges.append(range)
+        func claim(_ range: Range<String.Index>, content: Range<String.Index>? = nil, opaque: Bool = false) {
+            claimedRanges.append(Claim(range: range, contentRange: content ?? range, isOpaque: opaque))
         }
 
-        // A later (lower-priority) pattern is allowed to match a range that fully contains an
-        // already-claimed range -- that's legitimate nesting (e.g. **bold with `code` inside**,
-        // where code claims first per the priority order below, and bold's full range
-        // necessarily spans across it). It is rejected only when it partially overlaps a claimed
-        // range without containing it -- a real conflict between two same-level delimiters.
+        /// Decides whether a span conflicts with something already claimed.
+        ///
+        /// Emphasis nests: `**~~struck~~**` is legitimately bold *and* struck, and since bold
+        /// claims the outer range first, rejecting everything inside it threw the strikethrough
+        /// away completely -- the tildes vanished and no line was ever drawn.
+        ///
+        /// But nesting only counts when the inner span sits within the claim's *content*. In
+        /// `***world***` the bold pattern also matches, starting on the very same asterisks the
+        /// boldItalic claim owns -- that is two delimiters fighting over one run, not one style
+        /// inside another, and it has to lose.
+        ///
+        /// Code and emoji shortcodes are opaque: their content is literal, so `` `**not bold**` ``
+        /// keeps its asterisks and stays unstyled.
         func isClaimed(_ range: Range<String.Index>) -> Bool {
-            claimedRanges.contains { claimed in
+            claimedRanges.contains { claim in
+                let claimed = claim.range
                 let overlaps = range.lowerBound < claimed.upperBound && range.upperBound > claimed.lowerBound
                 guard overlaps else { return false }
-                let fullyContainsClaimed = range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound
-                return !fullyContainsClaimed
+
+                // The same run re-matched by a lower-priority delimiter.
+                if range == claimed { return true }
+
+                let claimWrapsRange = claimed.lowerBound <= range.lowerBound && claimed.upperBound >= range.upperBound
+                if claimWrapsRange {
+                    if claim.isOpaque { return true }
+                    // Nesting is only real when it stays inside the delimiters.
+                    let insideContent = range.lowerBound >= claim.contentRange.lowerBound
+                        && range.upperBound <= claim.contentRange.upperBound
+                    return !insideContent
+                }
+
+                let rangeWrapsClaim = range.lowerBound <= claimed.lowerBound && range.upperBound >= claimed.upperBound
+                return !rangeWrapsClaim
             }
         }
 
@@ -51,7 +80,7 @@ struct MarkdownParser {
                     openingDelimiterRange: openStart..<openEnd,
                     closingDelimiterRange: closeStart..<closeEnd
                 ))
-                claim(fullRange)
+                claim(fullRange, content: contentRange)
             }
         }
 
@@ -60,7 +89,7 @@ struct MarkdownParser {
         // italic pattern below (this parser doesn't implement CommonMark's intraword-emphasis
         // flanking rules -- see the type doc comment).
         for shortcode in parseEmojiShortcodes(in: text) {
-            claim(shortcode.fullRange)
+            claim(shortcode.fullRange, opaque: true)
         }
 
         // Order matters: higher-priority (longer/more specific) delimiters
@@ -91,7 +120,7 @@ struct MarkdownParser {
                     openingDelimiterRange: openStart..<openEnd,
                     closingDelimiterRange: closeStart..<closeEnd
                 ))
-                claim(fullRange)
+                claim(fullRange, opaque: true)
             }
         }
         // Triple delimiters claim next, before plain bold: **/__ would otherwise absorb two of
@@ -131,6 +160,23 @@ struct MarkdownParser {
         return headers
     }
 
+
+    /// The part of `line` after any leading blockquote markers.
+    ///
+    /// Markdown nests freely inside a quote -- lists, fenced code, further quotes -- but every
+    /// such line starts with ">" markers that the block parsers were matching against directly,
+    /// so a list or a code fence written inside a blockquote was never recognised and rendered as
+    /// literal "- " and "```" text. `Substring` shares indices with its parent, so detecting on
+    /// this stripped view keeps every range valid against the original document.
+    static func skippingBlockquoteMarkers(_ line: Substring) -> Substring {
+        var rest = line
+        while true {
+            let afterSpaces = rest.drop(while: { $0 == " " || $0 == "\t" })
+            guard afterSpaces.first == ">" else { return rest }
+            rest = afterSpaces.dropFirst()
+        }
+    }
+
     static func parseListItems(in text: String) -> [ListItemSpan] {
         var items: [ListItemSpan] = []
         var lineStart = text.startIndex
@@ -139,11 +185,13 @@ struct MarkdownParser {
         // pragmatic fixed unit (not CommonMark's column-based nesting rule), matching common
         // editor conventions. Tabs aren't recognized as indentation (out of scope).
         func level(of line: Substring) -> Int {
-            line.prefix { $0 == " " }.count / 2
+            let content = Self.skippingBlockquoteMarkers(line)
+            return content.prefix { $0 == " " }.count / 2
         }
 
         func markerContentStart(of line: Substring) -> Substring {
-            line[line.prefix { $0 == " " }.endIndex...]
+            let line = Self.skippingBlockquoteMarkers(line)
+            return line[line.prefix { $0 == " " }.endIndex...]
         }
 
         func unorderedMarkerRange(in line: Substring) -> Range<String.Index>? {
@@ -229,11 +277,16 @@ struct MarkdownParser {
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
-            if let markerRange = line.range(of: "^> ?", options: .regularExpression) {
+            // The whole run of markers, not just the first: ">> Level 2" is one blockquote line
+            // at depth 2, and matching only "^> ?" left the second ">" sitting in the content as
+            // literal text with a single bar drawn beside it.
+            if let markerRange = line.range(of: "^(?:>[ \t]?)+", options: .regularExpression) {
+                let depth = line[markerRange].filter { $0 == ">" }.count
                 blockquotes.append(BlockquoteSpan(
                     markerRange: markerRange,
                     contentRange: markerRange.upperBound..<lineEnd,
-                    lineRange: lineStart..<lineEnd
+                    lineRange: lineStart..<lineEnd,
+                    depth: max(1, depth)
                 ))
             }
             lineStart = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
@@ -362,7 +415,10 @@ struct MarkdownParser {
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // A fence inside a blockquote is still a fence: skip the ">" markers before looking
+            // for backticks, otherwise "> ```text" was read as ordinary quoted prose and the code
+            // rendered as literal backticks.
+            let trimmed = Self.skippingBlockquoteMarkers(line).trimmingCharacters(in: .whitespaces)
             let backtickCount = trimmed.prefix(while: { $0 == "`" }).count
 
             if openingFenceRange == nil, backtickCount >= 3 {
@@ -460,6 +516,205 @@ struct MarkdownParser {
                   let aliasRange = Range(match.range(at: 1), in: text),
                   let emoji = GemojiTable.shortcodeToEmoji[String(text[aliasRange])] else { return }
             spans.append(EmojiShortcodeSpan(fullRange: fullRange, emoji: emoji))
+        }
+        return spans
+    }
+}
+
+// MARK: - Autolinks
+
+extension MarkdownParser {
+    /// Bare URLs and email addresses written straight into the prose -- no `[text](url)` syntax.
+    /// Returns them as `LinkSpan`s whose text/url/full ranges are all the URL itself, so the
+    /// styler and the HTML renderer can treat them exactly like an explicit markdown link that
+    /// happens to have no delimiters to hide.
+    ///
+    /// `claimed` ranges are skipped: pass the `fullRange`s of the explicit markdown links (so the
+    /// URL inside `[text](url)` isn't linked twice) and of inline code spans (a URL inside
+    /// backticks is sample text, not a link).
+    ///
+    /// Trailing punctuation follows GFM's autolink rules, which exist because a URL at the end of
+    /// a sentence is far more common than a URL that genuinely ends in punctuation:
+    /// `https://example.com.` links without the full stop, `(https://example.com/path).` drops
+    /// both the paren and the stop, but `…/Markdown_(markup_language)` keeps its closing paren
+    /// because the parens inside the URL balance.
+    static func parseAutolinks(in text: String, excluding claimed: [Range<String.Index>] = []) -> [LinkSpan] {
+        var spans: [LinkSpan] = []
+
+        func isClaimed(_ range: Range<String.Index>) -> Bool {
+            claimed.contains { $0.lowerBound < range.upperBound && $0.upperBound > range.lowerBound }
+        }
+
+        func appendMatches(pattern: String, isEmail: Bool) {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+            let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+            regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+                guard let match, var range = Range(match.range, in: text) else { return }
+                guard let trimmed = trimmingAutolinkTrailingPunctuation(range, in: text) else { return }
+                range = trimmed
+                guard !isClaimed(range) else { return }
+                let raw = String(text[range])
+                spans.append(LinkSpan(textRange: range,
+                                      urlRange: range,
+                                      fullRange: range,
+                                      url: isEmail ? "mailto:\(raw)" : raw))
+            }
+        }
+
+        // A scheme'd URL runs to the first whitespace or angle bracket; the trailing-punctuation
+        // pass below decides where it really ends. The lookbehind keeps it from starting midway
+        // through a longer token.
+        appendMatches(pattern: "(?<![A-Za-z0-9._%+-])https?://[^\\s<>]+", isEmail: false)
+        // Email: local@domain.tld. Requires a dotted domain so "a@b" in prose isn't linked.
+        appendMatches(pattern: "(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}", isEmail: true)
+
+        return spans.sorted { $0.fullRange.lowerBound < $1.fullRange.lowerBound }
+    }
+
+    /// Walks back off the end of an autolink candidate while the last character is punctuation
+    /// that reads as sentence punctuation rather than part of the address. A closing bracket is
+    /// only dropped when it is unbalanced within the candidate -- that is what lets a Wikipedia
+    /// URL keep its `(markup_language)` suffix while `(https://example.com/path)` loses the paren
+    /// that was wrapping it. Returns nil if nothing is left.
+    private static func trimmingAutolinkTrailingPunctuation(_ range: Range<String.Index>,
+                                                            in text: String) -> Range<String.Index>? {
+        // Not "_" or "~": those are legitimate, common URL characters (…/some_path/file_name).
+        let sentencePunctuation: Set<Character> = [".", ",", ";", ":", "!", "?", "\"", "'", "*"]
+        let brackets: [Character: Character] = [")": "(", "]": "[", "}": "{"]
+
+        var end = range.upperBound
+        while end > range.lowerBound {
+            let last = text[text.index(before: end)]
+            if sentencePunctuation.contains(last) {
+                end = text.index(before: end)
+                continue
+            }
+            if let opener = brackets[last] {
+                let candidate = text[range.lowerBound..<end]
+                let opens = candidate.filter { $0 == opener }.count
+                let closes = candidate.filter { $0 == last }.count
+                if closes > opens {
+                    end = text.index(before: end)
+                    continue
+                }
+            }
+            break
+        }
+
+        guard end > range.lowerBound else { return nil }
+        let trimmed = range.lowerBound..<end
+        // "https://" on its own isn't a link.
+        return String(text[trimmed]).hasSuffix("//") ? nil : trimmed
+    }
+}
+
+// MARK: - Display substitutions
+
+/// A run of source characters that should *display* as something else while the file on disk keeps
+/// the literal characters the user typed -- HTML entities (`&copy;` shown as ©) and typographic
+/// replacements (`--` shown as –). The same idea as the existing `:shortcode:` → emoji handling,
+/// and it reuses that drawing path in MarkdownLayoutManager.
+struct DisplaySubstitutionSpan: Equatable {
+    let range: Range<String.Index>
+    let replacement: String
+}
+
+extension MarkdownParser {
+    private static let namedEntities: [String: String] = [
+        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00A0}",
+        "copy": "©", "reg": "®", "trade": "™", "deg": "°", "plusmn": "±", "times": "×",
+        "divide": "÷", "frac12": "½", "frac14": "¼", "frac34": "¾", "sup2": "²", "sup3": "³",
+        "micro": "µ", "para": "¶", "sect": "§", "dagger": "†", "Dagger": "‡", "bull": "•",
+        "middot": "·", "hellip": "…", "mdash": "—", "ndash": "–", "lsquo": "\u{2018}",
+        "rsquo": "\u{2019}", "ldquo": "\u{201C}", "rdquo": "\u{201D}", "laquo": "«", "raquo": "»",
+        "euro": "€", "pound": "£", "yen": "¥", "cent": "¢", "permil": "‰",
+        "larr": "←", "uarr": "↑", "rarr": "→", "darr": "↓", "harr": "↔",
+        "ne": "≠", "le": "≤", "ge": "≥", "infin": "∞", "asymp": "≈", "equiv": "≡", "radic": "√"
+    ]
+
+    /// HTML entities -- named (`&copy;`), decimal (`&#169;`) and hexadecimal (`&#x00A9;`).
+    static func parseHTMLEntities(in text: String) -> [DisplaySubstitutionSpan] {
+        guard let regex = try? NSRegularExpression(pattern: "&(#[Xx][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]{1,31});") else { return [] }
+        var spans: [DisplaySubstitutionSpan] = []
+        let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+        regex.enumerateMatches(in: text, range: nsrange) { match, _, _ in
+            guard let match,
+                  let full = Range(match.range, in: text),
+                  let body = Range(match.range(at: 1), in: text) else { return }
+            let token = String(text[body])
+            var replacement: String?
+            if token.hasPrefix("#x") || token.hasPrefix("#X") {
+                if let value = UInt32(token.dropFirst(2), radix: 16), let scalar = Unicode.Scalar(value) {
+                    replacement = String(Character(scalar))
+                }
+            } else if token.hasPrefix("#") {
+                if let value = UInt32(token.dropFirst()), let scalar = Unicode.Scalar(value) {
+                    replacement = String(Character(scalar))
+                }
+            } else {
+                replacement = namedEntities[token]
+            }
+            guard let replacement else { return }
+            spans.append(DisplaySubstitutionSpan(range: full, replacement: replacement))
+        }
+        return spans
+    }
+
+    /// Typographic substitution: straight quotes become curly, `...` becomes an ellipsis, `--` an
+    /// en dash and `---` an em dash. Done at *display* time only -- AppKit's own automatic
+    /// substitution is deliberately disabled on the text view because it rewrites the buffer
+    /// before the parser ever sees it, which silently turned a typed `---` into an em dash and
+    /// broke horizontal rules.
+    static func parseTypographicSubstitutions(in text: String) -> [DisplaySubstitutionSpan] {
+        var spans: [DisplaySubstitutionSpan] = []
+        let characters = Array(text)
+        let indices = Array(text.indices)
+        var i = 0
+
+        func character(at offset: Int) -> Character? {
+            (offset >= 0 && offset < characters.count) ? characters[offset] : nil
+        }
+        /// A quote opens when what precedes it is nothing, whitespace, or an opening bracket.
+        func isOpening(before offset: Int) -> Bool {
+            guard let previous = character(at: offset - 1) else { return true }
+            return previous.isWhitespace || "([{-–—/".contains(previous)
+        }
+
+        while i < characters.count {
+            let c = characters[i]
+            let start = indices[i]
+
+            /// The index `count` characters after `i`, clamped to the end of the text.
+            func end(after count: Int) -> String.Index {
+                i + count < indices.count ? indices[i + count] : text.endIndex
+            }
+
+            if c == ".", character(at: i + 1) == ".", character(at: i + 2) == "." {
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: 3), replacement: "…"))
+                i += 3
+                continue
+            }
+            if c == "-", character(at: i + 1) == "-" {
+                let isEmDash = character(at: i + 2) == "-"
+                let length = isEmDash ? 3 : 2
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: length),
+                                                    replacement: isEmDash ? "—" : "–"))
+                i += length
+                continue
+            }
+            if c == "\"" {
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: 1),
+                                                    replacement: isOpening(before: i) ? "\u{201C}" : "\u{201D}"))
+                i += 1
+                continue
+            }
+            if c == "'" {
+                spans.append(DisplaySubstitutionSpan(range: start..<end(after: 1),
+                                                    replacement: isOpening(before: i) ? "\u{2018}" : "\u{2019}"))
+                i += 1
+                continue
+            }
+            i += 1
         }
         return spans
     }

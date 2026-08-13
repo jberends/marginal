@@ -609,7 +609,10 @@ final class MarkdownStylerTableTests: XCTestCase {
         let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
         let location = text.distance(from: text.startIndex, to: text.range(of: "Feature")!.lowerBound)
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
-        XCTAssertEqual(font, NSFont.systemFont(ofSize: 14, weight: .medium))
+        // Asserts the *weight*, not a particular family: the editor's typeface is chosen in
+        // EditorFont and has changed once already, but "header row is medium, not bold" is the
+        // rule Notion's measured design actually specifies.
+        XCTAssertEqual(font, EditorFont.medium(14))
 
         let bodyLocation = text.distance(from: text.startIndex, to: text.range(of: "Headings")!.lowerBound)
         let bodyFont = attributed.attribute(.font, at: bodyLocation, effectiveRange: nil) as? NSFont

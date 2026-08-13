@@ -8,11 +8,18 @@ protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL)
 }
 
-private let markdownFileExtensions: Set<String> = ["md", "markdown"]
+/// Every extension Marginal opens as a document. A .txt is markdown without markup, so it opens
+/// in its own tab exactly like a .md rather than being treated as different in kind.
+private let markdownFileExtensions: Set<String> = ["md", "markdown", "txt", "text"]
 
 final class MarkdownTextView: NSTextView {
 
     weak var shortcutDelegate: MarkdownTextViewShortcutDelegate?
+
+    /// Decides what a link activation means -- an external URL to hand to the browser, or an
+    /// in-document "#anchor" to scroll to. Owned by DocumentViewController, which is the only
+    /// object that knows the document's heading structure. Returns true when it handled the link.
+    var linkActivationHandler: ((Any) -> Bool)?
 
     private func droppedMarkdownFileURL(from draggingInfo: NSDraggingInfo) -> URL? {
         guard let url = NSURL(from: draggingInfo.draggingPasteboard) as URL?,
@@ -38,10 +45,34 @@ final class MarkdownTextView: NSTextView {
     // Clicking a drawn task checkbox toggles it ([ ] <-> [x]) instead of moving the caret.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if event.modifierFlags.contains(.command), openLink(at: point) {
+            return
+        }
         if let characterIndex = taskCheckboxCharacterIndex(at: point), toggleTaskCheckbox(atCharacterIndex: characterIndex) {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    /// ⌘-click opens the link under `point` in the default browser. A plain click deliberately
+    /// still just moves the caret: this is an editor, and in an editable text view a bare click on
+    /// a link has to remain a way to put the cursor inside it -- ⌘-click is the same gesture Xcode
+    /// and VS Code use for exactly that reason. Returns false when there is no link under the
+    /// point, so the normal click handling continues.
+    private func openLink(at point: NSPoint) -> Bool {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else { return false }
+
+        // Reject points past the end of the line's glyphs, so clicking the empty space to the
+        // right of a link-terminated line doesn't open it.
+        let glyphIndex = layoutManager.glyphIndex(for: point, in: textContainer, fractionOfDistanceThroughGlyph: nil)
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+        guard glyphRect.contains(point) else { return false }
+
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard characterIndex < textStorage.length else { return false }
+        guard let value = textStorage.attribute(.link, at: characterIndex, effectiveRange: nil) else { return false }
+
+        return linkActivationHandler?(value) ?? false
     }
 
     /// The character index of a task-checkbox marker under `point` (view coordinates),

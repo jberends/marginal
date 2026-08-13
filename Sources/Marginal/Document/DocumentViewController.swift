@@ -56,10 +56,23 @@ final class DocumentViewController: NSViewController {
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = self
         textView.shortcutDelegate = self
+        // NSTextView paints its own attributes over any range carrying `.link` -- blue text with
+        // a full-strength underline by default -- which overrode the accent colour the styler
+        // applies and left links reading as system-blue with a purple underline. Restating the
+        // link appearance here keeps AppKit's rendering identical to MarkdownStyler's.
+        textView.linkTextAttributes = [
+            .foregroundColor: DesignPalette.accent,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .underlineColor: DesignPalette.accent.withAlphaComponent(0.35),
+            .cursor: NSCursor.pointingHand
+        ]
+        textView.linkActivationHandler = { [weak self] value in
+            self?.activateLink(value) ?? false
+        }
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
         editorFontSize = savedSize > 0 ? savedSize : 16
-        textView.font = NSFont.systemFont(ofSize: editorFontSize)
+        textView.font = EditorFont.body(editorFontSize)
 
         scrollView.documentView = textView
         containerView.addSubview(scrollView)
@@ -126,15 +139,19 @@ final class DocumentViewController: NSViewController {
         let text = textView.string
         let cursorInText = view.window?.firstResponder === textView
 
+        // Counts describe the whole document, so they stay accurate even when the caret is
+        // elsewhere -- the status bar keeps showing whichever readout the user clicked to.
+        let counts = DocumentCounts(text: text, selectedRange: textView.selectedRange())
+
         guard cursorInText, let cursor = currentCursorIndex() else {
             gutterView.lineNumber = nil
-            statusBar.update(with: nil)
+            statusBar.update(with: nil, counts: counts)
             return
         }
 
         let model = latestModel ?? MarkdownDocumentModel()
         let status = CursorStatus.status(for: text, model: model, cursor: cursor)
-        statusBar.update(with: status)
+        statusBar.update(with: status, counts: counts)
 
         guard let layoutManager = textView.layoutManager else {
             gutterView.lineNumber = nil
@@ -247,13 +264,96 @@ final class DocumentViewController: NSViewController {
         isApplyingProgrammaticEdit = false
     }
 
+    /// AppKit's own link click. Always reports the link as handled so NSTextView never falls
+    /// back to opening it with LaunchServices.
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        activateLink(link)
+    }
+
+    /// Handles a link the user activated (⌘-click, or AppKit's own link click). Returns true
+    /// when it dealt with the link, which also stops AppKit falling back to LaunchServices --
+    /// that fallback is what produced a "The application can't be opened. -50" dialog for an
+    /// in-document "#anchor", which is not something the Finder can open.
+    @discardableResult
+    func activateLink(_ value: Any) -> Bool {
+        let raw: String
+        switch value {
+        case let url as URL: raw = url.absoluteString
+        case let string as String: raw = string
+        default: return false
+        }
+
+        // In-document anchor: scroll to the heading whose GitHub-style slug matches.
+        if raw.hasPrefix("#") {
+            let wanted = String(raw.dropFirst()).lowercased()
+            let text = textView.string
+            for header in MarkdownParser.parseHeaders(in: text)
+            where Self.anchorSlug(for: String(text[header.contentRange])) == wanted {
+                let target = NSRange(header.contentRange, in: text)
+                textView.setSelectedRange(NSRange(location: target.location, length: 0))
+                textView.scrollRangeToVisible(target)
+                textView.window?.makeFirstResponder(textView)
+                return true
+            }
+            // Unknown anchor: swallow it anyway rather than handing "#missing" to the Finder.
+            return true
+        }
+
+        if let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
+           ["http", "https", "mailto"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+            return true
+        }
+
+        // A relative path (./notes.md, ../parent) resolves against the document on disk.
+        if let documentURL = (view.window?.windowController?.document as? NSDocument)?.fileURL {
+            let resolved = URL(fileURLWithPath: raw, relativeTo: documentURL.deletingLastPathComponent()).standardizedFileURL
+            if FileManager.default.fileExists(atPath: resolved.path) {
+                NSWorkspace.shared.open(resolved)
+                return true
+            }
+        }
+        return true
+    }
+
+    /// GitHub's heading-anchor slug: lowercased, punctuation dropped, spaces to hyphens. This is
+    /// the form "[Heading Level 1](#heading-level-1)" in a hand-written table of contents assumes.
+    static func anchorSlug(for headingText: String) -> String {
+        let lowered = headingText.trimmingCharacters(in: .whitespaces).lowercased()
+        let stripped = lowered.map { character -> Character in
+            if character.isLetter || character.isNumber { return character }
+            if character == "-" || character == " " { return character }
+            return "\u{0}"
+        }
+        return String(stripped).replacingOccurrences(of: "\u{0}", with: "")
+            .replacingOccurrences(of: " ", with: "-")
+    }
+
     private func restyle(cursorLocation: String.Index?) {
         let text = textView.string
+        // Explicit [text](url) links first, then bare URLs/emails in the prose. An autolink also
+        // suppresses any inline emphasis the parser found *inside* it: a URL like
+        // ".../some_path/file_name" otherwise reads as italic to the underscore rule, which both
+        // mis-styles it and hides the underscores as if they were delimiters.
+        let explicitLinks = MarkdownParser.parseLinks(in: text)
+        let allInlineStyles = MarkdownParser.parseInlineStyles(in: text)
+        let inlineCodeRanges = allInlineStyles
+            .filter { $0.kind == .code }
+            .map { $0.openingDelimiterRange.lowerBound..<$0.closingDelimiterRange.upperBound }
+        let autolinks = MarkdownParser.parseAutolinks(
+            in: text,
+            excluding: explicitLinks.map(\.fullRange) + inlineCodeRanges
+        )
+        let inlineStyles = allInlineStyles.filter { style in
+            let styleRange = style.openingDelimiterRange.lowerBound..<style.closingDelimiterRange.upperBound
+            return !autolinks.contains { $0.fullRange.lowerBound < styleRange.upperBound && $0.fullRange.upperBound > styleRange.lowerBound }
+        }
+
         let model = MarkdownDocumentModel(
-            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            inlineStyles: inlineStyles,
             headers: MarkdownParser.parseHeaders(in: text),
             listItems: MarkdownParser.parseListItems(in: text),
-            links: MarkdownParser.parseLinks(in: text),
+            links: explicitLinks + autolinks,
             blockquotes: MarkdownParser.parseBlockquotes(in: text),
             horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
             codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),

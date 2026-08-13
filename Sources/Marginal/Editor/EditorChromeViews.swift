@@ -45,12 +45,78 @@ final class LineNumberGutterView: NSView {
 
 /// The bottom status bar: markdown context breadcrumb on the left ("h1 › bold"),
 /// line/column on the right ("L 24 · C 13").
+/// A document's size, plus where the caret sits in it and what is selected -- shown in the status
+/// bar when the indicator is toggled to counts. "Chars 23 / 26374" answers "how far in am I?",
+/// which a bare total cannot.
+struct DocumentCounts: Equatable {
+    let characters: Int
+    let words: Int
+    /// Characters and words before the caret. Zero-width selection, so this is the caret position.
+    let caretCharacters: Int
+    let caretWords: Int
+    /// Characters and words inside the selection; both zero when nothing is selected.
+    let selectedCharacters: Int
+    let selectedWords: Int
+
+    var hasSelection: Bool { selectedCharacters > 0 }
+
+    /// Words are whitespace-separated runs -- the same thing a word processor counts, and what
+    /// someone writing to a word limit means. Characters count the text as written, markdown
+    /// markup included, since that is the file's real size.
+    private static func wordCount(_ text: Substring) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+    }
+
+    /// `selectedRange` is in UTF-16 units, as it comes from `NSTextView.selectedRange()`.
+    init(text: String, selectedRange: NSRange? = nil) {
+        characters = text.count
+        words = Self.wordCount(text[text.startIndex..<text.endIndex])
+
+        guard let selectedRange,
+              let start = Range(NSRange(location: selectedRange.location, length: 0), in: text)?.lowerBound,
+              let selection = Range(selectedRange, in: text) else {
+            caretCharacters = 0
+            caretWords = 0
+            selectedCharacters = 0
+            selectedWords = 0
+            return
+        }
+
+        let prefix = text[text.startIndex..<start]
+        caretCharacters = prefix.count
+        caretWords = Self.wordCount(prefix)
+
+        let selected = text[selection]
+        selectedCharacters = selected.count
+        selectedWords = Self.wordCount(selected)
+    }
+
+    init(characters: Int, words: Int) {
+        self.characters = characters
+        self.words = words
+        caretCharacters = 0
+        caretWords = 0
+        selectedCharacters = 0
+        selectedWords = 0
+    }
+}
+
 final class StatusBarView: NSView {
 
     static let height: CGFloat = 26
 
     private let breadcrumbLabel = NSTextField(labelWithString: "")
     private let positionLabel = NSTextField(labelWithString: "")
+
+    /// What the right-hand indicator is showing. Click it to swap: the caret's position is what
+    /// you want while editing, the document's size is what you want while writing to a length.
+    private enum Readout {
+        case position
+        case counts
+    }
+    private var readout: Readout = .position
+    private var status: CursorStatus?
+    private var counts: DocumentCounts?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -72,14 +138,40 @@ final class StatusBarView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func update(with status: CursorStatus?) {
+    func update(with status: CursorStatus?, counts: DocumentCounts? = nil) {
+        self.status = status
+        if let counts { self.counts = counts }
+        refresh()
+    }
+
+    private func refresh() {
         guard let status else {
             breadcrumbLabel.stringValue = ""
             positionLabel.stringValue = ""
+            toolTip = nil
             return
         }
         breadcrumbLabel.stringValue = status.path.joined(separator: " › ")
-        positionLabel.stringValue = "L \(status.line) · C \(status.column)"
+        switch readout {
+        case .position:
+            positionLabel.stringValue = "L \(status.line) · C \(status.column)"
+            toolTip = "Click to show word and character counts"
+        case .counts:
+            let counts = counts ?? DocumentCounts(characters: 0, words: 0)
+            if counts.hasSelection {
+                positionLabel.stringValue = "Selected \(counts.selectedCharacters) / \(counts.characters) chars · \(counts.selectedWords) / \(counts.words) words"
+            } else {
+                positionLabel.stringValue = "Chars \(counts.caretCharacters) / \(counts.characters) · Words \(counts.caretWords) / \(counts.words)"
+            }
+            toolTip = "Click to show the cursor position"
+        }
+    }
+
+    /// The indicator is the only thing in the status bar worth clicking, so the whole bar accepts
+    /// the click rather than asking the user to hit an 11pt label exactly.
+    override func mouseDown(with event: NSEvent) {
+        readout = (readout == .position) ? .counts : .position
+        refresh()
     }
 
     override func draw(_ dirtyRect: NSRect) {
