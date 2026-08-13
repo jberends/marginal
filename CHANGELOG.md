@@ -4,94 +4,64 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
-## [0.9.0] — unreleased
+## [0.9.0] — 2026-08-13
 
 ### Added
 
-- **File ▸ Open Recent**, holding the last ten documents, with the standard Clear Menu entry.
-
 - **Autolinks**: bare URLs and email addresses written straight into the prose become real
   links, without needing `[text](url)` syntax. Trailing punctuation follows GFM's rules, so
-  `https://example.com.` links without the full stop, `(https://example.com/path).` drops
-  the wrapping paren *and* the stop, and a URL whose own parentheses balance —
+  `https://example.com.` links without the full stop, `(https://example.com/path).` drops the
+  wrapping paren *and* the stop, and a URL whose own parentheses balance —
   `…/Markdown_(markup_language)` — keeps them. Emails link as `mailto:`.
-- **⌘-click opens a link** in the default browser. A plain click still just moves the
-  caret, so a link remains editable text.
-- **In-document anchor links** (`[Heading Level 1](#heading-level-1)`, as a hand-written
-  table of contents uses) scroll to the matching heading, resolved with GitHub's slug
-  rules. Relative paths resolve against the document's own folder. Previously an anchor
-  was handed to LaunchServices, which answered with "The application can't be opened. -50".
-- **`.txt` files open in Marginal.** The app only ever declared markdown as a document
-  type, so macOS did not believe it could open plain text — dragging a `.txt` (or a `.md`)
-  onto the Dock icon did nothing. Plain text is now a declared type, and a dropped `.txt`
-  opens as its own document in a new tab, exactly like a `.md`.
-- **Word and character counts.** Click the `L · C` indicator in the status bar to swap it for
-  counts, and click again to swap back. It shows where you are, not just how big the file is:
-  `Chars 23 / 26374 · Words 4 / 3995`. Select text and it reports the selection instead —
-  `Selected 120 / 26374 chars · 22 / 3995 words` — the caret's position is what you
-  want while editing, the document's size while writing to a length. Words are counted the
-  way a word processor counts them; characters count the text as written, markup included.
-- **Leaving without saving.** ⌘W now closes the document (one tab) rather than its window,
-  and the discard path clears the document's change count *before* dismissing the save sheet —
-  doing it the other way round let the close resume while the document still looked dirty, so
-  macOS simply asked again.
-- **Leaving without saving (original note).** Holding ⌘Q or ⌘W — or pressing it again while the "do you
-  want to save?" sheet is up — closes the document, or quits, **discarding the unsaved
-  changes**. The second gesture matters because that sheet appears in response to ⌘Q/⌘W,
-  so pressing the same keys again is the natural reflex, and previously nothing happened.
+- **⌘-click opens a link** in the default browser, with a pointing-hand cursor over links. A
+  plain click still just moves the caret, so a link stays editable text.
+- **In-document anchor links** (`[Heading](#heading)`, as a hand-written table of contents
+  uses) scroll to the matching heading, resolved with GitHub's slug rules. Relative paths
+  resolve against the document's own folder.
 - **Typographic substitution**: `"` `'` `...` `--` and `---` display as `“ ” ‘ ’ … – —`.
-- **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` all display as the
-  character they stand for — named, decimal and hexadecimal.
-
-  Neither substitution applies inside the hidden parts of a link, so a link title's
-  quotes (`[text](url "Title")`) no longer get drawn as stray curly quotes after the link.
-
+- **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` display as the character
+  they stand for — named, decimal and hexadecimal.
   Both substitutions are display-only: the file on disk keeps exactly what you typed, and
-  neither applies inside code blocks, inline code, or on a `---` horizontal-rule line.
-
-### Fixed
-
-- Lists and fenced code blocks written inside a blockquote render properly instead of showing
-  their literal `-` and ``` markers. Both parsers matched against the raw line, and every line
-  inside a quote begins with `>`, so neither ever matched there.
-
-- Nested blockquotes render as nested. Only the first ">" of a marker run was consumed, so
-  ">> Level 2" drew a single bar with a stray ">" left sitting in the text. Each level now
-  draws its own bar, stepped in, and the content is indented per level.
-
-- Strikethrough inside bold (`**~~deleted~~**`) now renders as both. Bold claimed the outer
-  range first and anything inside a claim was rejected, so the strikethrough was dropped —
-  the tildes disappeared but no line was ever drawn. Emphasis now nests, while inline code
-  stays literal, so `` `**not bold**` `` keeps its asterisks.
-- Substituted characters (`…`, `–`, `—`) and list numbers sit on the text baseline instead of
-  hanging below it. They are drawn rather than typed, and were being centred in the line — a
-  string's box is taller than its baseline-to-top distance, so centring always reads as low.
-
-- Selecting text inside a code block now shows the selection. The card's background was
-  painted *after* the selection highlight and covered it completely, so the status bar knew
-  text was selected but the page gave no sign of it.
+  neither applies inside code, on a `---` rule line, in a table's alignment row, or in the
+  hidden parts of a link.
+- **Word and character counts** in the status bar. Click the `L · C` indicator to swap it for
+  counts and click again to swap back. It shows where you are, not just how big the file is —
+  `Chars 23 / 26374 · Words 4 / 3995` — and reports the selection when text is selected.
+- **File ▸ Open Recent**, holding the last ten documents.
+- **`.txt` files open in Marginal**, from the Dock, from Finder and by dropping one on the
+  window — plain text is now a declared document type, and a dropped `.txt` opens in its own
+  tab exactly like a `.md`.
+- **Leaving without saving**: hold ⌘Q or ⌘W, or press it again while the save sheet is up, to
+  close or quit and **discard** the unsaved changes.
 
 ### Changed
 
-- Links render in Marginal's purple accent — previously the text came out system blue,
-  because `NSTextView` paints its own link attributes over any range carrying a `.link`
-  attribute and won against the styler. They are underlined with a hairline in a lighter
-  tint of the accent, the way Notion does: a quiet affordance instead of a heavily ruled
-  line. The pointer becomes a hand over a link.
-- **Typography.** The editor now sets in Avenir Next — the typeface that gives Bear its feel:
-  a humanist sans whose open letterforms read far warmer at length than the system UI font,
-  which is drawn for interface chrome rather than prose. Body text is set at a 1.32 line
-  height, and the blank lines markdown puts between blocks render at half height instead of
-  full. The usual advice of 1.5-1.6 assumes HTML, where the blank line between paragraphs
-  does not exist in the output — here the document *is* the markdown, so a blank source line
-  is a real rendered line and that multiple inflated the text and every gap at once.
-- Headings carry Notion's vertical rhythm — noticeably more air above than below (1.1/0.85/0.6em
-  above, 0.45em below) so a heading binds to the text it introduces instead of floating between
-  two blocks, and headings set tighter than body text so a long one holds together. The gap
-  below a heading used to be 0.125em, which left a heading followed straight by its bullets —
-  how most documents are actually written — almost touching them.
-- A URL containing underscores (`…/some_path/file_name`) is no longer mis-read as italic
-  emphasis and no longer has its underscores hidden.
+- **Typography.** The editor sets in Avenir Next — the typeface behind Bear's feel, a humanist
+  sans whose open letterforms read far warmer at length than the system UI font, which is drawn
+  for interface chrome rather than prose. Body text sets at a 1.32 line height and the blank
+  lines markdown puts between blocks render at half height. (The usual 1.5–1.6 advice assumes
+  HTML, where a blank line between paragraphs does not exist in the output; here the document
+  *is* the markdown, so that multiple inflated the text and every gap at once.)
+- Headings carry more air above than below — 1.1/0.85/0.6em above, 0.45em below — so a heading
+  binds to the text it introduces instead of floating between two blocks.
+- Links render in Marginal's purple accent, underlined with a hairline in a lighter tint of it,
+  the way Notion does.
+- Markdown is unchanged on disk unless you edit it: a URL containing underscores
+  (`…/some_path/file_name`) is no longer read as italic emphasis and rewritten on save.
+
+### Fixed
+
+- **Nested blockquotes** render as nested, one bar per level with the content indented.
+- **Lists and fenced code blocks inside a blockquote** render properly instead of showing their
+  literal `-` and ``` ``` ``` markers, with quoted lists indented to the quote's text and the
+  `>` markers hidden inside quoted code.
+- **Strikethrough inside bold** (`**~~deleted~~**`) renders as both. Markdown written inside
+  backticks stays literal.
+- Selecting text inside a code block shows the selection.
+- Substituted characters (`…`, `–`, `—`), list numbers and emoji sit on the text baseline
+  instead of hanging below it.
+- Blocks no longer collapse on top of one another, and a document opens with its first line —
+  and the caret — at the top of the window rather than the bottom.
 
 ## [0.3.0] — 2026-07-29
 
