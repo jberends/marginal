@@ -45,6 +45,10 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Fixed
 
+- Lists and fenced code blocks written inside a blockquote render properly instead of showing
+  their literal `-` and ``` markers. Both parsers matched against the raw line, and every line
+  inside a quote begins with `>`, so neither ever matched there.
+
 - Nested blockquotes render as nested. Only the first ">" of a marker run was consumed, so
   ">> Level 2" drew a single bar with a stray ">" left sitting in the text. Each level now
   draws its own bar, stepped in, and the content is indented per level.

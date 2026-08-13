@@ -160,6 +160,23 @@ struct MarkdownParser {
         return headers
     }
 
+
+    /// The part of `line` after any leading blockquote markers.
+    ///
+    /// Markdown nests freely inside a quote -- lists, fenced code, further quotes -- but every
+    /// such line starts with ">" markers that the block parsers were matching against directly,
+    /// so a list or a code fence written inside a blockquote was never recognised and rendered as
+    /// literal "- " and "```" text. `Substring` shares indices with its parent, so detecting on
+    /// this stripped view keeps every range valid against the original document.
+    static func skippingBlockquoteMarkers(_ line: Substring) -> Substring {
+        var rest = line
+        while true {
+            let afterSpaces = rest.drop(while: { $0 == " " || $0 == "\t" })
+            guard afterSpaces.first == ">" else { return rest }
+            rest = afterSpaces.dropFirst()
+        }
+    }
+
     static func parseListItems(in text: String) -> [ListItemSpan] {
         var items: [ListItemSpan] = []
         var lineStart = text.startIndex
@@ -168,11 +185,13 @@ struct MarkdownParser {
         // pragmatic fixed unit (not CommonMark's column-based nesting rule), matching common
         // editor conventions. Tabs aren't recognized as indentation (out of scope).
         func level(of line: Substring) -> Int {
-            line.prefix { $0 == " " }.count / 2
+            let content = Self.skippingBlockquoteMarkers(line)
+            return content.prefix { $0 == " " }.count / 2
         }
 
         func markerContentStart(of line: Substring) -> Substring {
-            line[line.prefix { $0 == " " }.endIndex...]
+            let line = Self.skippingBlockquoteMarkers(line)
+            return line[line.prefix { $0 == " " }.endIndex...]
         }
 
         func unorderedMarkerRange(in line: Substring) -> Range<String.Index>? {
@@ -396,7 +415,10 @@ struct MarkdownParser {
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
             let line = text[lineStart..<lineEnd]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // A fence inside a blockquote is still a fence: skip the ">" markers before looking
+            // for backticks, otherwise "> ```text" was read as ordinary quoted prose and the code
+            // rendered as literal backticks.
+            let trimmed = Self.skippingBlockquoteMarkers(line).trimmingCharacters(in: .whitespaces)
             let backtickCount = trimmed.prefix(while: { $0 == "`" }).count
 
             if openingFenceRange == nil, backtickCount >= 3 {
