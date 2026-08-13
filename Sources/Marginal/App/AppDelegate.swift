@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.buildMainMenu(target: self)
+        // Ten recent documents, the macOS default, stated explicitly so it does not drift with
+        // whatever the system-wide preference happens to be.
+        UserDefaults.standard.register(defaults: ["NSRecentDocumentsLimit": 10])
         installDiscardShortcutMonitor()
     }
 
@@ -76,23 +79,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let frontDocument = (NSApp.keyWindow ?? NSApp.mainWindow)?.windowController?.document as? NSDocument
         let targets: [NSDocument] = quittingApp ? documents : [frontDocument].compactMap { $0 }
 
+        // Clear the change count first: dismissing the sheet lets the close it belonged to carry
+        // on, and if the document still looks dirty at that moment AppKit simply asks again.
+        for document in targets {
+            document.updateChangeCount(.changeCleared)
+        }
+
         for window in NSApp.windows {
             if let sheet = window.attachedSheet {
                 window.endSheet(sheet, returnCode: .abort)
             }
         }
 
-        for document in targets {
-            document.updateChangeCount(.changeCleared)
-        }
-
         if quittingApp {
             NSApp.terminate(nil)
         } else {
+            // Close the front document itself rather than its window: with tabs, one document owns
+            // one tab, and closing the document takes that tab away without disturbing its
+            // siblings in the same window.
             for document in targets {
                 document.close()
             }
-            (NSApp.keyWindow ?? NSApp.mainWindow)?.performClose(nil)
         }
     }
 
@@ -220,6 +227,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         fileMenu.addItem(withTitle: "New", action: #selector(NSDocumentController.newDocument(_:)), keyEquivalent: "n")
         fileMenu.addItem(withTitle: "New Tab", action: #selector(NSWindow.newWindowForTab(_:)), keyEquivalent: "t")
         fileMenu.addItem(withTitle: "Open…", action: #selector(NSDocumentController.openDocument(_:)), keyEquivalent: "o")
+
+        // AppKit fills this in itself -- and keeps it across launches -- as long as the submenu
+        // carries the identifier it looks for. Building the list by hand would mean duplicating
+        // the tracking NSDocumentController already does every time a document is opened or saved.
+        let openRecentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
+        let openRecentMenu = NSMenu(title: "Open Recent")
+        openRecentMenu.identifier = NSUserInterfaceItemIdentifier("NSRecentDocumentsMenu")
+        openRecentItem.submenu = openRecentMenu
+        fileMenu.addItem(openRecentItem)
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileMenu.addItem(withTitle: "Save…", action: #selector(NSDocument.save(_:)), keyEquivalent: "s")

@@ -8,6 +8,8 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Added
 
+- **File ▸ Open Recent**, holding the last ten documents, with the standard Clear Menu entry.
+
 - **Autolinks**: bare URLs and email addresses written straight into the prose become real
   links, without needing `[text](url)` syntax. Trailing punctuation follows GFM's rules, so
   `https://example.com.` links without the full stop, `(https://example.com/path).` drops
@@ -29,7 +31,11 @@ All notable changes to Marginal are documented here. The format follows
   `Selected 120 / 26374 chars · 22 / 3995 words` — the caret's position is what you
   want while editing, the document's size while writing to a length. Words are counted the
   way a word processor counts them; characters count the text as written, markup included.
-- **Leaving without saving.** Holding ⌘Q or ⌘W — or pressing it again while the "do you
+- **Leaving without saving.** ⌘W now closes the document (one tab) rather than its window,
+  and the discard path clears the document's change count *before* dismissing the save sheet —
+  doing it the other way round let the close resume while the document still looked dirty, so
+  macOS simply asked again.
+- **Leaving without saving (original note).** Holding ⌘Q or ⌘W — or pressing it again while the "do you
   want to save?" sheet is up — closes the document, or quits, **discarding the unsaved
   changes**. The second gesture matters because that sheet appears in response to ⌘Q/⌘W,
   so pressing the same keys again is the natural reflex, and previously nothing happened.
