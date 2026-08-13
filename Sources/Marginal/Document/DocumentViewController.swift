@@ -139,15 +139,19 @@ final class DocumentViewController: NSViewController {
         let text = textView.string
         let cursorInText = view.window?.firstResponder === textView
 
+        // Counts describe the whole document, so they stay accurate even when the caret is
+        // elsewhere -- the status bar keeps showing whichever readout the user clicked to.
+        let counts = DocumentCounts(text: text)
+
         guard cursorInText, let cursor = currentCursorIndex() else {
             gutterView.lineNumber = nil
-            statusBar.update(with: nil)
+            statusBar.update(with: nil, counts: counts)
             return
         }
 
         let model = latestModel ?? MarkdownDocumentModel()
         let status = CursorStatus.status(for: text, model: model, cursor: cursor)
-        statusBar.update(with: status)
+        statusBar.update(with: status, counts: counts)
 
         guard let layoutManager = textView.layoutManager else {
             gutterView.lineNumber = nil

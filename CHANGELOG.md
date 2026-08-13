@@ -19,6 +19,10 @@ All notable changes to Marginal are documented here. The format follows
   table of contents uses) scroll to the matching heading, resolved with GitHub's slug
   rules. Relative paths resolve against the document's own folder. Previously an anchor
   was handed to LaunchServices, which answered with "The application can't be opened. -50".
+- **Word and character counts.** Click the `L · C` indicator in the status bar to swap it
+  for `Chars … · Words …`, and click again to swap back — the caret's position is what you
+  want while editing, the document's size while writing to a length. Words are counted the
+  way a word processor counts them; characters count the text as written, markup included.
 - **Leaving without saving.** Holding ⌘Q or ⌘W — or pressing it again while the "do you
   want to save?" sheet is up — closes the document, or quits, **discarding the unsaved
   changes**. The second gesture matters because that sheet appears in response to ⌘Q/⌘W,
