@@ -19,6 +19,10 @@ All notable changes to Marginal are documented here. The format follows
   table of contents uses) scroll to the matching heading, resolved with GitHub's slug
   rules. Relative paths resolve against the document's own folder. Previously an anchor
   was handed to LaunchServices, which answered with "The application can't be opened. -50".
+- **Dropping a `.txt` file** into the window inserts its text at the point you dropped it,
+  rather than opening it as a separate document — a plain-text file is markdown without any
+  markup, so its contents belong in the document you are writing. The insertion is a normal
+  undoable edit. Dropping a `.md` file still opens it as its own document.
 - **Typographic substitution**: `"` `'` `...` `--` and `---` display as `“ ” ‘ ’ … – —`.
 - **HTML entity decoding**: `&copy;`, `&amp;`, `&#169;` and `&#x00A9;` all display as the
   character they stand for — named, decimal and hexadecimal.
