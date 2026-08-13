@@ -48,8 +48,15 @@ All notable changes to Marginal are documented here. The format follows
   attribute and won against the styler. They are underlined with a hairline in a lighter
   tint of the accent, the way Notion does: a quiet affordance instead of a heavily ruled
   line. The pointer becomes a hand over a link.
-- Headings carry Notion's vertical rhythm — more air above than below, scaled by level, so a
-  heading reads as introducing the text beneath it.
+- **Typography.** The editor now sets in Avenir Next — the typeface that gives Bear its feel:
+  a humanist sans whose open letterforms read far warmer at length than the system UI font,
+  which is drawn for interface chrome rather than prose. Body text is set at a 1.55 line
+  height, the range typographic guidance converges on for long-form screen reading.
+- Headings carry Notion's vertical rhythm — noticeably more air above than below (1.1/0.85/0.6em
+  above, 0.45em below) so a heading binds to the text it introduces instead of floating between
+  two blocks, and headings set tighter than body text so a long one holds together. The gap
+  below a heading used to be 0.125em, which left a heading followed straight by its bullets —
+  how most documents are actually written — almost touching them.
 - A URL containing underscores (`…/some_path/file_name`) is no longer mis-read as italic
   emphasis and no longer has its underscores hidden.
 

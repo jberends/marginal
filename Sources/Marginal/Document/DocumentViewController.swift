@@ -72,7 +72,7 @@ final class DocumentViewController: NSViewController {
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
         editorFontSize = savedSize > 0 ? savedSize : 16
-        textView.font = NSFont.systemFont(ofSize: editorFontSize)
+        textView.font = EditorFont.body(editorFontSize)
 
         scrollView.documentView = textView
         containerView.addSubview(scrollView)

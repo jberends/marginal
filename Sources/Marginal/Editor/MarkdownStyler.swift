@@ -10,9 +10,16 @@ struct MarkdownStyler {
         baseFont: NSFont,
         cursorLocation: String.Index?
     ) -> NSAttributedString {
+        // 1.55 line height for body text. Anything below ~1.5 reads cramped at long-form
+        // lengths; this is the range every typographic guide lands on for screen reading.
+        let bodyStyle = NSMutableParagraphStyle()
+        bodyStyle.lineHeightMultiple = bodyLineHeightMultiple
+        bodyStyle.paragraphSpacing = baseFont.pointSize * 0.35
+
         let result = NSMutableAttributedString(string: text, attributes: [
             .font: baseFont,
-            .foregroundColor: NSColor.labelColor
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: bodyStyle
         ])
 
         let revealedStyles = cursorLocation.map {
@@ -115,10 +122,7 @@ struct MarkdownStyler {
 
         for header in headers {
             // Semibold, not full bold -- Notion's heading weight (600).
-            let headerFont = NSFont.systemFont(
-                ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize),
-                weight: .semibold
-            )
+            let headerFont = EditorFont.semibold(headerPointSize(for: header.level, baseSize: baseFont.pointSize))
             result.addAttribute(.font, value: headerFont, range: NSRange(header.contentRange, in: text))
 
             let markerRange = NSRange(header.markerRange, in: text)
@@ -134,7 +138,13 @@ struct MarkdownStyler {
             // specs/notion-design-tokens.md.
             let headingStyle = NSMutableParagraphStyle()
             headingStyle.paragraphSpacingBefore = baseFont.pointSize * headerExtraSpaceAbove(for: header.level)
-            headingStyle.paragraphSpacing = baseFont.pointSize * 0.125
+            // A real gap below the heading, but still clearly smaller than the one above, so the
+            // heading binds to the text it introduces instead of floating between two blocks.
+            // 0.125em was far too tight: a heading followed *immediately* by its bullets (no blank
+            // source line, which is how most documents are written) had almost nothing between them.
+            headingStyle.paragraphSpacing = baseFont.pointSize * 0.45
+            // Headings set tighter than body text -- long headings should hold together as a unit.
+            headingStyle.lineHeightMultiple = 1.15
             result.addAttribute(.paragraphStyle,
                                 value: headingStyle,
                                 range: (text as NSString).paragraphRange(for: markerRange))
@@ -154,6 +164,7 @@ struct MarkdownStyler {
             result.addAttribute(.marginalBlockquoteMarker, value: true, range: NSRange(blockquote.lineRange, in: text))
 
             let quoteParagraphStyle = NSMutableParagraphStyle()
+            quoteParagraphStyle.lineHeightMultiple = bodyLineHeightMultiple
             quoteParagraphStyle.firstLineHeadIndent = blockquoteContentIndent
             quoteParagraphStyle.headIndent = blockquoteContentIndent
             result.addAttribute(.paragraphStyle, value: quoteParagraphStyle, range: NSRange(blockquote.lineRange, in: text))
@@ -234,7 +245,7 @@ struct MarkdownStyler {
                         // Medium (500), not bold -- Notion's measured header row weight. A
                         // **bold** span nested in a header cell still layers real bold on top
                         // (inlineStyles runs after this).
-                        result.addAttribute(.font, value: NSFont.systemFont(ofSize: baseFont.pointSize, weight: .medium), range: NSRange(cellRange, in: text))
+                        result.addAttribute(.font, value: EditorFont.medium(baseFont.pointSize), range: NSRange(cellRange, in: text))
                     }
                 }
                 if let lastPipe = row.pipeRanges.last {
@@ -277,7 +288,7 @@ struct MarkdownStyler {
             // would shrink the nested span back down to editor-content size.
             let spanBaseFont: NSFont
             if let header = headers.first(where: { $0.contentRange.contains(span.contentRange.lowerBound) }) {
-                spanBaseFont = NSFont.systemFont(ofSize: headerPointSize(for: header.level, baseSize: baseFont.pointSize))
+                spanBaseFont = EditorFont.semibold(headerPointSize(for: header.level, baseSize: baseFont.pointSize))
             } else {
                 spanBaseFont = baseFont
             }
@@ -285,11 +296,11 @@ struct MarkdownStyler {
             case .bold:
                 // Semibold (600), not full bold -- 600 is the heaviest weight in the product
                 // (same rule as headings; the design system never uses 700).
-                result.addAttribute(.font, value: NSFont.systemFont(ofSize: spanBaseFont.pointSize, weight: .semibold), range: contentRange)
+                result.addAttribute(.font, value: EditorFont.semibold(spanBaseFont.pointSize), range: contentRange)
             case .italic:
                 result.addAttribute(.font, value: NSFontManager.shared.convert(spanBaseFont, toHaveTrait: .italicFontMask), range: contentRange)
             case .boldItalic:
-                let semibold = NSFont.systemFont(ofSize: spanBaseFont.pointSize, weight: .semibold)
+                let semibold = EditorFont.semibold(spanBaseFont.pointSize)
                 result.addAttribute(.font, value: NSFontManager.shared.convert(semibold, toHaveTrait: .italicFontMask), range: contentRange)
             case .strikethrough:
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
@@ -645,6 +656,7 @@ struct MarkdownStyler {
                 let hasContinuation = markerLineEnd < item.lineRange.upperBound
 
                 let markerLineStyle = NSMutableParagraphStyle()
+                markerLineStyle.lineHeightMultiple = bodyLineHeightMultiple
                 markerLineStyle.firstLineHeadIndent = levelOffset
                 markerLineStyle.headIndent = levelOffset + indentWidth
                 if !hasContinuation { markerLineStyle.paragraphSpacing = itemSpacing }
@@ -652,6 +664,7 @@ struct MarkdownStyler {
 
                 if hasContinuation {
                     let continuationStyle = NSMutableParagraphStyle()
+                    continuationStyle.lineHeightMultiple = bodyLineHeightMultiple
                     continuationStyle.firstLineHeadIndent = levelOffset + indentWidth
                     continuationStyle.headIndent = levelOffset + indentWidth
                     continuationStyle.paragraphSpacing = itemSpacing
@@ -675,8 +688,12 @@ struct MarkdownStyler {
     /// source line that already separates it from the previous block. Bigger headings get more
     /// air, which is what makes the document's hierarchy readable at a glance; h4-h6 sit at body
     /// scale already and need none.
+    /// Body line height. Typographic guidance for long-form screen reading converges on 1.5-1.6;
+    /// below that a wall of text reads cramped no matter how good the typeface is.
+    static let bodyLineHeightMultiple: CGFloat = 1.55
+
     private static func headerExtraSpaceAbove(for level: Int) -> CGFloat {
-        let extra: [Int: CGFloat] = [1: 0.75, 2: 0.5, 3: 0.25]
+        let extra: [Int: CGFloat] = [1: 1.1, 2: 0.85, 3: 0.6]
         return extra[level] ?? 0
     }
 

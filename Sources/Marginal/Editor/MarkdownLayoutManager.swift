@@ -50,6 +50,31 @@ struct EmojiGlyphInfo: Equatable {
 ///    therefore drawn starting exactly at the container's left edge, not to the left of it.
 final class MarkdownLayoutManager: NSLayoutManager {
 
+
+    /// The rect that actually hugs the glyphs on a line, for aligning anything drawn beside text.
+    ///
+    /// `boundingRect(forGlyphRange:in:)` returns the *line fragment*, and a paragraph style with a
+    /// `lineHeightMultiple` inflates that fragment above the glyphs -- so its `midY` sits higher
+    /// than the text does, and every marker drawn against it (bullets, list numbers, checkboxes,
+    /// emoji) drifted upward off its own line the moment body line height went to 1.55. Deriving
+    /// the rect from the glyph baseline and the font's ascender/descender keeps decorations
+    /// aligned to the text no matter what the line height is.
+    func textLineRect(forGlyphRange range: NSRange, in container: NSTextContainer) -> NSRect {
+        let bounding = boundingRect(forGlyphRange: range, in: container)
+        guard range.location < numberOfGlyphs, let storage = textStorage else { return bounding }
+        let characterIndex = characterIndexForGlyph(at: range.location)
+        guard characterIndex < storage.length else { return bounding }
+
+        let font = (storage.attribute(.font, at: characterIndex, effectiveRange: nil) as? NSFont)
+            ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let fragment = lineFragmentRect(forGlyphAt: range.location, effectiveRange: nil)
+        let baseline = fragment.minY + location(forGlyphAt: range.location).y
+        return NSRect(x: bounding.minX,
+                      y: baseline - font.ascender,
+                      width: bounding.width,
+                      height: font.ascender - font.descender)
+    }
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
 
@@ -113,7 +138,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // The marker character is still laid out at normal size (just transparent), so its own
             // bounding rect already reflects this exact line's real vertical geometry -- centering
             // the shape within it, sized from the font's own xHeight, needs no guessed offsets.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let diameter = font.xHeight * 0.85
             let shapeRect = NSRect(
                 x: origin.x + charRect.midX - diameter / 2,
@@ -155,7 +180,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // headIndent: relying on a trailing space's advance width for the gap (an earlier
             // version) is not guaranteed by NSString measurement and read as the number nearly
             // colliding with the following text.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let markerAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
             let markerSize = (displayText as NSString).size(withAttributes: markerAttributes)
             let rightEdge = origin.x + paragraphStyle.headIndent - MarkdownStyler.orderedMarkerContentGap(for: font)
@@ -171,7 +196,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // rect reflects this exact line's real geometry -- the checkbox is anchored at its
             // left edge (where the bullet would otherwise sit) and sized from xHeight, same
             // principle as the bullet/ordered-number markers.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let side = font.xHeight * 1.35
             let boxRect = NSRect(x: origin.x + charRect.minX, y: origin.y + charRect.midY - side / 2, width: side, height: side)
             let boxPath = NSBezierPath(roundedRect: boxRect, xRadius: 3, yRadius: 3)
@@ -236,7 +261,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // The whole ":shortcode:" run is hidden (tiny font) with a kern on its last character
             // reserving exactly the emoji's own rendered width (see MarkdownStyler), so this
             // first character's own position marks the left edge of that reserved space.
-            let charRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let charRect = textLineRect(forGlyphRange: glyphRange, in: textContainer)
             let emojiAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: info.fontSize)]
             let emojiSize = (info.emoji as NSString).size(withAttributes: emojiAttributes)
             let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + charRect.midY - emojiSize.height / 2)
