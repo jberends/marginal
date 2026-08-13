@@ -53,8 +53,8 @@ All notable changes to Marginal are documented here. The format follows
 
 - **Nested blockquotes** render as nested, one bar per level with the content indented.
 - **Lists and fenced code blocks inside a blockquote** render properly instead of showing their
-  literal `-` and ``` ``` ``` markers, with quoted lists indented to the quote's text and the
-  `>` markers hidden inside quoted code.
+  literal `-` and ``` ``` ``` markers. Quoted lists indent to the quote's text, and a quoted code
+  block keeps the quote bar to its left with the `>` markers hidden inside the card.
 - **Strikethrough inside bold** (`**~~deleted~~**`) renders as both. Markdown written inside
   backticks stays literal.
 - Selecting text inside a code block shows the selection.

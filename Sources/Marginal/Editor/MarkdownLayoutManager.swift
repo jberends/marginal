@@ -107,6 +107,9 @@ final class MarkdownLayoutManager: NSLayoutManager {
         // still layer on top of the card.
         textStorage.enumerateAttribute(.marginalCodeBlockMarker, in: fullRange) { value, range, _ in
             guard value != nil else { return }
+            // The value carries how far the card is inset -- non-zero when the fence sits inside a
+            // blockquote, so the quote bar has room to its left instead of overlapping the card.
+            let quoteInset = (value as? CGFloat) ?? 0
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             // boundingRect only returns ONE line fragment's rect (see the type doc comment) --
             // the card's vertical extent must be unioned from every fragment, including the
@@ -119,9 +122,9 @@ final class MarkdownLayoutManager: NSLayoutManager {
             }
             guard top < bottom else { return }
             let cardRect = NSRect(
-                x: origin.x + textContainer.lineFragmentPadding,
+                x: origin.x + textContainer.lineFragmentPadding + quoteInset,
                 y: origin.y + top,
-                width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2),
+                width: max(0, textContainer.size.width - textContainer.lineFragmentPadding * 2 - quoteInset),
                 height: bottom - top
             )
             DesignPalette.surfaceCode.setFill()

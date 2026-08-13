@@ -407,7 +407,12 @@ struct MarkdownStyler {
             // given a fixed line height below, so they render as the card's top/bottom padding
             // bands, and the content is inset from the card's left edge via paragraph indent.
             let blockNSRange = NSRange(codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound, in: text)
-            result.addAttribute(.marginalCodeBlockMarker, value: true, range: blockNSRange)
+            // A code block inside a quote is inset past the quote bar, so the bar reads as
+            // enclosing the card rather than running through its left edge.
+            let cardQuoteIndent = model.blockquotes
+                .first { $0.lineRange.overlaps(codeBlock.openingFenceRange) }
+                .map { blockquoteContentIndent * CGFloat($0.depth) } ?? 0
+            result.addAttribute(.marginalCodeBlockMarker, value: cardQuoteIndent, range: blockNSRange)
 
             let contentInset = codeBlockContentInset(for: baseFont)
             let contentStyle = NSMutableParagraphStyle()
@@ -461,8 +466,15 @@ struct MarkdownStyler {
         // The blockquote pass hides them, but the code-block pass then repaints those lines in
         // the mono face and code colour, which brings the marker back -- so a fence written
         // inside a quote showed "> " in front of every line of the card's contents.
-        for blockquote in blockquotes where !revealedBlockquotes.contains(blockquote) {
+        // `blockquotes` above deliberately excludes lines inside a fenced code block, so that a
+        // ">" appearing in sample code is never styled as a quote. A fence written *inside* a
+        // quote is the opposite case: those lines really are quoted, so they need their bar drawn
+        // and their markers hidden. Walk the unfiltered spans for exactly that.
+        for blockquote in model.blockquotes where !revealedBlockquotes.contains(blockquote) {
             guard overlapsAnyCodeBlock(blockquote.lineRange) else { continue }
+            result.addAttribute(.marginalBlockquoteMarker,
+                                value: blockquote.depth,
+                                range: NSRange(blockquote.lineRange, in: text))
             let markerRange = NSRange(blockquote.markerRange, in: text)
             guard markerRange.length > 0 else { continue }
             result.addAttribute(.font, value: hiddenFont, range: markerRange)
