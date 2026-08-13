@@ -47,3 +47,27 @@ apart from the existing manual “Check for Updates” action.
 - Marketing version: 0.9.0
 - Build: 9
 - Minimum macOS: 14.0
+
+---
+
+## Promotional Text (App Store Connect ▸ Promotional Text, 170 characters)
+
+This field can be changed at any time **without submitting a new build**, so it carries what is
+current rather than an evergreen tagline — use it later for timely notes ("Now with GitHub-style
+callouts") without waiting for a release. No version numbers: they mean nothing to a browsing
+customer and date the text the moment the next release ships.
+
+Recommended (155 characters):
+
+> Markdown, rendered as you type — now with typography built for hours of reading: a warmer
+> typeface, calmer spacing, and links that come alive as you write.
+
+Alternatives:
+
+- 76 — Markdown, rendered as you type — now with typography tuned for long reading.
+- 136 — A new typeface, calmer vertical rhythm, live links, and word counts. Still just plain
+  Markdown files on your disk, rendered as you type.
+- 91 — Still plain Markdown files you own. Now with the typography to actually enjoy reading them.
+
+Note: "Markdown, rendered as you type" is exactly 30 characters, the **Subtitle** limit. If it is
+in the Subtitle field, leave it there — it is a better subtitle than promotional text.
