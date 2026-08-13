@@ -120,6 +120,27 @@ struct MarkdownStyler {
                                 range: firstCharRange)
         }
 
+        // Collapse blank separator lines. Markdown puts a blank line between blocks, and this
+        // editor renders the source, so each of those costs a full line of height on screen --
+        // stacked on top of the heading spacing above, that is what made the document feel like
+        // it was swimming. Shrinking the empty line keeps the block separation without the void.
+        // Blank lines *inside* a fenced code block are content and keep their full height.
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let lineEnd = text.lineRange(for: lineStart..<lineStart).upperBound
+            let contentEnd = text[lineStart..<lineEnd].last == "\n" ? text.index(before: lineEnd) : lineEnd
+            let line = text[lineStart..<contentEnd]
+            if line.allSatisfy({ $0 == " " || $0 == "\t" }), !overlapsAnyCodeBlock(lineStart..<lineEnd) {
+                let blankStyle = NSMutableParagraphStyle()
+                blankStyle.lineHeightMultiple = bodyLineHeightMultiple * blankLineScale
+                let blankRange = NSRange(lineStart..<lineEnd, in: text)
+                result.addAttribute(.paragraphStyle, value: blankStyle, range: blankRange)
+                result.addAttribute(.font, value: baseFont, range: blankRange)
+            }
+            if lineEnd == lineStart { break }
+            lineStart = lineEnd
+        }
+
         for header in headers {
             // Semibold, not full bold -- Notion's heading weight (600).
             let headerFont = EditorFont.semibold(headerPointSize(for: header.level, baseSize: baseFont.pointSize))
@@ -688,9 +709,20 @@ struct MarkdownStyler {
     /// source line that already separates it from the previous block. Bigger headings get more
     /// air, which is what makes the document's hierarchy readable at a glance; h4-h6 sit at body
     /// scale already and need none.
-    /// Body line height. Typographic guidance for long-form screen reading converges on 1.5-1.6;
-    /// below that a wall of text reads cramped no matter how good the typeface is.
-    static let bodyLineHeightMultiple: CGFloat = 1.55
+    /// Body line height.
+    ///
+    /// The usual advice for screen reading is 1.5-1.6, but that assumes HTML, where the blank
+    /// line between two paragraphs does not exist in the output and the gap comes from margins.
+    /// Here the document *is* the markdown: a blank source line is a real, rendered line, so a
+    /// 1.55 multiple inflated the text and every separator between blocks at the same time and
+    /// the page came out swimming. 1.32 with collapsed blank lines (see `blankLineScale`) gives
+    /// the same amount of air between blocks with text that still reads as a paragraph.
+    static let bodyLineHeightMultiple: CGFloat = 1.32
+
+    /// How tall a blank separator line renders, relative to a normal line. A blank line's job
+    /// here is to separate blocks, and a full empty line of Avenir Next at 1.32 is far more space
+    /// than that needs -- especially under a heading, which already carries its own spacing.
+    static let blankLineScale: CGFloat = 0.5
 
     private static func headerExtraSpaceAbove(for level: Int) -> CGFloat {
         let extra: [Int: CGFloat] = [1: 1.1, 2: 0.85, 3: 0.6]

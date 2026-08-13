@@ -50,8 +50,11 @@ All notable changes to Marginal are documented here. The format follows
   line. The pointer becomes a hand over a link.
 - **Typography.** The editor now sets in Avenir Next — the typeface that gives Bear its feel:
   a humanist sans whose open letterforms read far warmer at length than the system UI font,
-  which is drawn for interface chrome rather than prose. Body text is set at a 1.55 line
-  height, the range typographic guidance converges on for long-form screen reading.
+  which is drawn for interface chrome rather than prose. Body text is set at a 1.32 line
+  height, and the blank lines markdown puts between blocks render at half height instead of
+  full. The usual advice of 1.5-1.6 assumes HTML, where the blank line between paragraphs
+  does not exist in the output — here the document *is* the markdown, so a blank source line
+  is a real rendered line and that multiple inflated the text and every gap at once.
 - Headings carry Notion's vertical rhythm — noticeably more air above than below (1.1/0.85/0.6em
   above, 0.45em below) so a heading binds to the text it introduces instead of floating between
   two blocks, and headings set tighter than body text so a long one holds together. The gap
