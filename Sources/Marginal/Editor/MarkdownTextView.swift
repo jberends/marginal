@@ -41,9 +41,8 @@ final class MarkdownTextView: NSTextView {
     private func dropCharacterIndex(_ info: NSDraggingInfo) -> Int {
         let point = convert(info.draggingLocation, from: nil)
         guard let lm = layoutManager, let tc = textContainer else { return string.count }
-        let inset = textContainerInset
-        let p = NSPoint(x: point.x - inset.width, y: point.y - inset.height)
-        let glyph = lm.glyphIndex(for: p, in: tc)
+        let containerPoint = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let glyph = lm.glyphIndex(for: containerPoint, in: tc)
         return lm.characterIndexForGlyph(at: glyph)
     }
 
