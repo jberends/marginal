@@ -79,4 +79,61 @@ final class MarkdownTextViewTests: XCTestCase {
         textView.keyDown(with: makeKeyEvent(charactersIgnoringModifiers: "+", modifierFlags: [.command, .shift]))
         XCTAssertEqual(delegate.increaseCallCount, 2, "Cmd+Plus (Cmd+Shift+=) should also increase font size")
     }
+
+    @MainActor
+    func testPasteboardContainsImageDetectsImagesAndRejectsText() {
+        let pngPb = ImageInsertionTests.makePrivatePasteboard()
+        pngPb.setData(ImageInsertionTests.onePixelPNG(), forType: .png)
+        XCTAssertTrue(MarkdownTextView.pasteboardContainsImage(pngPb), "PNG bytes should be detected as an image")
+
+        let tiffPb = ImageInsertionTests.makePrivatePasteboard()
+        let tiffImg = NSImage(size: NSSize(width: 1, height: 1))
+        tiffImg.lockFocus()
+        NSColor.blue.setFill()
+        NSRect(x: 0, y: 0, width: 1, height: 1).fill()
+        tiffImg.unlockFocus()
+        tiffPb.setData(tiffImg.tiffRepresentation!, forType: .tiff)
+        XCTAssertTrue(MarkdownTextView.pasteboardContainsImage(tiffPb), "TIFF bytes should be detected as an image")
+
+        let urlPb = ImageInsertionTests.makePrivatePasteboard()
+        let fileURL = URL(fileURLWithPath: "/tmp/some-photo.png")
+        urlPb.writeObjects([fileURL as NSURL])
+        XCTAssertTrue(MarkdownTextView.pasteboardContainsImage(urlPb), "An image file URL should be detected as an image")
+
+        let stringPb = ImageInsertionTests.makePrivatePasteboard()
+        stringPb.setString("just some text", forType: .string)
+        XCTAssertFalse(MarkdownTextView.pasteboardContainsImage(stringPb), "Plain text should not be detected as an image")
+
+        let emptyPb = ImageInsertionTests.makePrivatePasteboard()
+        XCTAssertFalse(MarkdownTextView.pasteboardContainsImage(emptyPb), "An empty pasteboard should not be detected as an image")
+    }
+
+    @MainActor
+    func testPasteCommandIsEnabledWhenClipboardHasImage() {
+        let savedItems = NSPasteboard.general.pasteboardItems?.map { item -> [NSPasteboard.PasteboardType: Data] in
+            var dict = [NSPasteboard.PasteboardType: Data]()
+            for type in item.types {
+                if let data = item.data(forType: type) { dict[type] = data }
+            }
+            return dict
+        }
+        defer {
+            NSPasteboard.general.clearContents()
+            if let savedItems {
+                let restoredItems = savedItems.map { dict -> NSPasteboardItem in
+                    let item = NSPasteboardItem()
+                    for (type, data) in dict { item.setData(data, forType: type) }
+                    return item
+                }
+                NSPasteboard.general.writeObjects(restoredItems)
+            }
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(ImageInsertionTests.onePixelPNG(), forType: .png)
+
+        let textView = MarkdownTextView()
+        let menuItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "")
+        XCTAssertTrue(textView.validateUserInterfaceItem(menuItem), "Paste should be enabled when the clipboard holds an image")
+    }
 }

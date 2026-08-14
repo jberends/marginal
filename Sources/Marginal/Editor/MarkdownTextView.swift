@@ -166,4 +166,23 @@ final class MarkdownTextView: NSTextView {
         if shortcutDelegate?.markdownTextViewInsertPastedImage(self) == true { return }
         super.paste(sender)
     }
+
+    /// Cheap presence check (no image decode) used only to enable the Paste command for images.
+    static func pasteboardContainsImage(_ pb: NSPasteboard) -> Bool {
+        if pb.data(forType: .png) != nil { return true }
+        if pb.data(forType: .tiff) != nil { return true }
+        if let url = NSURL(from: pb) as URL? {
+            return imageFileExtensions.contains(url.pathExtension.lowercased())
+        }
+        return false
+    }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        // NSTextView disables paste: for an image-only clipboard because importsGraphics is false.
+        // Re-enable it when we can handle the image ourselves (our paste(_:) override inserts markdown).
+        if item.action == #selector(NSText.paste(_:)), Self.pasteboardContainsImage(NSPasteboard.general) {
+            return true
+        }
+        return super.validateUserInterfaceItem(item)
+    }
 }
