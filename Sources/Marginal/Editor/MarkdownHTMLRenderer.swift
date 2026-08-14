@@ -142,6 +142,30 @@ struct MarkdownHTMLRenderer {
         var insertions: [TagInsertion] = []
         var skipRanges: [Range<String.Index>] = []
 
+        // Image spans are captured from the original text first (so alt/path text is real), then
+        // any markdown-delimiter characters (_ * ~ ` [ ] < >) inside each image's full range are
+        // masked to a neutral placeholder in a mutable working copy. Without this, delimiter
+        // scanners like parseInlineStyles have no concept of images and will happily pair an
+        // underscore inside a filename (e.g. "Screenshot_2026_08_14.png") with real emphasis
+        // delimiters elsewhere on the line -- leaking stray tags or stealing one side of a real
+        // "_italic_" pair. Masking (rather than only filtering the resulting insertions) is
+        // required because the mis-pairing can consume a genuine delimiter's partner entirely.
+        // This is safe: masked characters live inside a skipped image range and are replaced by
+        // the <img> insertion, so they never reach the rendered output regardless of their value.
+        let imageSpans = MarkdownParser.parseImages(in: line)
+        var line = line
+        let delimiterCharacters: Set<Character> = ["_", "*", "~", "`", "[", "]", "<", ">"]
+        for image in imageSpans {
+            var index = image.fullRange.lowerBound
+            while index < image.fullRange.upperBound {
+                let next = line.index(after: index)
+                if delimiterCharacters.contains(line[index]) {
+                    line.replaceSubrange(index..<next, with: "x")
+                }
+                index = next
+            }
+        }
+
         for style in MarkdownParser.parseInlineStyles(in: line) {
             let (openTag, closeTag): (String, String)
             switch style.kind {
@@ -162,11 +186,21 @@ struct MarkdownHTMLRenderer {
         // <img> tag is inserted as a literal opening "tag" at the image's start index, and the
         // whole image range is skipped in the character-escaping loop below -- this reuses the
         // same insertion/skip machinery as links instead of pre-escaping the fragment.
-        for image in MarkdownParser.parseImages(in: line) {
-            let src = image.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? image.path
+        for image in imageSpans {
+            let percentEncodedSrc = image.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? image.path
+            let src = percentEncodedSrc.replacingOccurrences(of: "&", with: "&amp;")
             let alt = htmlAttributeEscape(image.altText)
             insertions.append(TagInsertion(index: image.fullRange.lowerBound, isClosing: false, tag: "<img src=\"\(src)\" alt=\"\(alt)\">"))
             skipRanges.append(image.fullRange)
+        }
+
+        // Belt-and-suspenders alongside the masking above: an autolink (bare URL/email) can match
+        // purely alphanumeric text, which masking doesn't touch, so a URL-shaped image path could
+        // still be auto-linked from inside a skipped image range. Drop any link whose full range
+        // falls inside an image so no stray <a> tag can leak the same way stray style tags could.
+        let imageRanges = imageSpans.map(\.fullRange)
+        func overlapsImage(_ range: Range<String.Index>) -> Bool {
+            imageRanges.contains { $0.lowerBound < range.upperBound && range.lowerBound < $0.upperBound }
         }
 
         let explicitLinks = MarkdownParser.parseLinks(in: line)
@@ -179,6 +213,7 @@ struct MarkdownHTMLRenderer {
         let autolinks = MarkdownParser.parseAutolinks(in: line,
                                                       excluding: explicitLinks.map(\.fullRange) + inlineCodeRanges)
         for link in explicitLinks + autolinks {
+            guard !overlapsImage(link.fullRange) else { continue }
             insertions.append(TagInsertion(index: link.textRange.lowerBound, isClosing: false, tag: "<a href=\"\(htmlAttributeEscape(link.url))\">"))
             insertions.append(TagInsertion(index: link.textRange.upperBound, isClosing: true, tag: "</a>"))
             skipRanges.append(link.fullRange.lowerBound..<link.textRange.lowerBound)
