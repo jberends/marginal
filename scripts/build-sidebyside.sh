@@ -27,8 +27,8 @@ APP_NAME="Marginal-${VERSION}"
 DERIVED="build/sidebyside-${SUFFIX}"
 DEST="/Applications/${APP_NAME}.app"
 
-echo "==> Regenerating the β-badged beta app icon"
-swift scripts/make-beta-icon.swift
+echo "==> Regenerating the beta app icon from the designed source"
+scripts/make-beta-icon.sh
 
 echo "==> Regenerating Xcode project (xcodegen)"
 xcodegen generate
