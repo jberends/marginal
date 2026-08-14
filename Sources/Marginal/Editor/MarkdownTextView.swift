@@ -167,12 +167,19 @@ final class MarkdownTextView: NSTextView {
         super.paste(sender)
     }
 
+    /// File-URL extensions the paste path accepts, for BOTH validation (here) and handling
+    /// (`DocumentViewController.imageDataFromPasteboard`). Deliberately narrower than the
+    /// drag path's `imageFileExtensions`: tiff/bmp are omitted because their raw bytes would be
+    /// mis-written as png by `normalizedImageExtension`, so the handler doesn't accept tiff/bmp
+    /// *files* either -- keeping one shared list stops validation and handling from diverging.
+    static let pasteImageFileExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "heic", "webp"]
+
     /// Cheap presence check (no image decode) used only to enable the Paste command for images.
     static func pasteboardContainsImage(_ pb: NSPasteboard) -> Bool {
         if pb.data(forType: .png) != nil { return true }
         if pb.data(forType: .tiff) != nil { return true }
         if let url = NSURL(from: pb) as URL? {
-            return imageFileExtensions.contains(url.pathExtension.lowercased())
+            return pasteImageFileExtensions.contains(url.pathExtension.lowercased())
         }
         return false
     }

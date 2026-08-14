@@ -574,7 +574,7 @@ extension DocumentViewController {
         }
         // A file URL to an image counts as a paste of an existing file → treat as managed copy.
         if let url = NSURL(from: pb) as URL?,
-           ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(url.pathExtension.lowercased()),
+           MarkdownTextView.pasteImageFileExtensions.contains(url.pathExtension.lowercased()),
            let data = try? Data(contentsOf: url) {
             return (data, url.pathExtension)
         }

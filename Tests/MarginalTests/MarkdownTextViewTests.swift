@@ -109,6 +109,20 @@ final class MarkdownTextViewTests: XCTestCase {
     }
 
     @MainActor
+    func testPasteboardContainsImageAgreesWithHandlerOnFileURLExtensions() {
+        // Validation must accept exactly the same file-URL extensions the paste
+        // handler (DocumentViewController.imageDataFromPasteboard) accepts, or a
+        // paste can validate as enabled and then silently no-op.
+        let pngPb = ImageInsertionTests.makePrivatePasteboard()
+        pngPb.writeObjects([URL(fileURLWithPath: "/tmp/some-photo.png") as NSURL])
+        XCTAssertTrue(MarkdownTextView.pasteboardContainsImage(pngPb), "A .png file URL is handled, so validation should accept it")
+
+        let tiffPb = ImageInsertionTests.makePrivatePasteboard()
+        tiffPb.writeObjects([URL(fileURLWithPath: "/tmp/some-photo.tiff") as NSURL])
+        XCTAssertFalse(MarkdownTextView.pasteboardContainsImage(tiffPb), "A .tiff file URL is NOT handled by imageDataFromPasteboard, so validation must not enable paste for it")
+    }
+
+    @MainActor
     func testPasteCommandIsEnabledWhenClipboardHasImage() {
         let savedItems = NSPasteboard.general.pasteboardItems?.map { item -> [NSPasteboard.PasteboardType: Data] in
             var dict = [NSPasteboard.PasteboardType: Data]()
