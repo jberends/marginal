@@ -27,17 +27,23 @@ APP_NAME="Marginal-${VERSION}"
 DERIVED="build/sidebyside-${SUFFIX}"
 DEST="/Applications/${APP_NAME}.app"
 
+echo "==> Regenerating the β-badged beta app icon"
+swift scripts/make-beta-icon.swift
+
 echo "==> Regenerating Xcode project (xcodegen)"
 xcodegen generate
 
-echo "==> Building Release (${BUNDLE_ID})"
+echo "==> Building Release (${BUNDLE_ID}, β icon)"
 # Never run two xcodebuild processes at once — they corrupt the shared module cache.
+# ASSETCATALOG_COMPILER_APPICON_NAME selects the beta icon set for THIS build only;
+# the released build (project.yml) still uses AppIcon.
 xcodebuild \
   -project Marginal.xcodeproj \
   -scheme Marginal \
   -configuration Release \
   -derivedDataPath "${DERIVED}" \
   PRODUCT_BUNDLE_IDENTIFIER="${BUNDLE_ID}" \
+  ASSETCATALOG_COMPILER_APPICON_NAME=AppIconBeta \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=YES \
