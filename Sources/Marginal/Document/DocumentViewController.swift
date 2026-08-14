@@ -504,7 +504,12 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     }
 
     func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool {
-        let pb = NSPasteboard.general
+        insertPastedImage(from: NSPasteboard.general, into: textView)
+    }
+
+    /// Testable core of the paste-image flow: takes an injectable pasteboard so tests never
+    /// have to touch the global `NSPasteboard.general`.
+    func insertPastedImage(from pb: NSPasteboard, into textView: MarkdownTextView) -> Bool {
         // Prefer file promises / file URLs handled by the drag path; here handle raw image data.
         guard let (data, ext) = Self.imageDataFromPasteboard(pb) else { return false }
         guard let path = insertImageData(data, sourceExtension: ext, now: Date()) else { return true }

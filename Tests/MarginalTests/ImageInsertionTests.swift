@@ -49,4 +49,100 @@ final class ImageInsertionTests: XCTestCase {
         let tiff = img.tiffRepresentation!
         return NSBitmapImageRep(data: tiff)!.representation(using: .png, properties: [:])!
     }
+
+    /// A private, per-test pasteboard — never the global NSPasteboard.general, which is
+    /// shared across the whole machine and would make these tests flaky/order-dependent.
+    static func makePrivatePasteboard() -> NSPasteboard {
+        let pb = NSPasteboard(name: NSPasteboard.Name("MarginalTest-\(UUID().uuidString)"))
+        pb.clearContents()
+        return pb
+    }
+
+    // MARK: - imageDataFromPasteboard
+
+    func testImageDataFromPasteboardReadsPNGBytes() throws {
+        let pb = Self.makePrivatePasteboard()
+        let png = Self.onePixelPNG()
+        pb.setData(png, forType: .png)
+
+        let result = try XCTUnwrap(DocumentViewController.imageDataFromPasteboard(pb))
+        XCTAssertEqual(result.0, png)
+        XCTAssertEqual(result.1, "png")
+    }
+
+    func testImageDataFromPasteboardConvertsTIFFToPNG() throws {
+        let pb = Self.makePrivatePasteboard()
+        let img = NSImage(size: NSSize(width: 1, height: 1))
+        img.lockFocus()
+        NSColor.blue.setFill()
+        NSRect(x: 0, y: 0, width: 1, height: 1).fill()
+        img.unlockFocus()
+        let tiff = try XCTUnwrap(img.tiffRepresentation)
+        pb.setData(tiff, forType: .tiff)
+
+        let result = try XCTUnwrap(DocumentViewController.imageDataFromPasteboard(pb))
+        XCTAssertEqual(result.1, "png")
+        XCTAssertNotNil(NSBitmapImageRep(data: result.0), "should decode as a valid PNG")
+    }
+
+    func testImageDataFromPasteboardReturnsNilForPlainString() {
+        let pb = Self.makePrivatePasteboard()
+        pb.setString("hello", forType: .string)
+
+        XCTAssertNil(DocumentViewController.imageDataFromPasteboard(pb))
+    }
+
+    // MARK: - insertPastedImage(from:into:)
+
+    func testInsertPastedImageInsertsMarkupAndWritesFile() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let pb = Self.makePrivatePasteboard()
+        pb.setData(Self.onePixelPNG(), forType: .png)
+
+        let handled = vc.insertPastedImage(from: pb, into: vc.textView)
+        XCTAssertTrue(handled)
+
+        let text = vc.textView.string
+        XCTAssertTrue(text.hasPrefix("![]("), "expected markup at the caret, got \(text)")
+        XCTAssertTrue(text.contains("pasted-"), "expected the managed filename, got \(text)")
+
+        guard let start = text.range(of: "![]("), let end = text.range(of: ")", range: start.upperBound..<text.endIndex) else {
+            return XCTFail("could not locate inserted markdown path in \(text)")
+        }
+        let path = String(text[start.upperBound..<end.lowerBound])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+    }
+
+    func testInsertPastedImageIsUndoable() throws {
+        let (vc, _) = try makeVC(saved: false)
+        // NSTextView only vends an undoManager once it's hosted in a window -- give it one
+        // (never shown on screen) so allowsUndo's undo manager actually exists to query.
+        let window = NSWindow(contentViewController: vc)
+
+        let pb = Self.makePrivatePasteboard()
+        pb.setData(Self.onePixelPNG(), forType: .png)
+
+        XCTAssertTrue(vc.insertPastedImage(from: pb, into: vc.textView))
+        XCTAssertFalse(vc.textView.string.isEmpty)
+        _ = window // keep the window alive for the duration of the test
+
+        // NSTextView's undo manager groups actions by run-loop event (groupsByEvent), and that
+        // group is never closed here since the test never spins the run loop the way a real
+        // keystroke/paste event would -- calling undo() while the group is still open crashes
+        // deep in AppKit's text storage replay, unrelated to whether our own insert is correct.
+        // canUndo reflects that a registered undo action exists for this insert, which is what
+        // "paste goes through the undo stack" actually requires.
+        let undoManager = try XCTUnwrap(vc.textView.undoManager)
+        XCTAssertTrue(undoManager.canUndo, "the pasted-image insert should register an undo action")
+    }
+
+    func testInsertPastedImageReturnsFalseAndInsertsNothingForPlainString() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let pb = Self.makePrivatePasteboard()
+        pb.setString("hello", forType: .string)
+
+        let handled = vc.insertPastedImage(from: pb, into: vc.textView)
+        XCTAssertFalse(handled)
+        XCTAssertEqual(vc.textView.string, "")
+    }
 }
