@@ -596,4 +596,29 @@ final class MarkdownParserEmojiShortcodeTests: XCTestCase {
         let spans = MarkdownParser.parseEmojiShortcodes(in: ":smile: :rocket: :heart:")
         XCTAssertEqual(spans.map(\.emoji), ["😄", "🚀", "❤️"])
     }
+
+    func testParseImagesFindsBasicImage() {
+        let text = "before ![a cat](cat.png) after"
+        let images = MarkdownParser.parseImages(in: text)
+        XCTAssertEqual(images.count, 1)
+        let img = images[0]
+        XCTAssertEqual(String(text[img.fullRange]), "![a cat](cat.png)")
+        XCTAssertEqual(img.altText, "a cat")
+        XCTAssertEqual(img.path, "cat.png")
+    }
+
+    func testParseImagesEmptyAlt() {
+        let text = "![](img/x.png)"
+        let images = MarkdownParser.parseImages(in: text)
+        XCTAssertEqual(images.count, 1)
+        XCTAssertEqual(images[0].altText, "")
+        XCTAssertEqual(images[0].path, "img/x.png")
+    }
+
+    func testParseLinksSkipsImageInnerLink() {
+        let text = "![a](b.png) and [real](x.md)"
+        let links = MarkdownParser.parseLinks(in: text)
+        XCTAssertEqual(links.count, 1)
+        XCTAssertEqual(String(text[links[0].urlRange]), "x.md")
+    }
 }

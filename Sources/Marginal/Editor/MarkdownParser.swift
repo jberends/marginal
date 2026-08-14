@@ -498,9 +498,30 @@ struct MarkdownParser {
                   let fullRange = Range(match.range, in: text),
                   let textRange = Range(match.range(at: 1), in: text),
                   let urlRange = Range(match.range(at: 2), in: text) else { return }
+            let openBracket = fullRange.lowerBound
+            if openBracket > text.startIndex {
+                let prev = text.index(before: openBracket)
+                if text[prev] == "!" { return }   // belongs to an image, not a link
+            }
             links.append(LinkSpan(textRange: textRange, urlRange: urlRange, fullRange: fullRange, url: String(text[urlRange])))
         }
         return links
+    }
+
+    /// Matches CommonMark image syntax `![alt](path)`. Alt may be empty; path is the raw
+    /// text between the parentheses (not URL-decoded — the editor stores human-readable paths).
+    static func parseImages(in text: String) -> [ImageSpan] {
+        guard let regex = try? NSRegularExpression(pattern: #"!\[([^\]]*)\]\(([^)]+)\)"#) else {
+            return []
+        }
+        let ns = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            guard let full = Range(m.range, in: text),
+                  let alt = Range(m.range(at: 1), in: text),
+                  let path = Range(m.range(at: 2), in: text) else { return nil }
+            return ImageSpan(fullRange: full, altRange: alt, pathRange: path,
+                             altText: String(text[alt]), path: String(text[path]))
+        }
     }
 
     /// Only recognizes ":word:" sequences that match a known GFM/gemoji alias (see
