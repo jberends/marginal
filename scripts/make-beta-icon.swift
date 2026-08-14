@@ -15,8 +15,8 @@ let catalog = root.appendingPathComponent("Sources/Marginal/App/Assets.xcassets"
 let srcSet = catalog.appendingPathComponent("AppIcon.appiconset")
 let dstSet = catalog.appendingPathComponent("AppIconBeta.appiconset")
 
-// Badge colour (warm orange reads as "beta").
-let badgeColor = NSColor(calibratedRed: 0.98, green: 0.49, blue: 0.09, alpha: 1.0)
+// Badge colour (purple).
+let badgeColor = NSColor(calibratedRed: 0.55, green: 0.24, blue: 0.90, alpha: 1.0)
 
 struct Entry: Codable {
     var filename: String?
