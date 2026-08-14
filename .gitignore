@@ -36,3 +36,6 @@ fastlane/test_output
 
 # Brainstorming/visual-companion scratch state (if this repo is used as --project-dir)
 .superpowers/
+
+# Side-by-side local builds
+build/
