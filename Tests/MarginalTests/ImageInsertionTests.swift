@@ -40,6 +40,18 @@ final class ImageInsertionTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: onDisk.path))
     }
 
+    func testDroppedImageFileInsertsAbsoluteMarkupAtIndex() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.loadInitialText("hello world")
+        let tv = vc.textView!
+        // an existing image file somewhere outside the doc folder
+        let ext = FileManager.default.temporaryDirectory.appendingPathComponent("photo.png")
+        try ImageInsertionTests.onePixelPNG().write(to: ext)
+        vc.markdownTextView(tv, didReceiveDroppedImageFileAt: ext, atCharacterIndex: 5)
+        XCTAssertEqual(tv.string, "hello![](\(ext.path)) world")
+        try? FileManager.default.removeItem(at: ext)
+    }
+
     static func onePixelPNG() -> Data {
         let img = NSImage(size: NSSize(width: 1, height: 1))
         img.lockFocus()

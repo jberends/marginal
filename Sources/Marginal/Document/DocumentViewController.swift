@@ -527,6 +527,16 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     // window) rather than leaving a stray blank window behind. Any other content-bearing
     // window is left untouched and the file opens in a new window, so existing work is
     // never silently overwritten.
+    /// Linked image drop: absolute path, never copied into the document's assets folder.
+    func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedImageFileAt url: URL, atCharacterIndex characterIndex: Int) {
+        let markup = "![](\(url.path))"
+        let range = NSRange(location: characterIndex, length: 0)
+        if textView.shouldChangeText(in: range, replacementString: markup) {
+            textView.insertText(markup, replacementRange: range)
+            textView.didChangeText()
+        }
+    }
+
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL) {
         let windowToCloseIfOpenSucceeds: NSWindow? = (document?.fileURL == nil && textView.string.isEmpty) ? view.window : nil
 

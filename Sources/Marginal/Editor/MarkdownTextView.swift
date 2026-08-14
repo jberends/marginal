@@ -6,6 +6,8 @@ protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView)
     func markdownTextViewToggleShowSource(_ textView: MarkdownTextView)
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL)
+    /// A real image FILE was dropped (linked, not managed): insert an absolute-path image at `characterIndex`.
+    func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedImageFileAt url: URL, atCharacterIndex characterIndex: Int)
     /// Return true if an image was found on the pasteboard and handled (markup inserted).
     func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool
 }
@@ -13,6 +15,8 @@ protocol MarkdownTextViewShortcutDelegate: AnyObject {
 /// Every extension Marginal opens as a document. A .txt is markdown without markup, so it opens
 /// in its own tab exactly like a .md rather than being treated as different in kind.
 private let markdownFileExtensions: Set<String> = ["md", "markdown", "txt", "text"]
+
+private let imageFileExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "heic", "webp", "tiff", "bmp"]
 
 final class MarkdownTextView: NSTextView {
 
@@ -29,14 +33,33 @@ final class MarkdownTextView: NSTextView {
         return url
     }
 
+    private func droppedImageFileURL(from info: NSDraggingInfo) -> URL? {
+        guard let url = NSURL(from: info.draggingPasteboard) as URL? else { return nil }
+        return imageFileExtensions.contains(url.pathExtension.lowercased()) ? url : nil
+    }
+
+    private func dropCharacterIndex(_ info: NSDraggingInfo) -> Int {
+        let point = convert(info.draggingLocation, from: nil)
+        guard let lm = layoutManager, let tc = textContainer else { return string.count }
+        let inset = textContainerInset
+        let p = NSPoint(x: point.x - inset.width, y: point.y - inset.height)
+        let glyph = lm.glyphIndex(for: p, in: tc)
+        return lm.characterIndexForGlyph(at: glyph)
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if droppedMarkdownFileURL(from: sender) != nil {
+        if droppedImageFileURL(from: sender) != nil || droppedMarkdownFileURL(from: sender) != nil {
             return .copy
         }
         return super.draggingEntered(sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let imageURL = droppedImageFileURL(from: sender) {
+            shortcutDelegate?.markdownTextView(self, didReceiveDroppedImageFileAt: imageURL,
+                                               atCharacterIndex: dropCharacterIndex(sender))
+            return true
+        }
         if let url = droppedMarkdownFileURL(from: sender) {
             shortcutDelegate?.markdownTextView(self, didReceiveDroppedMarkdownFileAt: url)
             return true
