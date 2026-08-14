@@ -27,6 +27,27 @@ final class DocumentViewControllerTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "<p>Hello <strong>world</strong></p>")
     }
 
+    func testCopyAsHTMLEmbedsImagesAsDataURIs() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("copy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let imgURL = dir.appendingPathComponent("MyNote.assets", isDirectory: true).appendingPathComponent("p.png")
+        try FileManager.default.createDirectory(at: imgURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try ImageInsertionTests.onePixelPNG().write(to: imgURL)
+
+        let vc = DocumentViewController()
+        let doc = MarkdownDocument()
+        doc.fileURL = dir.appendingPathComponent("MyNote.md")
+        vc.document = doc
+        _ = vc.view
+        vc.loadInitialText("![a](MyNote.assets/p.png)")
+        vc.textView.setSelectedRange(NSRange(location: 0, length: (vc.textView.string as NSString).length))
+
+        let html = vc.htmlForCopy(of: vc.textView.string)
+        XCTAssertTrue(html.contains(#"src="data:image/png;base64,"#), html)
+        XCTAssertFalse(html.contains(#"src="MyNote.assets"#), "local path must be replaced by a data URI")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     func testToggleShowSourceRendersPlainMonospaceText() {
         let viewController = DocumentViewController()
         _ = viewController.view

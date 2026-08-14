@@ -200,9 +200,50 @@ final class DocumentViewController: NSViewController {
 
     func copyCurrentSelectionAsHTML() {
         guard let range = Range(textView.selectedRange(), in: textView.string) else { return }
-        let html = MarkdownHTMLRenderer.html(fromMarkdown: String(textView.string[range]))
+        let html = htmlForCopy(of: String(textView.string[range]))
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(html, forType: .string)
+    }
+
+    /// HTML for the pasteboard: like MarkdownHTMLRenderer.html, but every local <img> is inlined
+    /// as a data: URI so the copied fragment is self-contained (pasting into Mail/Notes/Word shows
+    /// the image without the original file). The search key mirrors MarkdownHTMLRenderer's own
+    /// src emission exactly: percent-encode with .urlPathAllowed, then escape "&" to "&amp;" --
+    /// otherwise the replace silently no-ops for any path containing an ampersand or other
+    /// percent-encoded character.
+    func htmlForCopy(of markdown: String) -> String {
+        var html = MarkdownHTMLRenderer.html(fromMarkdown: markdown)
+        let base = document?.fileURL?.deletingLastPathComponent()
+        for span in MarkdownParser.parseImages(in: markdown) {
+            let percentEncodedSrc = span.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? span.path
+            let encodedSrc = percentEncodedSrc.replacingOccurrences(of: "&", with: "&amp;")
+
+            let resolved: URL
+            if span.path.hasPrefix("/") {
+                resolved = URL(fileURLWithPath: span.path)
+            } else if let base {
+                resolved = URL(fileURLWithPath: span.path, relativeTo: base)
+            } else {
+                continue
+            }
+
+            guard let data = try? Data(contentsOf: resolved) else { continue }
+            let mime = Self.mimeType(forExtension: resolved.pathExtension)
+            let dataURI = "data:\(mime);base64,\(data.base64EncodedString())"
+            html = html.replacingOccurrences(of: "src=\"\(encodedSrc)\"", with: "src=\"\(dataURI)\"")
+        }
+        return html
+    }
+
+    static func mimeType(forExtension ext: String) -> String {
+        switch ext.lowercased() {
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "heic": return "image/heic"
+        case "webp": return "image/webp"
+        default: return "application/octet-stream"
+        }
     }
 
     // The underlying text storage is always the literal markdown source (never mutated for
