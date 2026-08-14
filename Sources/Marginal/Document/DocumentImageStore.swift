@@ -1,4 +1,4 @@
-import AppKit
+import Foundation
 
 /// Manages the on-disk lifecycle of images inserted into a document: pasted/dropped image
 /// bytes are buffered in a per-document temp directory while the document is untitled, then
@@ -6,7 +6,8 @@ import AppKit
 @MainActor
 final class DocumentImageStore {
     /// Per-document temp buffer for managed images while the document is untitled.
-    /// Lazily created under FileManager.default.temporaryDirectory.
+    /// The URL is reserved at init, but the directory itself is only created on disk
+    /// the first time a file is actually written into it (see `ensureTemp()`).
     let tempDirectory: URL
     private let fm: FileManager
 
@@ -14,7 +15,6 @@ final class DocumentImageStore {
         self.fm = fileManager
         self.tempDirectory = fileManager.temporaryDirectory
             .appendingPathComponent("marginal-images-\(UUID().uuidString)", isDirectory: true)
-        try? fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
     }
 
     private func ensureTemp() throws {
@@ -67,11 +67,13 @@ final class DocumentImageStore {
     /// Moves each managed temp file into `assetsDir` (created if needed). Returns old→new URL map.
     /// Skips URLs not under tempDirectory. On name clash in assetsDir, uniquifies.
     func relocateTempFiles(_ urls: [URL], into assetsDir: URL, now: Date) throws -> [URL: URL] {
+        let managed = urls.filter(isManagedTemp)
+        guard !managed.isEmpty else { return [:] }
+        if !fm.fileExists(atPath: assetsDir.path) {
+            try fm.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        }
         var map: [URL: URL] = [:]
-        for url in urls where isManagedTemp(url) {
-            if !fm.fileExists(atPath: assetsDir.path) {
-                try fm.createDirectory(at: assetsDir, withIntermediateDirectories: true)
-            }
+        for url in managed {
             let name = uniqueFilename(ext: url.pathExtension, now: now, in: assetsDir)
             let dest = assetsDir.appendingPathComponent(name)
             try fm.moveItem(at: url, to: dest)

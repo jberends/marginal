@@ -18,6 +18,7 @@ final class DocumentImageStoreTests: XCTestCase {
         let store = DocumentImageStore()
         let now = Date(timeIntervalSince1970: 1_755_000_000)
         let dir = store.tempDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let first = store.uniqueFilename(ext: "png", now: now, in: dir)
         try Data().write(to: dir.appendingPathComponent(first))
         let second = store.uniqueFilename(ext: "png", now: now, in: dir)
