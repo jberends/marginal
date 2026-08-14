@@ -32,6 +32,21 @@ final class MarkdownDocument: NSDocument {
         viewController.loadInitialText(text)
     }
 
+    // The funnel used by Save, Save As, and autosave-as -- it runs on the main actor and knows
+    // the target URL before any bytes are written, so this is where managed temp images get
+    // relocated into <doc>.assets/ and their paths rewritten to relative before data(ofType:)
+    // serializes `text`.
+    override func save(
+        to url: URL, ofType typeName: String,
+        for saveOperation: NSDocument.SaveOperationType,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        if let vc = windowControllers.first?.contentViewController as? DocumentViewController {
+            vc.prepareForSave(to: url, now: Date())
+        }
+        super.save(to: url, ofType: typeName, for: saveOperation, completionHandler: completionHandler)
+    }
+
     override func data(ofType typeName: String) throws -> Data {
         guard let data = text.data(using: .utf8) else {
             throw CocoaError(.fileWriteUnknown)

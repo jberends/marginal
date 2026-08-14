@@ -444,6 +444,46 @@ extension DocumentViewController: NSTextViewDelegate {
 }
 
 extension DocumentViewController {
+    /// Called just before the document writes to `targetURL`. Moves managed temp images into
+    /// <doc>.assets/ and rewrites their absolute temp paths in the text to relative. Updates both
+    /// the text view storage and document.text so the written file and the open editor agree.
+    /// No-op when the document has no managed (temp) images -- linked/absolute paths are left as-is.
+    func prepareForSave(to targetURL: URL, now: Date) {
+        let docName = targetURL.deletingPathExtension().lastPathComponent
+        let assetsDir = targetURL.deletingLastPathComponent()
+            .appendingPathComponent("\(docName).assets", isDirectory: true)
+
+        let text = textView.string
+        let spans = MarkdownParser.parseImages(in: text)
+        // Collect managed temp URLs referenced in the document.
+        let managed = spans.compactMap { span -> (ImageSpan, URL)? in
+            let url = URL(fileURLWithPath: span.path)
+            return imageStore.isManagedTemp(url) ? (span, url) : nil
+        }
+        guard !managed.isEmpty else { return }
+
+        let moveMap: [URL: URL]
+        do {
+            moveMap = try imageStore.relocateTempFiles(managed.map { $0.1 }, into: assetsDir, now: now)
+        } catch {
+            NSSound.beep()
+            return
+        }
+
+        // Rewrite paths back-to-front so earlier ranges stay valid.
+        var mutable = text
+        for (span, oldURL) in managed.sorted(by: { $0.0.pathRange.lowerBound > $1.0.pathRange.lowerBound }) {
+            guard let newURL = moveMap[oldURL] else { continue }
+            let relative = "\(docName).assets/\(newURL.lastPathComponent)"
+            mutable.replaceSubrange(span.pathRange, with: relative)
+        }
+
+        // Keep the open editor and the document text in agreement with what we write.
+        textView.string = mutable
+        document?.text = mutable
+        restyle(cursorLocation: currentCursorIndex())
+    }
+
     /// Chooses the on-disk destination by document state and returns the markdown path to embed.
     /// Managed image: temp+absolute while untitled, <doc>.assets/name+relative while saved.
     func insertImageData(_ data: Data, sourceExtension: String, now: Date) -> String? {

@@ -52,6 +52,38 @@ final class ImageInsertionTests: XCTestCase {
         try? FileManager.default.removeItem(at: ext)
     }
 
+    func testPrepareForSaveRelocatesAndRewrites() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+        let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        vc.textView.string = "before ![](\(tempPath)) after"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let target = dir.appendingPathComponent("MyNote.md")
+
+        vc.prepareForSave(to: target, now: now)
+
+        XCTAssertEqual(vc.textView.string, "before ![](MyNote.assets/\(URL(fileURLWithPath: tempPath).lastPathComponent)) after")
+        let moved = dir.appendingPathComponent("MyNote.assets").appendingPathComponent(URL(fileURLWithPath: tempPath).lastPathComponent)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: moved.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempPath))
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func testPrepareForSaveLeavesAbsoluteLinkedImages() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let linked = "/Users/someone/Pictures/holiday.png"
+        vc.textView.string = "![](\(linked))"
+        vc.document?.text = vc.textView.string
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: Date(timeIntervalSince1970: 1))
+        XCTAssertEqual(vc.textView.string, "![](\(linked))") // untouched
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     static func onePixelPNG() -> Data {
         let img = NSImage(size: NSSize(width: 1, height: 1))
         img.lockFocus()
