@@ -84,6 +84,53 @@ final class ImageInsertionTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 
+    /// The single-image test can't distinguish a correct descending-range sort from a naive
+    /// front-to-back one (rewriting the first span first would shift the second span's range).
+    /// Two managed images in one document is the property back-to-front rewriting protects.
+    func testPrepareForSaveRewritesMultipleManagedImagesCorrectly() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+        let tempA = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        let tempB = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        vc.textView.string = "a ![](\(tempA)) b ![](\(tempB)) c"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        let nameA = URL(fileURLWithPath: tempA).lastPathComponent
+        let nameB = URL(fileURLWithPath: tempB).lastPathComponent
+        XCTAssertEqual(vc.textView.string, "a ![](MyNote.assets/\(nameA)) b ![](MyNote.assets/\(nameB)) c")
+
+        let assetsDir = dir.appendingPathComponent("MyNote.assets")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(nameA).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(nameB).path))
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// Two spans referencing the SAME managed temp file (e.g. duplicated markdown) must not
+    /// abort the save after the first move -- the file is relocated once and both spans are
+    /// rewritten to the same relative path.
+    func testPrepareForSaveDedupesDuplicateReferencesToSameTempFile() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+        let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        vc.textView.string = "one ![](\(tempPath)) two ![](\(tempPath)) three"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        let name = URL(fileURLWithPath: tempPath).lastPathComponent
+        XCTAssertEqual(vc.textView.string, "one ![](MyNote.assets/\(name)) two ![](MyNote.assets/\(name)) three")
+        let assetsDir = dir.appendingPathComponent("MyNote.assets")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(name).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempPath))
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     static func onePixelPNG() -> Data {
         let img = NSImage(size: NSSize(width: 1, height: 1))
         img.lockFocus()

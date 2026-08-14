@@ -462,9 +462,19 @@ extension DocumentViewController {
         }
         guard !managed.isEmpty else { return }
 
+        // Two spans can reference the same managed temp file (e.g. duplicated markdown) --
+        // relocate each distinct URL only once, or a second moveItem on an already-moved
+        // source would throw and abort the whole save-prep after the first move already
+        // happened on disk. Dedupe while preserving first-occurrence order: relocateTempFiles'
+        // clash-avoidance (appending "-2", "-3", ...) is order-dependent when several images
+        // share the same `now` timestamp, and a Set's iteration order is unspecified, so simply
+        // deduping via Set would make which file gets the plain name vs. "-2" nondeterministic.
+        var seenManagedURLs = Set<URL>()
+        let uniqueManagedURLs = managed.map { $0.1 }.filter { seenManagedURLs.insert($0).inserted }
+
         let moveMap: [URL: URL]
         do {
-            moveMap = try imageStore.relocateTempFiles(managed.map { $0.1 }, into: assetsDir, now: now)
+            moveMap = try imageStore.relocateTempFiles(uniqueManagedURLs, into: assetsDir, now: now)
         } catch {
             NSSound.beep()
             return
