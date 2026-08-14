@@ -21,6 +21,8 @@ final class DocumentViewController: NSViewController {
 
     weak var document: MarkdownDocument?
 
+    private lazy var imageStore = DocumentImageStore()
+
     override func loadView() {
         let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 600))
 
@@ -441,6 +443,53 @@ extension DocumentViewController: NSTextViewDelegate {
     }
 }
 
+extension DocumentViewController {
+    /// Chooses the on-disk destination by document state and returns the markdown path to embed.
+    /// Managed image: temp+absolute while untitled, <doc>.assets/name+relative while saved.
+    func insertImageData(_ data: Data, sourceExtension: String, now: Date) -> String? {
+        let ext = Self.normalizedImageExtension(sourceExtension)
+        do {
+            if let fileURL = document?.fileURL {
+                let docName = fileURL.deletingPathExtension().lastPathComponent
+                let assetsDir = fileURL.deletingLastPathComponent()
+                    .appendingPathComponent("\(docName).assets", isDirectory: true)
+                let written = try imageStore.write(data: data, ext: ext, now: now, into: assetsDir)
+                return "\(docName).assets/\(written.lastPathComponent)"
+            } else {
+                let written = try imageStore.writeToTemp(data: data, ext: ext, now: now)
+                return written.path
+            }
+        } catch {
+            NSSound.beep()
+            return nil
+        }
+    }
+
+    /// PNG for raw bitmap/tiff; keep known compressed formats as-is.
+    static func normalizedImageExtension(_ ext: String) -> String {
+        let known: Set<String> = ["png", "jpg", "jpeg", "gif", "heic", "webp"]
+        let lower = ext.lowercased()
+        return known.contains(lower) ? lower : "png"
+    }
+
+    /// Returns (bytes, extension) for the best image on the pasteboard, or nil.
+    static func imageDataFromPasteboard(_ pb: NSPasteboard) -> (Data, String)? {
+        if let png = pb.data(forType: .png) { return (png, "png") }
+        if let tiff = pb.data(forType: .tiff),
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return (png, "png")
+        }
+        // A file URL to an image counts as a paste of an existing file → treat as managed copy.
+        if let url = NSURL(from: pb) as URL?,
+           ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(url.pathExtension.lowercased()),
+           let data = try? Data(contentsOf: url) {
+            return (data, url.pathExtension)
+        }
+        return nil
+    }
+}
+
 extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     func markdownTextViewIncreaseFontSize(_ textView: MarkdownTextView) {
         setFontSize(FontSizing.increased(from: editorFontSize))
@@ -452,6 +501,20 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
 
     func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {
         toggleShowSource()
+    }
+
+    func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool {
+        let pb = NSPasteboard.general
+        // Prefer file promises / file URLs handled by the drag path; here handle raw image data.
+        guard let (data, ext) = Self.imageDataFromPasteboard(pb) else { return false }
+        guard let path = insertImageData(data, sourceExtension: ext, now: Date()) else { return true }
+        let markup = "![](\(path))"
+        let sel = textView.selectedRange()
+        if textView.shouldChangeText(in: sel, replacementString: markup) {
+            textView.insertText(markup, replacementRange: sel)
+            textView.didChangeText()
+        }
+        return true
     }
 
     // Dropping a markdown file always opens it. If this window's document is untitled and

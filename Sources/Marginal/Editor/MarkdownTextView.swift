@@ -6,6 +6,8 @@ protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView)
     func markdownTextViewToggleShowSource(_ textView: MarkdownTextView)
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL)
+    /// Return true if an image was found on the pasteboard and handled (markup inserted).
+    func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool
 }
 
 /// Every extension Marginal opens as a document. A .txt is markdown without markup, so it opens
@@ -136,5 +138,10 @@ final class MarkdownTextView: NSTextView {
             }
         }
         super.keyDown(with: event)
+    }
+
+    override func paste(_ sender: Any?) {
+        if shortcutDelegate?.markdownTextViewInsertPastedImage(self) == true { return }
+        super.paste(sender)
     }
 }

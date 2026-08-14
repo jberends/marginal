@@ -11,6 +11,7 @@ final class MarkdownTextViewTests: XCTestCase {
         func markdownTextViewDecreaseFontSize(_ textView: MarkdownTextView) { decreaseCallCount += 1 }
         func markdownTextViewToggleShowSource(_ textView: MarkdownTextView) {}
         func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL) {}
+        func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool { false }
     }
 
     private func makeKeyEvent(charactersIgnoringModifiers: String, modifierFlags: NSEvent.ModifierFlags) -> NSEvent {
