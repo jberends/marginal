@@ -19,7 +19,7 @@ final class PDFExporterIntegrationTests: XCTestCase {
         try? FileManager.default.removeItem(at: url)
 
         let done = expectation(description: "export completes")
-        PDFExporter.shared.export(markdown: markdown, title: "Export test", to: url) { error in
+        PDFExporter.shared.export(markdown: markdown, title: "Export test", baseURL: nil, to: url) { error in
             XCTAssertNil(error, "Export reported an error: \(String(describing: error))")
             done.fulfill()
         }

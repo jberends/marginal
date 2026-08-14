@@ -230,6 +230,7 @@ final class DocumentViewController: NSViewController {
             PDFExporter.shared.export(
                 markdown: self.textView.string,
                 title: self.document?.displayName ?? "Document",
+                baseURL: self.document?.fileURL?.deletingLastPathComponent(),
                 to: url
             ) { error in
                 guard let error else { return }

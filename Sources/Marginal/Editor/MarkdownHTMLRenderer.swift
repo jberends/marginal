@@ -158,6 +158,17 @@ struct MarkdownHTMLRenderer {
             skipRanges.append(style.closingDelimiterRange)
         }
 
+        // Replace images before the link pass runs, so the '!' + link fallback never fires. The
+        // <img> tag is inserted as a literal opening "tag" at the image's start index, and the
+        // whole image range is skipped in the character-escaping loop below -- this reuses the
+        // same insertion/skip machinery as links instead of pre-escaping the fragment.
+        for image in MarkdownParser.parseImages(in: line) {
+            let src = image.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? image.path
+            let alt = htmlAttributeEscape(image.altText)
+            insertions.append(TagInsertion(index: image.fullRange.lowerBound, isClosing: false, tag: "<img src=\"\(src)\" alt=\"\(alt)\">"))
+            skipRanges.append(image.fullRange)
+        }
+
         let explicitLinks = MarkdownParser.parseLinks(in: line)
         // Bare URLs/emails become real anchors in exported HTML and PDF too, matching what the
         // editor shows. Explicit links and inline code are excluded so a URL is never linked

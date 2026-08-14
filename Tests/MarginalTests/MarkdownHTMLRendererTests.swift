@@ -76,4 +76,20 @@ final class MarkdownHTMLRendererTests: XCTestCase {
     func testEmptyStringProducesEmptyHTML() {
         XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: ""), "")
     }
+
+    func testImageRendersAsImgTag() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![a cat](MyNote.assets/cat.png)")
+        XCTAssertTrue(html.contains(#"<img src="MyNote.assets/cat.png" alt="a cat">"#), html)
+        XCTAssertFalse(html.contains("<a "), "image must not also render as a link")
+    }
+
+    func testImageAltIsEscaped() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: #"![a "b" & c](x.png)"#)
+        XCTAssertTrue(html.contains(#"alt="a &quot;b&quot; &amp; c""#), html)
+    }
+
+    func testImagePathWithSpacesIsPercentEncoded() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![](My Note.assets/pic 1.png)")
+        XCTAssertTrue(html.contains(#"src="My%20Note.assets/pic%201.png""#), html)
+    }
 }

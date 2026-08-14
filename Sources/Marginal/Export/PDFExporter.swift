@@ -18,7 +18,7 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
     /// A4 in PostScript points.
     private static let paperSize = NSSize(width: 595, height: 842)
 
-    func export(markdown: String, title: String, to url: URL, completion: @escaping (Error?) -> Void) {
+    func export(markdown: String, title: String, baseURL: URL?, to url: URL, completion: @escaping (Error?) -> Void) {
         // One export at a time; a second request while busy just fails fast.
         guard self.completion == nil else {
             completion(CocoaError(.userCancelled))
@@ -42,7 +42,7 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
         self.webView = webView
         self.hostWindow = window
 
-        webView.loadHTMLString(Self.pageHTML(markdown: markdown, title: title), baseURL: nil)
+        webView.loadHTMLString(Self.pageHTML(markdown: markdown, title: title), baseURL: baseURL)
     }
 
     /// Wraps the rendered markdown body in a printable page styled on the design tokens.
@@ -80,6 +80,7 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
           hr { border: 0; border-top: 1px solid #E6E5E3; }
           li { margin-bottom: 6px; }
           h1, h2, h3 { page-break-after: avoid; }
+          img { max-width: 100%; height: auto; }
         </style>
         </head>
         <body>\(body)</body>
