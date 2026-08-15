@@ -329,11 +329,14 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let lineRect = self.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
             // The reserved box: the line fragment, inset a few points from its own left/top edge
             // and capped at the reserved displaySize so a wide image never bleeds past it.
+            // Height comes from the REAL reserved line fragment (like the quote bar uses
+            // lineRect.height), not the assumed displaySize -- so the image can never overflow the
+            // fragment if the two ever diverge.
             let box = NSRect(
                 x: origin.x + lineRect.minX + 4,
                 y: origin.y + lineRect.minY + 2,
                 width: min(info.displaySize.width, lineRect.width - 8),
-                height: info.displaySize.height - 4
+                height: lineRect.height - 4
             )
             guard box.width > 0, box.height > 0 else { return }
             let fitted = Self.aspectFit(imageSize: image.size, into: box)

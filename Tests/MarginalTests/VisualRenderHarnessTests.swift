@@ -126,11 +126,83 @@ final class VisualRenderHarnessTests: XCTestCase {
         print("RENDER_PREVIEW_PATH: \(outputPath)")
     }
 
+    /// Renders `text` like `renderToPNG` but keeps the layout alive so the caller can learn WHERE
+    /// the `.marginalImage` span's reserved line fragment landed. Returns the cached bitmap plus
+    /// that fragment's rect in the bitmap's own pixel coordinates (top-left origin, matching a
+    /// flipped text view), so a test can sample inside the image band and outside it.
+    @MainActor
+    private func renderImagePlacement(text: String, width: CGFloat = 700)
+        throws -> (rep: NSBitmapImageRep, imageBandPixels: NSRect) {
+        let model = MarkdownDocumentModel(
+            inlineStyles: MarkdownParser.parseInlineStyles(in: text),
+            headers: MarkdownParser.parseHeaders(in: text),
+            listItems: MarkdownParser.parseListItems(in: text),
+            links: MarkdownParser.parseLinks(in: text),
+            blockquotes: MarkdownParser.parseBlockquotes(in: text),
+            horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
+            codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),
+            tables: MarkdownParser.parseTables(in: text),
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text),
+            images: MarkdownParser.parseImages(in: text)
+        )
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+
+        let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
+        textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
+        textView.isRichText = true
+        textView.textContainerInset = NSSize(width: 40, height: 24)
+        textView.textContainer?.widthTracksTextView = true
+        textView.textStorage?.setAttributedString(attributed)
+
+        guard let layoutManager = textView.layoutManager,
+              let container = textView.textContainer,
+              let storage = textView.textStorage else {
+            throw NSError(domain: "test", code: 1)
+        }
+        layoutManager.ensureLayout(for: container)
+        let usedHeight = layoutManager.usedRect(for: container).height
+        let totalHeight = max(ceil(usedHeight + textView.textContainerInset.height * 2), 10)
+        textView.frame = NSRect(x: 0, y: 0, width: width, height: totalHeight)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: -20000, y: -20000, width: width, height: totalHeight),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.contentView = textView
+        textView.display()
+
+        var imageRange = NSRange(location: NSNotFound, length: 0)
+        storage.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
+            if value != nil { imageRange = range; stop.pointee = true }
+        }
+        guard imageRange.location != NSNotFound else { throw NSError(domain: "test", code: 2) }
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: imageRange, actualCharacterRange: nil)
+        var fragment = layoutManager.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+        // Container -> view coordinates (the text view is flipped, so y grows downward from top,
+        // matching the cached bitmap's top-left pixel origin).
+        fragment.origin.x += textView.textContainerInset.width
+        fragment.origin.y += textView.textContainerInset.height
+
+        guard let rep = textView.bitmapImageRepForCachingDisplay(in: textView.bounds) else {
+            throw NSError(domain: "test", code: 3)
+        }
+        textView.cacheDisplay(in: textView.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsHigh) / textView.bounds.height
+        let bandPixels = NSRect(x: fragment.minX * scale, y: fragment.minY * scale,
+                                width: fragment.width * scale, height: fragment.height * scale)
+        window.contentView = nil
+        return (rep, bandPixels)
+    }
+
     @MainActor
     func testInlineImageIsDrawn() throws {
-        // A solid-blue PNG referenced by absolute path (so the styler resolves it with no
-        // document base) and with the cursor away from the span, so Task 8 attributes it and
-        // Task 9 must paint it. If the image never draws, no blue pixel appears anywhere.
+        // A solid-blue PNG referenced by absolute path (so the styler resolves it with no document
+        // base), cursor away from the span so Task 8 attributes it and Task 9 must paint it. The
+        // image is on its own paragraph between "before" and "after" text lines. Verifying mere
+        // PRESENCE of blue anywhere would pass even if the image drew over the text; this asserts
+        // the blue lands INSIDE the reserved line-fragment band and is ABSENT from the text bands
+        // above and below it -- guarding the coordinate math that is the point of this task.
         let imageURL = NSHomeDirectory() + "/marginal-blue-\(UUID().uuidString).png"
         let blue = NSImage(size: NSSize(width: 40, height: 40))
         blue.lockFocus()
@@ -141,22 +213,31 @@ final class VisualRenderHarnessTests: XCTestCase {
         try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: imageURL))
         defer { try? FileManager.default.removeItem(atPath: imageURL) }
 
-        let outputPath = NSHomeDirectory() + "/inline-image-render-\(UUID().uuidString).png"
-        try renderToPNG(text: "before\n\n![](\(imageURL))\n\nafter", outputPath: outputPath)
-        defer { try? FileManager.default.removeItem(atPath: outputPath) }
+        let (rep, band) = try renderImagePlacement(text: "before\n\n![](\(imageURL))\n\nafter")
 
-        let png = try Data(contentsOf: URL(fileURLWithPath: outputPath))
-        let rep = NSBitmapImageRep(data: png)!
-        var sawBlue = false
-        for y in 0..<rep.pixelsHigh where !sawBlue {
-            for x in stride(from: 0, to: rep.pixelsWide, by: 4) {
-                if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                   c.blueComponent > 0.6, c.redComponent < 0.3, c.greenComponent < 0.3 {
-                    sawBlue = true
-                    break
+        func hasBlue(inRows rows: Range<Int>) -> Bool {
+            let clamped = max(0, rows.lowerBound)..<min(rep.pixelsHigh, rows.upperBound)
+            for y in clamped {
+                for x in stride(from: 0, to: rep.pixelsWide, by: 4) {
+                    if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                       c.blueComponent > 0.6, c.redComponent < 0.3, c.greenComponent < 0.3 {
+                        return true
+                    }
                 }
             }
+            return false
         }
-        XCTAssertTrue(sawBlue, "the inline image should paint visible blue pixels into its reserved box")
+
+        let bandTop = Int(band.minY.rounded())
+        let bandBottom = Int(band.maxY.rounded())
+        // (a) The image paints inside its own reserved band.
+        XCTAssertTrue(hasBlue(inRows: bandTop..<bandBottom),
+                      "the inline image should paint blue pixels inside its reserved line fragment")
+        // (b) It does NOT bleed into the "before" text band above the block...
+        XCTAssertFalse(hasBlue(inRows: 0..<(bandTop - 2)),
+                       "no image pixels should appear above the reserved band (over the 'before' line)")
+        // ...nor into the "after" text band below it.
+        XCTAssertFalse(hasBlue(inRows: (bandBottom + 2)..<rep.pixelsHigh),
+                       "no image pixels should appear below the reserved band (over the 'after' line)")
     }
 }
