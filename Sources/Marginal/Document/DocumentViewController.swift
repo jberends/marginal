@@ -411,6 +411,7 @@ final class DocumentViewController: NSViewController {
             model: model,
             baseFont: NSFont.systemFont(ofSize: editorFontSize),
             cursorLocation: cursorLocation,
+            selectedRange: Range(textView.selectedRange(), in: text),
             documentBaseURL: document?.fileURL?.deletingLastPathComponent()
         )
 

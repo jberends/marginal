@@ -624,6 +624,54 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertFalse(found, "raw source is revealed (no reserve attribute) when cursor is inside")
     }
 
+    func testImageSourceRevealedWhenSelectionIntersectsImage() {
+        let text = "before ![a](x.png) after"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        // A non-empty selection spanning the whole document (e.g. Cmd-A), which intersects the
+        // image's fullRange without the caret being a single point inside it.
+        let selection = text.startIndex..<text.endIndex
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: nil, selectedRange: selection, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if v != nil { found = true }
+        }
+        XCTAssertFalse(found, "a selection intersecting the image reveals its source")
+    }
+
+    func testImageStaysHiddenWhenSelectionDoesNotIntersectImage() {
+        let text = "before ![a](x.png) after"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        // A non-empty selection entirely within "after", not touching the image's fullRange.
+        let selectionStart = text.range(of: "after")!.lowerBound
+        let selection = selectionStart..<text.endIndex
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: nil, selectedRange: selection, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if v != nil { found = true }
+        }
+        XCTAssertTrue(found, "a selection that doesn't intersect the image must not over-reveal it")
+    }
+
+    func testImageSourceRevealedWhenSelectionIsCaretInsideImage() {
+        let text = "![a](x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        // A zero-length selection (plain caret) inside the image's markup -- the pre-existing
+        // click-to-edit path -- must still reveal, matching testImageSourceRevealedWhenCursorInside.
+        let caret = text.index(text.startIndex, offsetBy: 3)
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: caret, selectedRange: caret..<caret, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if v != nil { found = true }
+        }
+        XCTAssertFalse(found, "a zero-length selection (caret) inside the image still reveals its source")
+    }
+
     func testImageRunHidesMarkupAndReservesTwoHundredPointLineHeight() {
         let text = "![a](x.png)\nnext"
         let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))

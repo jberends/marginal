@@ -9,6 +9,7 @@ struct MarkdownStyler {
         model: MarkdownDocumentModel,
         baseFont: NSFont,
         cursorLocation: String.Index?,
+        selectedRange: Range<String.Index>? = nil,
         documentBaseURL: URL? = nil
     ) -> NSAttributedString {
         // 1.55 line height for body text. Anything below ~1.5 reads cramped at long-form
@@ -736,8 +737,13 @@ struct MarkdownStyler {
         // draws the actual pixels into that reserved box using the attached ImageDisplayInfo;
         // Task 8 only reserves the space and resolves the URL. When the cursor sits inside the
         // span the raw source is left revealed for editing, matching every other marker kind.
-        let revealedImages = cursorLocation.map {
-            CursorRevealController.revealedImageSpans(in: model, cursorLocation: $0)
+        // Task 10: images reveal on selection-intersection, not only a zero-length caret --
+        // e.g. dragging a selection across an image, or Cmd-A, reveals its source too. Callers
+        // that only have a caret (no explicit selection) fall back to a zero-length range at
+        // that caret, which is exactly the old caret-containment behavior.
+        let imageRevealRange = selectedRange ?? cursorLocation.map { $0..<$0 }
+        let revealedImages = imageRevealRange.map {
+            CursorRevealController.revealedImageSpans(in: model, selectedRange: $0)
         } ?? []
 
         for image in images {

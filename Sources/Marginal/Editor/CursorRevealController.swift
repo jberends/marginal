@@ -61,9 +61,20 @@ struct CursorRevealController {
         }
     }
 
-    static func revealedImageSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [ImageSpan] {
+    /// Reveals an image when the current selection intersects its `fullRange`. A zero-length
+    /// selection (a plain caret) uses inclusive containment -- same as every other reveal helper
+    /// -- so click-to-edit at either edge of the markup still works. A non-empty selection (e.g.
+    /// dragging across the image, or Cmd-A selecting the whole document) instead uses a proper
+    /// interval-overlap test, so merely touching an edge without covering any of the span doesn't
+    /// falsely reveal it.
+    static func revealedImageSpans(in model: MarkdownDocumentModel, selectedRange: Range<String.Index>) -> [ImageSpan] {
         model.images.filter { image in
-            cursorLocation >= image.fullRange.lowerBound && cursorLocation <= image.fullRange.upperBound
+            let fullRange = image.fullRange
+            if selectedRange.isEmpty {
+                let cursorLocation = selectedRange.lowerBound
+                return cursorLocation >= fullRange.lowerBound && cursorLocation <= fullRange.upperBound
+            }
+            return selectedRange.lowerBound < fullRange.upperBound && selectedRange.upperBound > fullRange.lowerBound
         }
     }
 }
