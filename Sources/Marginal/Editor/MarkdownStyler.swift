@@ -760,8 +760,7 @@ struct MarkdownStyler {
             }
 
             let info = ImageDisplayInfo(resolvedURL: resolvedURL,
-                                        displaySize: NSSize(width: 320, height: 200),
-                                        sourceLength: fullNSRange.length)
+                                        displaySize: NSSize(width: 320, height: 200))
             result.addAttribute(.marginalImage, value: info, range: fullNSRange)
             result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
 

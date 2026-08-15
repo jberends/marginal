@@ -18,7 +18,6 @@ extension NSAttributedString.Key {
 struct ImageDisplayInfo: Equatable {
     let resolvedURL: URL
     let displaySize: NSSize
-    let sourceLength: Int
 }
 
 /// One table row's grid geometry, computed once per table in MarkdownStyler and drawn by
