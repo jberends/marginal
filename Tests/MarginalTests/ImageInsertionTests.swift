@@ -30,6 +30,22 @@ final class ImageInsertionTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: path))
     }
 
+    /// Reproduces the real-app bug: `autosavesInPlace = true` means a brand-new, never-saved
+    /// document already has a non-nil `fileURL` (pointing into the sandbox's hidden Autosave
+    /// Information folder) by the time a paste happens. `isDraft` is NSDocument's own signal that
+    /// the user hasn't done a real Save/Save As yet, and `insertImageData` must key off it, not
+    /// merely off `fileURL` being non-nil -- otherwise the image is written into that hidden
+    /// autosave folder with a relative path that's never relocated on the eventual real save.
+    func testInsertImageDataDraftDocumentWithAutosaveFileURLUsesAbsoluteTempPath() throws {
+        let (vc, url) = try makeVC(saved: true)
+        vc.document?.isDraft = true
+        let png = Self.onePixelPNG()
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+        let path = try XCTUnwrap(vc.insertImageData(png, sourceExtension: "png", now: now))
+        XCTAssertTrue(path.hasPrefix("/"), "draft doc (autosave fileURL) → absolute temp path, got \(path)")
+        XCTAssertFalse(path.hasPrefix(url!.deletingLastPathComponent().path), "must not land next to the autosave fileURL")
+    }
+
     func testInsertImageDataSavedUsesRelativeAssetsPath() throws {
         let (vc, url) = try makeVC(saved: true)
         let png = Self.onePixelPNG()

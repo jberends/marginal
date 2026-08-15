@@ -538,10 +538,19 @@ extension DocumentViewController {
 
     /// Chooses the on-disk destination by document state and returns the markdown path to embed.
     /// Managed image: temp+absolute while untitled, <doc>.assets/name+relative while saved.
+    ///
+    /// "Saved" means the user has explicitly saved this document to a real location, not merely
+    /// that `fileURL` is non-nil: `autosavesInPlace = true` (see `MarkdownDocument`) means a brand
+    /// new, never-saved document already has a non-nil `fileURL` pointing into the sandbox's
+    /// hidden "Autosave Information" folder. Writing relative to THAT would silently strand the
+    /// image there (it's never relocated, since `prepareForSave` only relocates files that live
+    /// under `imageStore.tempDirectory`). `isDraft` is the NSDocument-native signal for exactly
+    /// this: true for an autosaved-but-never-explicitly-saved document, false once the user does
+    /// Save/Save As.
     func insertImageData(_ data: Data, sourceExtension: String, now: Date) -> String? {
         let ext = Self.normalizedImageExtension(sourceExtension)
         do {
-            if let fileURL = document?.fileURL {
+            if let fileURL = document?.fileURL, document?.isDraft == false {
                 let docName = fileURL.deletingPathExtension().lastPathComponent
                 let assetsDir = fileURL.deletingLastPathComponent()
                     .appendingPathComponent("\(docName).assets", isDirectory: true)
