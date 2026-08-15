@@ -315,5 +315,40 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let drawPoint = NSPoint(x: origin.x + charRect.minX, y: origin.y + emojiBaseline)
             (info.emoji as NSString).draw(at: drawPoint, withAttributes: emojiAttributes)
         }
+
+        // Inline images: Task 8 hid the "![alt](path)" source and reserved a fixed-height line
+        // fragment via the paragraph's min/max line height. This paints the decoded pixels into
+        // that reserved box, aspect-fit and left-aligned to the text inset. Same coordinate
+        // approach as the decorations above -- the reserved box IS the glyph's line fragment,
+        // offset by `origin` into container coordinates.
+        textStorage.enumerateAttribute(.marginalImage, in: fullRange) { value, range, _ in
+            guard let info = value as? ImageDisplayInfo,
+                  let image = ImageCache.shared.image(at: info.resolvedURL) else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphRange.location < self.numberOfGlyphs else { return }
+            let lineRect = self.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+            // The reserved box: the line fragment, inset a few points from its own left/top edge
+            // and capped at the reserved displaySize so a wide image never bleeds past it.
+            let box = NSRect(
+                x: origin.x + lineRect.minX + 4,
+                y: origin.y + lineRect.minY + 2,
+                width: min(info.displaySize.width, lineRect.width - 8),
+                height: info.displaySize.height - 4
+            )
+            guard box.width > 0, box.height > 0 else { return }
+            let fitted = Self.aspectFit(imageSize: image.size, into: box)
+            image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1.0,
+                       respectFlipped: true, hints: nil)
+        }
+    }
+
+    /// The largest rect with `imageSize`'s aspect ratio that fits inside `box`, anchored at the
+    /// box's top-left. Used to letterbox an inline image into its reserved layout box without
+    /// distorting it.
+    static func aspectFit(imageSize: NSSize, into box: NSRect) -> NSRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return box }
+        let scale = min(box.width / imageSize.width, box.height / imageSize.height)
+        return NSRect(x: box.minX, y: box.minY,
+                      width: imageSize.width * scale, height: imageSize.height * scale)
     }
 }

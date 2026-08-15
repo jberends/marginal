@@ -18,7 +18,8 @@ final class VisualRenderHarnessTests: XCTestCase {
             horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
             codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),
             tables: MarkdownParser.parseTables(in: text),
-            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text),
+            images: MarkdownParser.parseImages(in: text)
         )
         let baseFont = NSFont.systemFont(ofSize: fontSize)
         let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
@@ -123,5 +124,39 @@ final class VisualRenderHarnessTests: XCTestCase {
         let outputPath = NSHomeDirectory() + "/render-preview.png"
         try renderToPNG(text: text, outputPath: outputPath)
         print("RENDER_PREVIEW_PATH: \(outputPath)")
+    }
+
+    @MainActor
+    func testInlineImageIsDrawn() throws {
+        // A solid-blue PNG referenced by absolute path (so the styler resolves it with no
+        // document base) and with the cursor away from the span, so Task 8 attributes it and
+        // Task 9 must paint it. If the image never draws, no blue pixel appears anywhere.
+        let imageURL = NSHomeDirectory() + "/marginal-blue-\(UUID().uuidString).png"
+        let blue = NSImage(size: NSSize(width: 40, height: 40))
+        blue.lockFocus()
+        NSColor.blue.setFill()
+        NSRect(x: 0, y: 0, width: 40, height: 40).fill()
+        blue.unlockFocus()
+        let bitmap = NSBitmapImageRep(data: blue.tiffRepresentation!)!
+        try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: imageURL))
+        defer { try? FileManager.default.removeItem(atPath: imageURL) }
+
+        let outputPath = NSHomeDirectory() + "/inline-image-render-\(UUID().uuidString).png"
+        try renderToPNG(text: "before\n\n![](\(imageURL))\n\nafter", outputPath: outputPath)
+        defer { try? FileManager.default.removeItem(atPath: outputPath) }
+
+        let png = try Data(contentsOf: URL(fileURLWithPath: outputPath))
+        let rep = NSBitmapImageRep(data: png)!
+        var sawBlue = false
+        for y in 0..<rep.pixelsHigh where !sawBlue {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 4) {
+                if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                   c.blueComponent > 0.6, c.redComponent < 0.3, c.greenComponent < 0.3 {
+                    sawBlue = true
+                    break
+                }
+            }
+        }
+        XCTAssertTrue(sawBlue, "the inline image should paint visible blue pixels into its reserved box")
     }
 }
