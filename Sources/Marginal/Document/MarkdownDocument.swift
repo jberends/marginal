@@ -35,16 +35,31 @@ final class MarkdownDocument: NSDocument {
     // The funnel used by Save, Save As, and autosave-as -- it runs on the main actor and knows
     // the target URL before any bytes are written, so this is where managed temp images get
     // relocated into <doc>.assets/ and their paths rewritten to relative before data(ofType:)
-    // serializes `text`.
+    // serializes `text`. Gated to genuine user saves only (see shouldRelocateImages): autosaving
+    // a draft document would otherwise relocate its temp images into the hidden Autosave
+    // Information folder and rewrite their paths before the user ever picks a real save location,
+    // stranding them there when the real save finally happens.
     override func save(
         to url: URL, ofType typeName: String,
         for saveOperation: NSDocument.SaveOperationType,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        if let vc = windowControllers.first?.contentViewController as? DocumentViewController {
+        if Self.shouldRelocateImages(for: saveOperation),
+           let vc = windowControllers.first?.contentViewController as? DocumentViewController {
             vc.prepareForSave(to: url, now: Date())
         }
         super.save(to: url, ofType: typeName, for: saveOperation, completionHandler: completionHandler)
+    }
+
+    /// Relocate managed temp images only on a genuine user save, never on autosave -- autosaving
+    /// a draft would move temp images into the hidden Autosave Information folder and rewrite
+    /// their paths before the user picks a real save location.
+    static func shouldRelocateImages(for op: NSDocument.SaveOperationType) -> Bool {
+        switch op {
+        case .saveOperation, .saveAsOperation, .saveToOperation: return true
+        case .autosaveInPlaceOperation, .autosaveElsewhereOperation, .autosaveAsOperation: return false
+        @unknown default: return false
+        }
     }
 
     override func data(ofType typeName: String) throws -> Data {

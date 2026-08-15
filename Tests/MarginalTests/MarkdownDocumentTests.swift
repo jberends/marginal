@@ -36,4 +36,18 @@ final class MarkdownDocumentTests: XCTestCase {
         XCTAssertEqual(window?.tabbingIdentifier, "MarginalDocumentWindow")
         window?.close()
     }
+
+    // Relocating managed temp images must happen only on a genuine user save. Autosave-in-place
+    // fires on a draft document before the user ever picks a real location; if prepareForSave ran
+    // there too, it would move temp images into the hidden Autosave Information folder and rewrite
+    // their paths to something no longer relocatable on the eventual real save.
+    func testShouldRelocateImagesOnlyForUserInitiatedSaves() {
+        XCTAssertTrue(MarkdownDocument.shouldRelocateImages(for: .saveOperation))
+        XCTAssertTrue(MarkdownDocument.shouldRelocateImages(for: .saveAsOperation))
+        XCTAssertTrue(MarkdownDocument.shouldRelocateImages(for: .saveToOperation))
+
+        XCTAssertFalse(MarkdownDocument.shouldRelocateImages(for: .autosaveInPlaceOperation))
+        XCTAssertFalse(MarkdownDocument.shouldRelocateImages(for: .autosaveElsewhereOperation))
+        XCTAssertFalse(MarkdownDocument.shouldRelocateImages(for: .autosaveAsOperation))
+    }
 }
