@@ -9,6 +9,16 @@ extension NSAttributedString.Key {
     static let marginalTableGridMarker = NSAttributedString.Key("marginalTableGridMarker")
     static let marginalCodeBlockMarker = NSAttributedString.Key("marginalCodeBlockMarker")
     static let marginalEmojiShortcode = NSAttributedString.Key("marginalEmojiShortcode")
+    static let marginalImage = NSAttributedString.Key("marginalImage")
+}
+
+/// Carries the info needed to draw an inline image in place of its hidden "![alt](path)"
+/// markup. `displaySize` is a reserved layout box -- Task 8 always uses a fixed default; Task 9
+/// refines it once the image itself has been decoded and its real aspect ratio is known.
+struct ImageDisplayInfo: Equatable {
+    let resolvedURL: URL
+    let displaySize: NSSize
+    let sourceLength: Int
 }
 
 /// One table row's grid geometry, computed once per table in MarkdownStyler and drawn by

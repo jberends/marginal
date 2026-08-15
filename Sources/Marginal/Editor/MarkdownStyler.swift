@@ -8,7 +8,8 @@ struct MarkdownStyler {
         for text: String,
         model: MarkdownDocumentModel,
         baseFont: NSFont,
-        cursorLocation: String.Index?
+        cursorLocation: String.Index?,
+        documentBaseURL: URL? = nil
     ) -> NSAttributedString {
         // 1.55 line height for body text. Anything below ~1.5 reads cramped at long-form
         // lengths; this is the range every typographic guide lands on for screen reading.
@@ -54,6 +55,7 @@ struct MarkdownStyler {
             return !overlapsAnyCodeBlock(fullRange)
         }
         let emojiShortcodes = model.emojiShortcodes.filter { !overlapsAnyCodeBlock($0.fullRange) }
+        let images = model.images.filter { !overlapsAnyCodeBlock($0.fullRange) }
 
         // The literal ":shortcode:" text is fully hidden (tiny font, not just cleared color) --
         // reserving its own (often much longer) text width read as a big dead gap around a much
@@ -726,6 +728,41 @@ struct MarkdownStyler {
                     result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
                 }
             }
+        }
+
+        // Inline images: the raw "![alt](path)" markup is hidden (same shrunk hidden-delimiter
+        // font used for every other marker) and a fixed-height box is reserved via paragraph
+        // line height, exactly like the horizontal-rule/table-row reservation above. Task 9
+        // draws the actual pixels into that reserved box using the attached ImageDisplayInfo;
+        // Task 8 only reserves the space and resolves the URL. When the cursor sits inside the
+        // span the raw source is left revealed for editing, matching every other marker kind.
+        let revealedImages = cursorLocation.map {
+            CursorRevealController.revealedImageSpans(in: model, cursorLocation: $0)
+        } ?? []
+
+        for image in images {
+            let fullNSRange = NSRange(image.fullRange, in: text)
+            guard !revealedImages.contains(image) else { continue }
+
+            let resolvedURL: URL
+            if image.path.hasPrefix("/") {
+                resolvedURL = URL(fileURLWithPath: image.path)
+            } else if let base = documentBaseURL {
+                resolvedURL = URL(fileURLWithPath: image.path, relativeTo: base).standardizedFileURL
+            } else {
+                continue // relative path with no document base to resolve against -- skip
+            }
+
+            let info = ImageDisplayInfo(resolvedURL: resolvedURL,
+                                        displaySize: NSSize(width: 320, height: 200),
+                                        sourceLength: fullNSRange.length)
+            result.addAttribute(.marginalImage, value: info, range: fullNSRange)
+            result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
+
+            let reserveStyle = NSMutableParagraphStyle()
+            reserveStyle.minimumLineHeight = info.displaySize.height
+            reserveStyle.maximumLineHeight = info.displaySize.height
+            result.addAttribute(.paragraphStyle, value: reserveStyle, range: fullNSRange)
         }
 
         return result

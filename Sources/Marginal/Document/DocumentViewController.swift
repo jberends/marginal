@@ -402,14 +402,16 @@ final class DocumentViewController: NSViewController {
             horizontalRules: MarkdownParser.parseHorizontalRules(in: text),
             codeBlocks: MarkdownParser.parseFencedCodeBlocks(in: text),
             tables: MarkdownParser.parseTables(in: text),
-            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text)
+            emojiShortcodes: MarkdownParser.parseEmojiShortcodes(in: text),
+            images: MarkdownParser.parseImages(in: text)
         )
         latestModel = model
         let attributed = MarkdownStyler.attributedString(
             for: text,
             model: model,
             baseFont: NSFont.systemFont(ofSize: editorFontSize),
-            cursorLocation: cursorLocation
+            cursorLocation: cursorLocation,
+            documentBaseURL: document?.fileURL?.deletingLastPathComponent()
         )
 
         let selectedRange = textView.selectedRange()

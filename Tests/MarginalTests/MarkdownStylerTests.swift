@@ -752,4 +752,35 @@ final class MarkdownStylerEmojiShortcodeTests: XCTestCase {
         let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
         XCTAssertNotEqual(color, NSColor.clear)
     }
+
+    func testImageRunCarriesReserveAttributeWhenCursorOutside() {
+        let text = "![a](x.png)\nnext"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 13) // in "next", outside the image
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if let info = v as? ImageDisplayInfo {
+                found = true
+                XCTAssertEqual(info.resolvedURL, URL(fileURLWithPath: "/tmp/x.png"))
+            }
+        }
+        XCTAssertTrue(found, "image run must carry .marginalImage when cursor is outside")
+    }
+
+    func testImageSourceRevealedWhenCursorInside() {
+        let text = "![a](x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 3) // inside the image markup
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if v != nil { found = true }
+        }
+        XCTAssertFalse(found, "raw source is revealed (no reserve attribute) when cursor is inside")
+    }
 }

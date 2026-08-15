@@ -131,4 +131,5 @@ struct MarkdownDocumentModel: Equatable {
     var codeBlocks: [CodeBlockSpan] = []
     var tables: [TableSpan] = []
     var emojiShortcodes: [EmojiShortcodeSpan] = []
+    var images: [ImageSpan] = []
 }

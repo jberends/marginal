@@ -60,4 +60,10 @@ struct CursorRevealController {
             return cursorLocation >= fullRange.lowerBound && cursorLocation <= fullRange.upperBound
         }
     }
+
+    static func revealedImageSpans(in model: MarkdownDocumentModel, cursorLocation: String.Index) -> [ImageSpan] {
+        model.images.filter { image in
+            cursorLocation >= image.fullRange.lowerBound && cursorLocation <= image.fullRange.upperBound
+        }
+    }
 }
