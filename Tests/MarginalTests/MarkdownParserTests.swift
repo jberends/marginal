@@ -596,6 +596,9 @@ final class MarkdownParserEmojiShortcodeTests: XCTestCase {
         let spans = MarkdownParser.parseEmojiShortcodes(in: ":smile: :rocket: :heart:")
         XCTAssertEqual(spans.map(\.emoji), ["😄", "🚀", "❤️"])
     }
+}
+
+final class MarkdownParserImageTests: XCTestCase {
 
     func testParseImagesFindsBasicImage() {
         let text = "before ![a cat](cat.png) after"
