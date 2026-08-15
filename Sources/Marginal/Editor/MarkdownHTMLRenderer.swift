@@ -6,6 +6,50 @@ import Foundation
 /// MarkdownParser's own "pragmatic single-pass, not full CommonMark" scope.
 struct MarkdownHTMLRenderer {
 
+    /// Like html(fromMarkdown:), but every local <img> src is inlined as a data: URI so the
+    /// returned HTML is self-contained -- no subresource fetch (e.g. file://) is required to
+    /// render it. Used by both copy-as-HTML and PDF export, which each need images to survive
+    /// outside the context of the original document's file location (WKWebView's
+    /// loadHTMLString(_:baseURL:) does not generally grant read access to file:// subresources,
+    /// and pasting into another app has no access to the original file at all).
+    ///
+    /// The search key mirrors this renderer's own src emission exactly: percent-encode with
+    /// .urlPathAllowed, then escape "&" to "&amp;" -- otherwise the replace silently no-ops for
+    /// any path containing an ampersand or other percent-encoded character.
+    static func htmlEmbeddingLocalImages(fromMarkdown markdown: String, baseURL: URL?) -> String {
+        var html = self.html(fromMarkdown: markdown)
+        for span in MarkdownParser.parseImages(in: markdown) {
+            let percentEncodedSrc = span.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? span.path
+            let encodedSrc = percentEncodedSrc.replacingOccurrences(of: "&", with: "&amp;")
+
+            let resolved: URL
+            if span.path.hasPrefix("/") {
+                resolved = URL(fileURLWithPath: span.path)
+            } else if let baseURL {
+                resolved = URL(fileURLWithPath: span.path, relativeTo: baseURL)
+            } else {
+                continue
+            }
+
+            guard let data = try? Data(contentsOf: resolved) else { continue }
+            let mime = mimeType(forExtension: resolved.pathExtension)
+            let dataURI = "data:\(mime);base64,\(data.base64EncodedString())"
+            html = html.replacingOccurrences(of: "src=\"\(encodedSrc)\"", with: "src=\"\(dataURI)\"")
+        }
+        return html
+    }
+
+    static func mimeType(forExtension ext: String) -> String {
+        switch ext.lowercased() {
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "heic": return "image/heic"
+        case "webp": return "image/webp"
+        default: return "application/octet-stream"
+        }
+    }
+
     static func html(fromMarkdown text: String) -> String {
         guard !text.isEmpty else { return "" }
 

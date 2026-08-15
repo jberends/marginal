@@ -42,12 +42,16 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
         self.webView = webView
         self.hostWindow = window
 
-        webView.loadHTMLString(Self.pageHTML(markdown: markdown, title: title), baseURL: baseURL)
+        webView.loadHTMLString(Self.pageHTML(markdown: markdown, title: title, baseURL: baseURL), baseURL: baseURL)
     }
 
-    /// Wraps the rendered markdown body in a printable page styled on the design tokens.
-    static func pageHTML(markdown: String, title: String) -> String {
-        let body = MarkdownHTMLRenderer.html(fromMarkdown: markdown)
+    /// Wraps the rendered markdown body in a printable page styled on the design tokens. Local
+    /// images are embedded as data URIs (same helper copy-as-HTML uses) rather than left as
+    /// file:// src references, because WKWebView's loadHTMLString(_:baseURL:) generally does not
+    /// grant read access to file:// subresources -- without this, images render blank in the
+    /// exported PDF even though baseURL is passed to loadHTMLString.
+    static func pageHTML(markdown: String, title: String, baseURL: URL?) -> String {
+        let body = MarkdownHTMLRenderer.htmlEmbeddingLocalImages(fromMarkdown: markdown, baseURL: baseURL)
         let escapedTitle = title
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")

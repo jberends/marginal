@@ -212,38 +212,12 @@ final class DocumentViewController: NSViewController {
     /// otherwise the replace silently no-ops for any path containing an ampersand or other
     /// percent-encoded character.
     func htmlForCopy(of markdown: String) -> String {
-        var html = MarkdownHTMLRenderer.html(fromMarkdown: markdown)
         let base = document?.fileURL?.deletingLastPathComponent()
-        for span in MarkdownParser.parseImages(in: markdown) {
-            let percentEncodedSrc = span.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? span.path
-            let encodedSrc = percentEncodedSrc.replacingOccurrences(of: "&", with: "&amp;")
-
-            let resolved: URL
-            if span.path.hasPrefix("/") {
-                resolved = URL(fileURLWithPath: span.path)
-            } else if let base {
-                resolved = URL(fileURLWithPath: span.path, relativeTo: base)
-            } else {
-                continue
-            }
-
-            guard let data = try? Data(contentsOf: resolved) else { continue }
-            let mime = Self.mimeType(forExtension: resolved.pathExtension)
-            let dataURI = "data:\(mime);base64,\(data.base64EncodedString())"
-            html = html.replacingOccurrences(of: "src=\"\(encodedSrc)\"", with: "src=\"\(dataURI)\"")
-        }
-        return html
+        return MarkdownHTMLRenderer.htmlEmbeddingLocalImages(fromMarkdown: markdown, baseURL: base)
     }
 
     static func mimeType(forExtension ext: String) -> String {
-        switch ext.lowercased() {
-        case "png": return "image/png"
-        case "jpg", "jpeg": return "image/jpeg"
-        case "gif": return "image/gif"
-        case "heic": return "image/heic"
-        case "webp": return "image/webp"
-        default: return "application/octet-stream"
-        }
+        MarkdownHTMLRenderer.mimeType(forExtension: ext)
     }
 
     // The underlying text storage is always the literal markdown source (never mutated for
