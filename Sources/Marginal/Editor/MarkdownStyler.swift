@@ -746,9 +746,13 @@ struct MarkdownStyler {
             CursorRevealController.revealedImageSpans(in: model, selectedRange: $0)
         } ?? []
 
+        // The active/revealed source font is small and dimmed, but never the fully-shrunk hidden
+        // delimiter font -- the raw "![](path)" text stays legible for editing while the image
+        // itself is anchored above it.
+        let activeSourceFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.8, weight: .regular)
+
         for image in images {
             let fullNSRange = NSRange(image.fullRange, in: text)
-            guard !revealedImages.contains(image) else { continue }
 
             let resolvedURL: URL
             if image.path.hasPrefix("/") {
@@ -761,13 +765,25 @@ struct MarkdownStyler {
 
             let info = ImageDisplayInfo(resolvedURL: resolvedURL,
                                         displaySize: NSSize(width: 320, height: 200))
+            // Always attach the image attribute -- the image draws in both the active and
+            // inactive states now. Only the markup's font/color changes with reveal state.
             result.addAttribute(.marginalImage, value: info, range: fullNSRange)
-            result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
 
+            // Reserve the image's height as space ABOVE the markup line (not min/max line
+            // height) so the markup line keeps its natural height -- the caret never balloons
+            // to the image's height.
             let reserveStyle = NSMutableParagraphStyle()
-            reserveStyle.minimumLineHeight = info.displaySize.height
-            reserveStyle.maximumLineHeight = info.displaySize.height
+            reserveStyle.paragraphSpacingBefore = info.displaySize.height
             result.addAttribute(.paragraphStyle, value: reserveStyle, range: fullNSRange)
+
+            if revealedImages.contains(image) {
+                // Active: show the raw markdown small and dimmed, beneath the anchored image.
+                result.addAttribute(.font, value: activeSourceFont, range: fullNSRange)
+                result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: fullNSRange)
+            } else {
+                // Inactive: hide the markup entirely.
+                result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
+            }
         }
 
         return result
