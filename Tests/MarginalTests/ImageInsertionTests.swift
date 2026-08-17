@@ -70,6 +70,27 @@ final class ImageInsertionTests: XCTestCase {
         try? FileManager.default.removeItem(at: ext)
     }
 
+    /// A dropped file's name containing `]` (e.g. `weird]name.png`) would otherwise produce
+    /// `![weird]name](path)` -- the raw `]` in the alt prematurely closes MarkdownParser's
+    /// `[^\]]*` alt group, breaking parsing of the whole image span. The alt must be sanitized so
+    /// the resulting markdown still parses as exactly one image with the correct path.
+    func testDroppedImageFileNameWithBracketSanitizesAltText() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.loadInitialText("")
+        let tv = vc.textView!
+        let ext = FileManager.default.temporaryDirectory.appendingPathComponent("weird]name.png")
+        try ImageInsertionTests.onePixelPNG().write(to: ext)
+        defer { try? FileManager.default.removeItem(at: ext) }
+
+        vc.markdownTextView(tv, didReceiveDroppedImageFileAt: ext, atCharacterIndex: 0)
+
+        let text = tv.string
+        let images = MarkdownParser.parseImages(in: text)
+        XCTAssertEqual(images.count, 1, "the inserted markup must still parse as exactly one image span, got \(text)")
+        XCTAssertFalse(images.first?.altText.contains("]") ?? true, "sanitized alt must not contain ']'")
+        XCTAssertEqual(images.first?.path, ext.path)
+    }
+
     /// Injects a `DocumentFolderAccess` whose prompt always grants, so `prepareForSave` tests
     /// never hit the real `NSOpenPanel` (which would hang a headless test run).
     static func grantingFolderAccess() -> DocumentFolderAccess {
