@@ -16,9 +16,10 @@ All notable changes to Marginal are documented here. The format follows
   self-contained data URIs, so exports and **Copy as HTML** carry the picture with them. Exported
   PDF images are capped to about half a page tall (keeping their aspect ratio) so a single image
   no longer takes over a page.
-- On saving, an option in the folder-access prompt can also **copy externally-linked images**
-  (ones dragged from elsewhere on disk) into the document's `.assets/` folder, making the document
-  self-contained.
+- When a document references **externally-linked images** (ones dragged in from elsewhere on
+  disk), the **Save panel** shows a checkbox to also **copy them into the document's `.assets/`
+  folder**, making the document self-contained. (Pasted images always go there regardless, so the
+  checkbox only appears when there's an external image to copy.)
 - Inserted images get **alt text auto-filled from the filename** (accessibility and a caption).
 - An image that can't be loaded now shows an **"image unavailable" placeholder** with its path,
   instead of a blank gap.

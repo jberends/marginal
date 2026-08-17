@@ -522,6 +522,15 @@ extension DocumentViewController: NSTextViewDelegate {
 }
 
 extension DocumentViewController {
+    /// Whether the document references any externally-linked image -- an absolute-path image that
+    /// isn't one of Marginal's managed temp files. Used to decide whether to offer the Save panel's
+    /// "also copy linked images" checkbox: a paste-only document has nothing external to copy.
+    func hasExternallyLinkedImages() -> Bool {
+        MarkdownParser.parseImages(in: textView.string).contains { span in
+            span.path.hasPrefix("/") && !imageStore.isManagedTemp(URL(fileURLWithPath: span.path))
+        }
+    }
+
     /// Called just before the document writes to `targetURL`. Moves managed temp images into
     /// <doc>.assets/ and rewrites their absolute temp paths in the text to relative. Updates both
     /// the text view storage and document.text so the written file and the open editor agree.
@@ -532,7 +541,7 @@ extension DocumentViewController {
     /// so this acquires folder access via `imageFolderAccess` first. If access is declined or the
     /// relocation fails, the temp paths are left untouched (never rewritten to a dead reference)
     /// and a visible warning is shown instead of a silent beep-and-swallow.
-    func prepareForSave(to targetURL: URL, now: Date) {
+    func prepareForSave(to targetURL: URL, now: Date, copyLinkedImages: Bool = false) {
         let docName = targetURL.deletingPathExtension().lastPathComponent
         let folder = targetURL.deletingLastPathComponent()
         let assetsDir = folder.appendingPathComponent("\(docName).assets", isDirectory: true)
@@ -557,9 +566,9 @@ extension DocumentViewController {
         let uniqueManagedURLs = managed.map { $0.1 }.filter { seenManagedURLs.insert($0).inserted }
 
         // Externally-linked images: absolute paths that are neither managed temp files nor
-        // already inside `<doc>.assets/`. Copying these in is opt-in (see
-        // `DocumentFolderAccess.shouldCopyLinkedImages`) -- collected up front so the
-        // `withAccess` closure below can act on them without re-parsing.
+        // already inside `<doc>.assets/`. Copying these in is opt-in via the Save panel's
+        // accessory checkbox (`copyLinkedImages`) -- collected up front so the `withAccess`
+        // closure below can act on them without re-parsing.
         let assetsPrefix = assetsDir.standardizedFileURL.path + "/"
         let linked = spans.compactMap { span -> (ImageSpan, URL)? in
             guard span.path.hasPrefix("/") else { return nil }
@@ -581,7 +590,7 @@ extension DocumentViewController {
         let result: (moveMap: [URL: URL], linkedMap: [URL: URL])? = imageFolderAccess.withAccess(toFolder: folder, reason: reason) { _ in
             let moveMap = (try? imageStore.relocateTempFiles(uniqueManagedURLs, into: assetsDir, now: now)) ?? [:]
             var linkedMap: [URL: URL] = [:]
-            if imageFolderAccess.shouldCopyLinkedImages(forFolder: folder) {
+            if copyLinkedImages {
                 var seenLinkedURLs = Set<URL>()
                 let uniqueLinkedURLs = linked.map { $0.1 }.filter { seenLinkedURLs.insert($0).inserted }
                 for source in uniqueLinkedURLs {

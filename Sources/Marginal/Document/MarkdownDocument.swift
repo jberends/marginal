@@ -46,7 +46,7 @@ final class MarkdownDocument: NSDocument {
     ) {
         if Self.shouldRelocateImages(for: saveOperation),
            let vc = windowControllers.first?.contentViewController as? DocumentViewController {
-            vc.prepareForSave(to: url, now: Date())
+            vc.prepareForSave(to: url, now: Date(), copyLinkedImages: copyLinkedImagesCheckbox?.state == .on)
         }
         super.save(to: url, ofType: typeName, for: saveOperation, completionHandler: completionHandler)
     }
@@ -76,13 +76,42 @@ final class MarkdownDocument: NSDocument {
         "md"
     }
 
+    // Held only while a Save panel is on screen, so `save(to:…)` can read whether the user ticked
+    // "also copy linked images" (see prepareSavePanel). Nil when no such panel is up.
+    private weak var copyLinkedImagesCheckbox: NSButton?
+
     // fileNameExtension(forType:) alone is NOT enough for the *visible* Save-As proposal: the
     // Markdown UTI (net.daringfireball.markdown) is declared by the system, and its system
     // preferred filename extension is ".markdown" (md is last in its tag list), so NSSavePanel
     // seeds "Untitled.markdown". Rewrite the name field here to end in ".md" -- the one control
     // that governs what the user actually sees -- while still accepting ".markdown" if typed.
+    //
+    // When the document references externally-linked images (dragged in from elsewhere on disk),
+    // also add an accessory checkbox offering to copy them into the document's "<name>.assets/"
+    // folder on save, so the document becomes self-contained. Pasted images always relocate there
+    // regardless, so the checkbox is only offered -- and only meaningful -- when there is an
+    // external image to copy.
     override func prepareSavePanel(_ savePanel: NSSavePanel) -> Bool {
         savePanel.nameFieldStringValue = Self.proposedMarkdownFileName(from: savePanel.nameFieldStringValue)
+
+        copyLinkedImagesCheckbox = nil
+        if let vc = windowControllers.first?.contentViewController as? DocumentViewController,
+           vc.hasExternallyLinkedImages() {
+            let checkbox = NSButton(checkboxWithTitle: "Copy linked images into the document’s .assets folder",
+                                    target: nil, action: nil)
+            checkbox.state = .off
+            checkbox.translatesAutoresizingMaskIntoConstraints = false
+            let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 34))
+            accessory.addSubview(checkbox)
+            NSLayoutConstraint.activate([
+                checkbox.leadingAnchor.constraint(equalTo: accessory.leadingAnchor, constant: 20),
+                checkbox.trailingAnchor.constraint(lessThanOrEqualTo: accessory.trailingAnchor, constant: -20),
+                checkbox.centerYAnchor.constraint(equalTo: accessory.centerYAnchor)
+            ])
+            savePanel.accessoryView = accessory
+            copyLinkedImagesCheckbox = checkbox
+        }
+
         return super.prepareSavePanel(savePanel)
     }
 
