@@ -305,6 +305,50 @@ final class ImageInsertionTests: XCTestCase {
         try? FileManager.default.removeItem(at: linkedSource)
     }
 
+    // Regression: a document whose ONLY image is an externally-linked absolute path used to
+    // short-circuit prepareForSave (empty `managed`), so ticking "copy linked images" did nothing.
+    func testPrepareForSaveCopiesLinkedImageInLinkedOnlyDocumentWhenOptedIn() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess()
+        vc.suppressSaveWarningForTests = true
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+
+        // No managed/pasted image at all -- only a linked file.
+        let linkedSource = FileManager.default.temporaryDirectory.appendingPathComponent("linked-\(UUID().uuidString).png")
+        try ImageInsertionTests.onePixelPNG().write(to: linkedSource)
+        vc.textView.string = "see ![](\(linkedSource.path)) here"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now, copyLinkedImages: true)
+
+        XCTAssertFalse(vc.textView.string.contains(linkedSource.path), "linked path must be rewritten to relative")
+        XCTAssertTrue(vc.textView.string.contains("MyNote.assets/"), "linked image must be copied into MyNote.assets")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: linkedSource.path), "source preserved (copy, not move)")
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent("MyNote.assets").path)) ?? []
+        XCTAssertEqual(contents.count, 1, "exactly the one linked image was copied in")
+        try? FileManager.default.removeItem(at: dir); try? FileManager.default.removeItem(at: linkedSource)
+    }
+
+    func testPrepareForSaveLinkedOnlyDocumentUntouchedWhenNotOptedIn() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess()
+        vc.suppressSaveWarningForTests = true
+        let now = Date(timeIntervalSince1970: 1)
+        let linkedSource = FileManager.default.temporaryDirectory.appendingPathComponent("linked-\(UUID().uuidString).png")
+        try ImageInsertionTests.onePixelPNG().write(to: linkedSource)
+        vc.textView.string = "![](\(linkedSource.path))"
+        vc.document?.text = vc.textView.string
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now, copyLinkedImages: false)
+        XCTAssertEqual(vc.textView.string, "![](\(linkedSource.path))", "not opted in -> left untouched")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("MyNote.assets").path),
+                       "no .assets folder should be created when not copying")
+        try? FileManager.default.removeItem(at: dir); try? FileManager.default.removeItem(at: linkedSource)
+    }
+
     func testPrepareForSaveSkipsUnreadableLinkedImageWithoutThrowing() throws {
         let (vc, _) = try makeVC(saved: false)
         vc.imageFolderAccess = Self.grantingFolderAccess()

@@ -669,7 +669,7 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertTrue(isActiveSourceFont(attributed, at: 0), "a zero-length selection (caret) inside the image still reveals its source")
     }
 
-    func testImageRunHidesMarkupAndReservesTwoHundredPointSpaceAbove() {
+    func testImageRunHidesMarkupAndReservesCardBandAbove() {
         let text = "![a](x.png)\nnext"
         let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
         let cursor = text.index(text.startIndex, offsetBy: 13) // in "next", outside the image
@@ -687,12 +687,19 @@ final class MarkdownStylerTests: XCTestCase {
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
 
-        // The run must reserve a genuine 200pt space ABOVE the markup line (the
-        // displaySize.height placeholder) via paragraphSpacingBefore, not by inflating the
-        // line's own min/max height -- that would balloon the caret to image height.
+        // The run reserves the full figure-card band (image + caption + padding) ABOVE the source
+        // by inflating the line to `band + one source line` and pushing the source glyphs into the
+        // bottom slot via a negative baseline offset. (Line height, not paragraphSpacingBefore,
+        // because the latter is dropped by TextKit for a first-line image.) The card-tall caret is
+        // clamped by MarkdownTextView.drawInsertionPoint, not by keeping the line short here.
+        let expectedBand = ImageCardMetrics.bandHeight(captionFontSize: 16 * 0.8)
+        XCTAssertGreaterThan(expectedBand, ImageCardMetrics.imageAreaHeight, "band includes caption + padding")
         let paragraphStyle = attributed.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle
-        XCTAssertEqual(paragraphStyle?.paragraphSpacingBefore ?? 0, 200, accuracy: 0.5)
-        XCTAssertEqual(paragraphStyle?.maximumLineHeight ?? 0, 0, "line height must stay natural, not inflated to image height")
+        XCTAssertGreaterThan(paragraphStyle?.maximumLineHeight ?? 0, expectedBand, "line inflated to band + a source line")
+        XCTAssertEqual(paragraphStyle?.minimumLineHeight ?? 0, paragraphStyle?.maximumLineHeight ?? -1,
+                       "min == max so the band height is exact")
+        let baselineOffset = attributed.attribute(.baselineOffset, at: location, effectiveRange: nil) as? CGFloat
+        XCTAssertEqual(baselineOffset ?? 0, -expectedBand, accuracy: 0.5, "source glyphs pushed into the bottom slot")
     }
 
     func testInactiveImageReservesSpaceAboveAndHidesMarkupAtNormalLineHeight() {
@@ -703,12 +710,47 @@ final class MarkdownStylerTests: XCTestCase {
             for: text, model: model, baseFont: .systemFont(ofSize: 16),
             cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
 
+        let expectedBand = ImageCardMetrics.bandHeight(captionFontSize: 16 * 0.8)
         let ps = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
-        XCTAssertEqual(ps?.paragraphSpacingBefore ?? 0, 200, accuracy: 0.5)
-        XCTAssertEqual(ps?.maximumLineHeight ?? 0, 0, "line height must stay natural (0 = unconstrained), not 200")
+        XCTAssertGreaterThan(ps?.maximumLineHeight ?? 0, expectedBand, "line inflated to reserve the card band")
         let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize ?? 99, MarkdownStyler.hiddenDelimiterFontSize, accuracy: 0.001)
-        XCTAssertNotNil(attributed.attribute(.marginalImage, at: 0, effectiveRange: nil))
+        // The caption defaults to the filename stem when alt is empty; here alt is "a".
+        let info = attributed.attribute(.marginalImage, at: 0, effectiveRange: nil) as? ImageDisplayInfo
+        XCTAssertEqual(info?.caption, "a")
+    }
+
+    // The image line is inflated to hold the card, so its raw insertion-point rect is card-tall.
+    // MarkdownTextView.drawInsertionPoint clamps it to a normal source-line height at the bottom.
+    @MainActor
+    func testCaretOnImageLineIsClampedToNormalHeight() {
+        let text = "![a](/tmp/x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: text.startIndex, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+
+        let tv = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        tv.textStorage?.setAttributedString(attributed)
+        tv.setSelectedRange(NSRange(location: 3, length: 0)) // inside the image markup
+
+        let band = ImageCardMetrics.bandHeight(captionFontSize: 16 * 0.8)
+        // A card-tall raw caret must be shrunk to (rawHeight - band) and moved to the bottom.
+        let raw = NSRect(x: 10, y: 5, width: 2, height: band + 20)
+        let clamped = tv.clampedImageInsertionRect(raw)
+        XCTAssertEqual(clamped.height, 20, accuracy: 0.5, "caret is one source line tall, not card-tall")
+        XCTAssertEqual(clamped.maxY, raw.maxY, accuracy: 0.5, "caret sits at the bottom of the fragment")
+        XCTAssertLessThan(clamped.height, band, "caret must never be as tall as the card")
+    }
+
+    func testImageCaptionFallsBackToFilenameStemWhenAltEmpty() {
+        let text = "![](/tmp/holiday.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: nil, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        let info = attributed.attribute(.marginalImage, at: 0, effectiveRange: nil) as? ImageDisplayInfo
+        XCTAssertEqual(info?.caption, "holiday", "empty alt → caption is the filename without extension")
     }
 
     func testActiveImageShowsSmallDimmedMonospaceSourceAndStillDrawsImage() {

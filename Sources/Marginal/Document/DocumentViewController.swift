@@ -553,17 +553,6 @@ extension DocumentViewController {
             let url = URL(fileURLWithPath: span.path)
             return imageStore.isManagedTemp(url) ? (span, url) : nil
         }
-        guard !managed.isEmpty else { return }
-
-        // Two spans can reference the same managed temp file (e.g. duplicated markdown) --
-        // relocate each distinct URL only once, or a second moveItem on an already-moved
-        // source would throw and abort the whole save-prep after the first move already
-        // happened on disk. Dedupe while preserving first-occurrence order: relocateTempFiles'
-        // clash-avoidance (appending "-2", "-3", ...) is order-dependent when several images
-        // share the same `now` timestamp, and a Set's iteration order is unspecified, so simply
-        // deduping via Set would make which file gets the plain name vs. "-2" nondeterministic.
-        var seenManagedURLs = Set<URL>()
-        let uniqueManagedURLs = managed.map { $0.1 }.filter { seenManagedURLs.insert($0).inserted }
 
         // Externally-linked images: absolute paths that are neither managed temp files nor
         // already inside `<doc>.assets/`. Copying these in is opt-in via the Save panel's
@@ -577,6 +566,22 @@ extension DocumentViewController {
             guard !url.standardizedFileURL.path.hasPrefix(assetsPrefix) else { return nil }
             return (span, url)
         }
+
+        // Nothing to do unless there are managed images to relocate, or linked images the user
+        // opted to copy in. A linked-only document (only absolute Finder-dragged paths) must NOT
+        // short-circuit here when copy-in is requested -- that was the bug where ticking the
+        // checkbox did nothing for such a document.
+        guard !managed.isEmpty || (copyLinkedImages && !linked.isEmpty) else { return }
+
+        // Two spans can reference the same managed temp file (e.g. duplicated markdown) --
+        // relocate each distinct URL only once, or a second moveItem on an already-moved
+        // source would throw and abort the whole save-prep after the first move already
+        // happened on disk. Dedupe while preserving first-occurrence order: relocateTempFiles'
+        // clash-avoidance (appending "-2", "-3", ...) is order-dependent when several images
+        // share the same `now` timestamp, and a Set's iteration order is unspecified, so simply
+        // deduping via Set would make which file gets the plain name vs. "-2" nondeterministic.
+        var seenManagedURLs = Set<URL>()
+        let uniqueManagedURLs = managed.map { $0.1 }.filter { seenManagedURLs.insert($0).inserted }
 
         let reason = "Marginal needs permission to save this document's images in this folder."
         // `relocateTempFiles` throws; the closure swallows that into an empty map (rather than
@@ -594,6 +599,10 @@ extension DocumentViewController {
                 var seenLinkedURLs = Set<URL>()
                 let uniqueLinkedURLs = linked.map { $0.1 }.filter { seenLinkedURLs.insert($0).inserted }
                 for source in uniqueLinkedURLs {
+                    // A Finder-dragged image outside the sandbox needs its own security scope to
+                    // be readable here; a per-file bookmark was stored when it was dropped, so
+                    // (re)open it. Idempotent, and a no-op/false for paths already reachable.
+                    imageFolderAccess.beginRetainedAccess(to: source)
                     guard FileManager.default.isReadableFile(atPath: source.path) else { continue }
                     if let dest = try? imageStore.copyExternalFile(at: source, into: assetsDir, now: now) {
                         linkedMap[source] = dest
@@ -603,11 +612,17 @@ extension DocumentViewController {
             return (moveMap, linkedMap)
         }
 
-        guard let result, !result.moveMap.isEmpty else {
-            // Declined, or the move failed: keep the temp paths (the text still saves, and images
-            // still resolve from temp this session) and warn -- never a silent dead reference.
-            // This warning stays scoped to MANAGED images; skipped linked images are a valid
-            // outcome (an absolute link left in place), not data loss.
+        guard let result else {
+            // Access was declined: keep the temp paths (the text still saves, and images still
+            // resolve from temp this session) and warn -- never a silent dead reference.
+            warnImagesNotSaved()
+            return
+        }
+        // Managed images existed but none relocated -> the move itself failed; warn and keep the
+        // temp paths. A linked-only document legitimately has an empty moveMap (nothing managed to
+        // move), so an empty moveMap alone must NOT warn -- only warn when there was managed work
+        // that produced nothing.
+        if !uniqueManagedURLs.isEmpty && result.moveMap.isEmpty {
             warnImagesNotSaved()
             return
         }

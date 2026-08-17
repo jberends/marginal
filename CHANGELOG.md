@@ -8,10 +8,12 @@ All notable changes to Marginal are documented here. The format follows
 
 ### Added
 
-- **Images**: insert an image by paste, screenshot, or drag-and-drop. A pasted or screenshotted
-  image renders **inline** in the editor; click it to reveal its `![](path)` markdown source in a
-  small dimmed line beneath the still-anchored image (clicking away collapses it, without the page
-  jumping). Dragging an image **file** from Finder links it by absolute path.
+- **Images**: insert an image by paste, screenshot, or drag-and-drop. An image renders inline as a
+  tidy **figure card** — the picture centered in a softly-shaded, rounded, hairline-bordered
+  container with a **caption** beneath it (the alt text, or the filename when there's no alt).
+  Click it to reveal its `![](path)` markdown source as a small dimmed line beneath the still-
+  anchored card (clicking away collapses it, without the page jumping). Dragging an image **file**
+  from Finder links it by absolute path.
 - **Image export**: images render as real `<img>` in **PDF and HTML export** and are embedded as
   self-contained data URIs, so exports and **Copy as HTML** carry the picture with them. Exported
   PDF images are capped to about half a page tall (keeping their aspect ratio) so a single image
@@ -33,6 +35,14 @@ All notable changes to Marginal are documented here. The format follows
   folder (remembered afterwards) and writes the images into a sibling `<name>.assets/` folder next
   to the `.md`. If access is declined, Marginal warns rather than silently losing the images.
 - New documents are proposed with a **`.md`** extension instead of `.markdown`.
+- **An image on the very first line now renders** (card, image, or "unavailable" placeholder)
+  instead of showing as bare `![](…)` text. The image band was reserved as space-above-the-line,
+  which TextKit silently drops for the first paragraph; it's now reserved as line height (honored
+  everywhere) with the caret kept a normal height.
+- **The Save panel's "copy linked images" checkbox now works for a document whose only image is an
+  externally-linked path** (e.g. one dragged from the Desktop). Such a document was skipped before
+  the copy step ran, so ticking the box did nothing; it now copies the linked image into the
+  `<name>.assets/` folder and rewrites the reference to a relative path.
 - **Opening any saved document no longer hangs the app** (beachball, needing Force Quit). Reopening
   a file-backed document walked its folder's ancestors looking for a remembered image-folder grant,
   but the walk never terminated at the filesystem root and spun a CPU core at 100%. The walk now

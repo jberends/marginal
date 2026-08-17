@@ -175,6 +175,29 @@ final class MarkdownTextView: NSTextView {
         return true
     }
 
+    // An image markup line is inflated (via line height) to hold the image card above its source
+    // line, so its natural insertion-point rect is as tall as the whole card. Clamp the caret back
+    // to a normal source-line height at the BOTTOM of the fragment (where the revealed `![](path)`
+    // source sits), so editing an image's source never shows a card-tall caret.
+    override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
+        super.drawInsertionPoint(in: clampedImageInsertionRect(rect), color: color, turnedOn: flag)
+    }
+
+    func clampedImageInsertionRect(_ rect: NSRect) -> NSRect {
+        guard let storage = textStorage, storage.length > 0 else { return rect }
+        let loc = selectedRange().location
+        // The caret can sit at the start/inside/just-after the image markup; check the character
+        // it's on and the one just before it so an end-of-markup caret is clamped too.
+        for idx in [loc, loc - 1] where idx >= 0 && idx < storage.length {
+            if let info = storage.attribute(.marginalImage, at: idx, effectiveRange: nil) as? ImageDisplayInfo,
+               rect.height > info.displaySize.height {
+                let caretHeight = rect.height - info.displaySize.height
+                return NSRect(x: rect.minX, y: rect.maxY - caretHeight, width: rect.width, height: caretHeight)
+            }
+        }
+        return rect
+    }
+
     override func keyDown(with event: NSEvent) {
         if event.modifierFlags.contains(.command), let characters = event.charactersIgnoringModifiers {
             switch characters {

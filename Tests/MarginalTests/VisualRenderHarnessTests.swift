@@ -126,6 +126,37 @@ final class VisualRenderHarnessTests: XCTestCase {
         print("RENDER_PREVIEW_PATH: \(outputPath)")
     }
 
+    @MainActor
+    func testRenderImageCardForVisualInspection() throws {
+        // A real image so the card shows actual pixels, plus a first-line image (regression) and
+        // a missing image (unavailable card) in one sheet.
+        let imageURL = NSHomeDirectory() + "/marginal-card-\(UUID().uuidString).png"
+        let img = NSImage(size: NSSize(width: 320, height: 180))
+        img.lockFocus()
+        NSColor(calibratedRed: 0.32, green: 0.28, blue: 0.85, alpha: 1).setFill()
+        NSRect(x: 0, y: 0, width: 320, height: 180).fill()
+        NSColor.white.setFill(); NSRect(x: 40, y: 40, width: 240, height: 100).fill()
+        img.unlockFocus()
+        try NSBitmapImageRep(data: img.tiffRepresentation!)!.representation(using: .png, properties: [:])!
+            .write(to: URL(fileURLWithPath: imageURL))
+        defer { try? FileManager.default.removeItem(atPath: imageURL) }
+
+        let text = """
+        ![Coastline at dusk](\(imageURL))
+
+        Some body text between two figures.
+
+        ![](\(imageURL))
+
+        And a broken one:
+
+        ![missing diagram](/nope/does-not-exist.png)
+        """
+        let outputPath = NSHomeDirectory() + "/render-image-card.png"
+        try renderToPNG(text: text, outputPath: outputPath)
+        print("RENDER_CARD_PATH: \(outputPath)")
+    }
+
     /// Renders `text` like `renderToPNG` but keeps the layout alive so the caller can learn WHERE
     /// the `.marginalImage` span's reserved line fragment landed. Returns the cached bitmap plus
     /// that fragment's rect in the bitmap's own pixel coordinates (top-left origin, matching a
@@ -179,12 +210,17 @@ final class VisualRenderHarnessTests: XCTestCase {
         storage.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
             if value != nil { imageRange = range; stop.pointee = true }
         }
-        guard imageRange.location != NSNotFound else { throw NSError(domain: "test", code: 2) }
+        guard imageRange.location != NSNotFound,
+              let info = storage.attribute(.marginalImage, at: imageRange.location, effectiveRange: nil) as? ImageDisplayInfo
+        else { throw NSError(domain: "test", code: 2) }
         let glyphRange = layoutManager.glyphRange(forCharacterRange: imageRange, actualCharacterRange: nil)
         var fragment = layoutManager.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
-        // The USED rect excludes the paragraphSpacingBefore leading space, so its top edge marks
-        // where the reserved image band ends and the markup's text line begins.
-        var used = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+        // The markup line is inflated to `band + one source line`; the card occupies the top
+        // `band` region and the source glyphs sit in the slot below it. `used` here marks the top
+        // of that source slot (== fragment top + band), i.e. where the reserved card band ends.
+        var used = fragment
+        used.origin.y += info.displaySize.height
+        used.size.height -= info.displaySize.height
         // Container -> view coordinates (the text view is flipped, so y grows downward from top,
         // matching the cached bitmap's top-left pixel origin).
         fragment.origin.x += textView.textContainerInset.width
@@ -203,6 +239,43 @@ final class VisualRenderHarnessTests: XCTestCase {
                               width: used.width * scale, height: used.height * scale)
         window.contentView = nil
         return (rep, fullBand, textBand)
+    }
+
+    /// Regression: an image on the FIRST line reserves its full band (and draws its card), the
+    /// same as a mid-document image. TextKit drops `paragraphSpacingBefore` on the first
+    /// paragraph, so reserving via that (the old approach) left a first-line image with a 0-height
+    /// band -- rendering as bare raw markdown. The band is now reserved via line height, which is
+    /// honored on the first paragraph too.
+    @MainActor
+    func testFirstLineImageReservesBandLikeMidDocument() throws {
+        let imageURL = NSHomeDirectory() + "/marginal-firstline-\(UUID().uuidString).png"
+        let blue = NSImage(size: NSSize(width: 40, height: 40))
+        blue.lockFocus(); NSColor.blue.setFill(); NSRect(x: 0, y: 0, width: 40, height: 40).fill(); blue.unlockFocus()
+        try NSBitmapImageRep(data: blue.tiffRepresentation!)!.representation(using: .png, properties: [:])!
+            .write(to: URL(fileURLWithPath: imageURL))
+        defer { try? FileManager.default.removeItem(atPath: imageURL) }
+
+        let (rep, firstFull, firstText) = try renderImagePlacement(text: "![](\(imageURL))\n\nafter")
+        let (_, midFull, midText) = try renderImagePlacement(text: "before\n\n![](\(imageURL))\n\nafter")
+
+        let firstBand = firstText.minY - firstFull.minY
+        let midBand = midText.minY - midFull.minY
+        XCTAssertGreaterThan(firstBand, 100, "a first-line image must reserve its band, not collapse to 0")
+        XCTAssertEqual(firstBand, midBand, accuracy: 2, "first-line band must match a mid-document image's band")
+
+        // And the image actually paints inside that first-line band.
+        func hasBlue(inRows rows: Range<Int>) -> Bool {
+            let clamped = max(0, rows.lowerBound)..<min(rep.pixelsHigh, rows.upperBound)
+            for y in clamped {
+                for x in stride(from: 0, to: rep.pixelsWide, by: 4) {
+                    if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                       c.blueComponent > 0.6, c.redComponent < 0.3, c.greenComponent < 0.3 { return true }
+                }
+            }
+            return false
+        }
+        XCTAssertTrue(hasBlue(inRows: Int(firstFull.minY.rounded())..<Int(firstText.minY.rounded())),
+                      "the first-line image must paint inside its reserved band")
     }
 
     @MainActor

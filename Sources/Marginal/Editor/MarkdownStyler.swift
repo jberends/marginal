@@ -763,18 +763,36 @@ struct MarkdownStyler {
                 continue // relative path with no document base to resolve against -- skip
             }
 
+            // Caption shown beneath the image: the alt text, or the filename stem when alt is
+            // empty (a sensible default that doubles as accessible text).
+            let caption = image.altText.isEmpty
+                ? resolvedURL.deletingPathExtension().lastPathComponent
+                : image.altText
+            let bandHeight = ImageCardMetrics.bandHeight(captionFontSize: activeSourceFont.pointSize)
             let info = ImageDisplayInfo(resolvedURL: resolvedURL,
-                                        displaySize: NSSize(width: 320, height: 200))
+                                        displaySize: NSSize(width: 320, height: bandHeight),
+                                        caption: caption)
             // Always attach the image attribute -- the image draws in both the active and
             // inactive states now. Only the markup's font/color changes with reveal state.
             result.addAttribute(.marginalImage, value: info, range: fullNSRange)
 
-            // Reserve the image's height as space ABOVE the markup line (not min/max line
-            // height) so the markup line keeps its natural height -- the caret never balloons
-            // to the image's height.
+            // Reserve the card's height by inflating the markup line to `band + one source line`
+            // and pushing the source glyphs down into that bottom source-line slot (via a negative
+            // baseline offset). The card is drawn into the top `band` region by the layout manager.
+            //
+            // Line height (not paragraphSpacingBefore) is used deliberately: paragraphSpacingBefore
+            // is DROPPED by TextKit for the very first paragraph, so a first-line image reserved no
+            // space at all; line height is honored on every paragraph and is counted in the text
+            // view's used height, so the band never collapses or gets clipped. The tall line would
+            // balloon the caret -- MarkdownTextView.drawInsertionPoint clamps it back to a normal
+            // source-line height at the bottom (see there).
+            let sourceLineHeight = (activeSourceFont.ascender - activeSourceFont.descender
+                                    + activeSourceFont.leading).rounded(.up)
             let reserveStyle = NSMutableParagraphStyle()
-            reserveStyle.paragraphSpacingBefore = info.displaySize.height
+            reserveStyle.minimumLineHeight = info.displaySize.height + sourceLineHeight
+            reserveStyle.maximumLineHeight = info.displaySize.height + sourceLineHeight
             result.addAttribute(.paragraphStyle, value: reserveStyle, range: fullNSRange)
+            result.addAttribute(.baselineOffset, value: -info.displaySize.height, range: fullNSRange)
 
             if revealedImages.contains(image) {
                 // Active: show the raw markdown small and dimmed, beneath the anchored image.

@@ -13,11 +13,31 @@ extension NSAttributedString.Key {
 }
 
 /// Carries the info needed to draw an inline image in place of its hidden "![alt](path)"
-/// markup. `displaySize` is a reserved layout box -- Task 8 always uses a fixed default; Task 9
-/// refines it once the image itself has been decoded and its real aspect ratio is known.
+/// markup. `displaySize.height` is the total reserved band (the whole figure card: image area +
+/// caption row + padding); the styler computes it from `ImageCardMetrics`. `caption` is the text
+/// shown beneath the image (the alt text, or the filename stem when alt is empty).
 struct ImageDisplayInfo: Equatable {
     let resolvedURL: URL
     let displaySize: NSSize
+    let caption: String
+}
+
+/// Metrics for the inline-image "figure card" -- shared by the styler (which reserves the band)
+/// and the layout manager (which draws it) so the reserved space and the drawn card always agree.
+enum ImageCardMetrics {
+    static let cornerRadius: CGFloat = 8
+    static let outerInset: CGFloat = 4      // gap between the card and the text column edges
+    static let padding: CGFloat = 14        // inner padding inside the card
+    static let captionGap: CGFloat = 8      // between the image and its caption
+    static let imageAreaHeight: CGFloat = 200
+
+    /// Height of the caption text line at the given font size.
+    static func captionHeight(fontSize: CGFloat) -> CGFloat { (fontSize * 1.3).rounded(.up) }
+
+    /// Total reserved band height: padding + image + gap + caption + padding.
+    static func bandHeight(captionFontSize: CGFloat) -> CGFloat {
+        padding + imageAreaHeight + captionGap + captionHeight(fontSize: captionFontSize) + padding
+    }
 }
 
 /// One table row's grid geometry, computed once per table in MarkdownStyler and drawn by
@@ -58,7 +78,6 @@ struct EmojiGlyphInfo: Equatable {
 ///    with a negative x offset into that margin was silently clipped and invisible). The bar is
 ///    therefore drawn starting exactly at the container's left edge, not to the left of it.
 final class MarkdownLayoutManager: NSLayoutManager {
-
 
     /// The rect that actually hugs the glyphs on a line, for aligning anything drawn beside text.
     ///
@@ -328,50 +347,82 @@ final class MarkdownLayoutManager: NSLayoutManager {
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             guard glyphRange.location < self.numberOfGlyphs else { return }
             let lineRect = self.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
-            let usedRect = self.lineFragmentUsedRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
-            // The reserved leading space (== paragraphSpacingBefore == displaySize.height): the
-            // gap between the fragment's top and the source text's used rect. Measured from the
-            // real layout, not the assumed displaySize, so the image can never overflow into the
-            // text line if the two ever diverge.
-            let reservedHeight = max(0, usedRect.minY - lineRect.minY)
-            let box = NSRect(
-                x: origin.x + lineRect.minX + 4,
-                y: origin.y + lineRect.minY + 2,
-                width: min(info.displaySize.width, lineRect.width - 8),
-                height: reservedHeight - 4
-            )
-            guard box.width > 0, box.height > 0 else { return }
-            if let image = ImageCache.shared.image(at: info.resolvedURL) {
-                let fitted = Self.aspectFit(imageSize: image.size, into: box)
-                image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1.0,
-                           respectFlipped: true, hints: nil)
-            } else {
-                Self.drawUnavailablePlaceholder(in: box, fileName: info.resolvedURL.lastPathComponent)
-            }
+            // The markup line is inflated (via line height) to `band + one source line`, with the
+            // source glyphs pushed to the bottom slot (see MarkdownStyler). The card occupies the
+            // top `band` region of the fragment; `displaySize.height` IS that band. Using the known
+            // band -- rather than a measured used-rect gap -- works uniformly on the first line too
+            // (line height, unlike paragraphSpacingBefore, is honored for the first paragraph).
+            let band = NSRect(x: origin.x + lineRect.minX, y: origin.y + lineRect.minY,
+                              width: lineRect.width, height: min(info.displaySize.height, lineRect.height))
+            Self.drawImageCard(in: band,
+                               image: ImageCache.shared.image(at: info.resolvedURL),
+                               caption: info.caption,
+                               fileName: info.resolvedURL.lastPathComponent)
         }
     }
 
-    /// Drawn in place of the decoded image when it can't be loaded (missing file, unreadable
-    /// path after a sandbox re-open, corrupt data, etc.) -- so the reserved band never sits
-    /// visually empty and the user has a clue why. Never throws/crashes: `NSString.draw` and
-    /// `NSBezierPath` are always safe to call with a degenerate/tiny rect.
-    static func drawUnavailablePlaceholder(in box: NSRect, fileName: String) {
+    /// Draws the inline-image "figure card" inside its reserved `band`: a rounded container with a
+    /// hairline border and a faint tint, the image aspect-fit and centered in the top area, and a
+    /// small dimmed caption beneath it. When `image` is nil (missing/unreadable file) the image
+    /// area shows an "unavailable" message instead, in the same card, so the band never sits blank.
+    /// Never throws/crashes: `NSString.draw`/`NSBezierPath` are safe on degenerate/tiny rects.
+    static func drawImageCard(in band: NSRect, image: NSImage?, caption: String, fileName: String) {
+        let m = ImageCardMetrics.self
+        let card = NSRect(x: band.minX + m.outerInset, y: band.minY + 2,
+                          width: max(0, band.width - 2 * m.outerInset), height: max(0, band.height - 4))
+        guard card.width > 8, card.height > 8 else { return }
+
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
 
-        let path = NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6)
-        NSColor.quaternaryLabelColor.withAlphaComponent(0.15).setFill()
+        let path = NSBezierPath(roundedRect: card, xRadius: m.cornerRadius, yRadius: m.cornerRadius)
+        NSColor.quaternaryLabelColor.withAlphaComponent(0.07).setFill()
         path.fill()
         NSColor.separatorColor.setStroke()
         path.lineWidth = 1
         path.stroke()
 
+        let inner = card.insetBy(dx: m.padding, dy: m.padding)
+        guard inner.width > 0, inner.height > 0 else { return }
+        // Split the padded interior into an image area (top) and a caption row (bottom). The
+        // caption height is derived from the band, so it stays consistent with the styler's
+        // reservation without the layout manager needing to know the caption font size.
+        let captionRowH = max(0, min(inner.height, inner.height - m.imageAreaHeight - m.captionGap))
+        let imageBox = NSRect(x: inner.minX, y: inner.minY,
+                              width: inner.width, height: max(0, inner.height - captionRowH - m.captionGap))
+        let captionBox = NSRect(x: inner.minX, y: inner.maxY - captionRowH,
+                                width: inner.width, height: captionRowH)
+
+        if let image, imageBox.height > 0 {
+            var fitted = aspectFit(imageSize: image.size, into: imageBox)
+            fitted.origin.x = imageBox.minX + (imageBox.width - fitted.width) / 2
+            fitted.origin.y = imageBox.minY + (imageBox.height - fitted.height) / 2
+            image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1.0,
+                       respectFlipped: true, hints: nil)
+        } else if imageBox.height > 0 {
+            drawUnavailableContent(in: imageBox, fileName: fileName)
+        }
+
+        if captionRowH > 0, !caption.isEmpty {
+            let font = NSFont.systemFont(ofSize: min(13, max(9, captionRowH / 1.3)))
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
+            let text = caption as NSString
+            let size = text.size(withAttributes: attrs)
+            let point = NSPoint(x: captionBox.minX + max(0, (captionBox.width - size.width) / 2),
+                                y: captionBox.minY + max(0, (captionBox.height - size.height) / 2))
+            text.draw(at: point, withAttributes: attrs)
+        }
+    }
+
+    /// The "unavailable" message drawn inside the card's image area when the file can't be loaded
+    /// (missing file, unreadable path after a sandbox re-open, corrupt data).
+    static func drawUnavailableContent(in box: NSRect, fileName: String) {
         let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: min(13, box.height * 0.3)),
+            .font: NSFont.systemFont(ofSize: min(13, max(9, box.height * 0.12))),
             .foregroundColor: NSColor.secondaryLabelColor
         ]
         let subtitleAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: min(11, box.height * 0.24)),
+            .font: NSFont.systemFont(ofSize: min(11, max(8, box.height * 0.10))),
             .foregroundColor: NSColor.tertiaryLabelColor
         ]
         let title = "\u{26A0}\u{FE0E} Image unavailable — click to grant access" as NSString
