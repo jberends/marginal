@@ -198,6 +198,68 @@ final class MarkdownTextView: NSTextView {
         return rect
     }
 
+    /// One indentation level in Marginal is two spaces (matching the list parser's 2-spaces-per-
+    /// level rule), so Tab/Shift-Tab indent and outdent by two — never a literal tab character
+    /// (which would render at the ~8-column default and isn't recognized as list nesting).
+    static let indentUnit = "  "
+
+    // Tab indents every line the selection touches by one level; a bare caret indents its own
+    // line. Line-based (not caret-based) so it reads as "indent this item", the behavior every
+    // list-capable editor uses.
+    override func insertTab(_ sender: Any?) {
+        reindentSelectedLines(outdent: false)
+    }
+
+    // Shift-Tab outdents, removing up to one level (two leading spaces) from each touched line.
+    override func insertBacktab(_ sender: Any?) {
+        reindentSelectedLines(outdent: true)
+    }
+
+    private func reindentSelectedLines(outdent: Bool) {
+        guard let textStorage else { return }
+        let ns = string as NSString
+        let sel = selectedRange()
+        let lineRange = ns.lineRange(for: sel)
+        var block = ns.substring(with: lineRange)
+        let trailingNewline = block.hasSuffix("\n")
+        if trailingNewline { block.removeLast() }
+
+        let lines = block.components(separatedBy: "\n")
+        var removedPerLine: [Int] = []
+        let newLines: [String] = lines.map { line in
+            if outdent {
+                var removed = 0
+                var idx = line.startIndex
+                while removed < Self.indentUnit.count, idx < line.endIndex, line[idx] == " " {
+                    idx = line.index(after: idx); removed += 1
+                }
+                removedPerLine.append(removed)
+                return String(line[idx...])
+            } else {
+                removedPerLine.append(-Self.indentUnit.count)   // negative == inserted
+                return Self.indentUnit + line
+            }
+        }
+        // A pure outdent that changes nothing (no line had leading spaces) shouldn't push an
+        // empty undo step or fight the caret.
+        if outdent, removedPerLine.allSatisfy({ $0 == 0 }) { return }
+
+        var newBlock = newLines.joined(separator: "\n")
+        if trailingNewline { newBlock += "\n" }
+
+        guard shouldChangeText(in: lineRange, replacementString: newBlock) else { return }
+        textStorage.replaceCharacters(in: lineRange, with: newBlock)
+        didChangeText()
+
+        // Keep the selection over the same logical text: shift its start by the first line's
+        // delta, and its end by the total delta across every touched line.
+        let firstDelta = -removedPerLine.first! // +2 when indenting, -removed when outdenting
+        let totalDelta = -removedPerLine.reduce(0, +)
+        let newLocation = max(lineRange.location, sel.location + firstDelta)
+        let newEnd = max(newLocation, sel.location + sel.length + totalDelta)
+        setSelectedRange(NSRange(location: newLocation, length: newEnd - newLocation))
+    }
+
     override func keyDown(with event: NSEvent) {
         if event.modifierFlags.contains(.command), let characters = event.charactersIgnoringModifiers {
             switch characters {

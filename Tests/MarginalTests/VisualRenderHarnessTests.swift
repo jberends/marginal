@@ -8,7 +8,7 @@ import AppKit
 final class VisualRenderHarnessTests: XCTestCase {
 
     @MainActor
-    private func renderToPNG(text: String, fontSize: CGFloat = 15, width: CGFloat = 700, outputPath: String) throws {
+    private func renderToPNG(text: String, fontSize: CGFloat = 15, width: CGFloat = 700, cursorLocation: Int? = nil, outputPath: String) throws {
         let model = MarkdownDocumentModel(
             inlineStyles: MarkdownParser.parseInlineStyles(in: text),
             headers: MarkdownParser.parseHeaders(in: text),
@@ -22,7 +22,8 @@ final class VisualRenderHarnessTests: XCTestCase {
             images: MarkdownParser.parseImages(in: text)
         )
         let baseFont = NSFont.systemFont(ofSize: fontSize)
-        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        let cursorIndex = cursorLocation.flatMap { text.index(text.startIndex, offsetBy: $0, limitedBy: text.endIndex) }
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: cursorIndex)
 
         let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
         textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
@@ -124,6 +125,20 @@ final class VisualRenderHarnessTests: XCTestCase {
         let outputPath = NSHomeDirectory() + "/render-preview.png"
         try renderToPNG(text: text, outputPath: outputPath)
         print("RENDER_PREVIEW_PATH: \(outputPath)")
+    }
+
+    @MainActor
+    func testRenderNestedListForVisualInspection() throws {
+        let text = """
+        - dit is een list
+        - Dit is listitem 2
+        - Dit is listitem 3
+             - dit is echt een indented list
+             - weten we het zeker?
+        """
+        let outputPath = NSHomeDirectory() + "/render-nested-list.png"
+        try renderToPNG(text: text, outputPath: outputPath)
+        print("RENDER_NESTED_LIST_PATH: \(outputPath)")
     }
 
     @MainActor

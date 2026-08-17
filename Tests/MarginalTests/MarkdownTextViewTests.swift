@@ -69,6 +69,45 @@ final class MarkdownTextViewTests: XCTestCase {
     }
 
     @MainActor
+    func testTabIndentsCurrentLineByTwoSpaces() {
+        let tv = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        tv.string = "- item"
+        tv.setSelectedRange(NSRange(location: 6, length: 0))
+        tv.insertTab(nil)
+        XCTAssertEqual(tv.string, "  - item")
+        XCTAssertEqual(tv.selectedRange(), NSRange(location: 8, length: 0), "caret follows its text right by two")
+    }
+
+    @MainActor
+    func testShiftTabOutdentsUpToTwoLeadingSpaces() {
+        let tv = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        tv.string = "    - nested"   // four leading spaces
+        tv.setSelectedRange(NSRange(location: 6, length: 0))   // caret on the 'n'
+        tv.insertBacktab(nil)
+        XCTAssertEqual(tv.string, "  - nested", "removes exactly one level (two spaces)")
+        XCTAssertEqual(tv.selectedRange(), NSRange(location: 4, length: 0))
+    }
+
+    @MainActor
+    func testShiftTabWithNoLeadingSpacesIsANoOp() {
+        let tv = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        tv.string = "- item"
+        tv.setSelectedRange(NSRange(location: 3, length: 0))
+        tv.insertBacktab(nil)
+        XCTAssertEqual(tv.string, "- item")
+        XCTAssertEqual(tv.selectedRange(), NSRange(location: 3, length: 0))
+    }
+
+    @MainActor
+    func testTabIndentsEveryLineInAMultiLineSelection() {
+        let tv = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        tv.string = "- a\n- b"
+        tv.setSelectedRange(NSRange(location: 0, length: 7))
+        tv.insertTab(nil)
+        XCTAssertEqual(tv.string, "  - a\n  - b", "both selected lines indent")
+    }
+
+    @MainActor
     func testCommandPlusIncreasesFontSizeSameAsCommandEquals() {
         let textView = MarkdownTextView()
         let delegate = RecordingShortcutDelegate()

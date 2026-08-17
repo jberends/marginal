@@ -30,6 +30,9 @@ All notable changes to Marginal are documented here. The format follows
   preserved on the same Mac), so linked images still display the next time you open the document.
 - The **line-number gutter** now draws a faint vertical bar spanning the caret line's full height,
   so a tall line (like an image figure card) reads as tall at a glance.
+- **Tab / Shift-Tab indent and outdent** list items by one level — two spaces, matching the list
+  parser's nesting unit — instead of inserting a literal tab (which rendered ~8 columns wide and
+  wasn't recognized as list nesting). Works across a multi-line selection and is undoable.
 
 ### Fixed
 

@@ -354,8 +354,12 @@ final class MarkdownLayoutManager: NSLayoutManager {
             // (line height, unlike paragraphSpacingBefore, is honored for the first paragraph).
             let band = NSRect(x: origin.x + lineRect.minX, y: origin.y + lineRect.minY,
                               width: lineRect.width, height: min(info.displaySize.height, lineRect.height))
+            // drawBackground always runs on the main thread; older SDKs (the CI's Xcode 16.4)
+            // don't annotate NSLayoutManager main-actor, so reach the @MainActor ImageCache via
+            // assumeIsolated rather than leaving the call in a nonisolated context.
+            let image = MainActor.assumeIsolated { ImageCache.shared.image(at: info.resolvedURL) }
             Self.drawImageCard(in: band,
-                               image: ImageCache.shared.image(at: info.resolvedURL),
+                               image: image,
                                caption: info.caption,
                                fileName: info.resolvedURL.lastPathComponent)
         }
@@ -391,7 +395,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
         path.fill()
         NSGraphicsContext.restoreGraphicsState()
 
-        NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+        NSColor.separatorColor.withAlphaComponent(0.12).setStroke()   // barely there — a hint of a card
         path.lineWidth = 0.5   // device-hairline on retina
         path.stroke()
 
