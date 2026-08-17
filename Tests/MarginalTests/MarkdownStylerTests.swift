@@ -741,6 +741,11 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(clamped.height, 20, accuracy: 0.5, "caret is one source line tall, not card-tall")
         XCTAssertEqual(clamped.maxY, raw.maxY, accuracy: 0.5, "caret sits at the bottom of the fragment")
         XCTAssertLessThan(clamped.height, band, "caret must never be as tall as the card")
+
+        // On a WRAPPED source line the fragment is already normal height (< band), so the clamp
+        // must leave the caret untouched -- never shrink it to a negative/zero height.
+        let normal = NSRect(x: 10, y: 400, width: 2, height: 18)
+        XCTAssertEqual(tv.clampedImageInsertionRect(normal), normal, "a normal-height caret is left as-is")
     }
 
     func testImageCaptionFallsBackToFilenameStemWhenAltEmpty() {

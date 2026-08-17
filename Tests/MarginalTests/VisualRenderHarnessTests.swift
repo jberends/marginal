@@ -256,6 +256,57 @@ final class VisualRenderHarnessTests: XCTestCase {
         return (rep, fullBand, textBand)
     }
 
+    /// Lays out `text` (image source revealed) and returns the heights, top-to-bottom, of the line
+    /// fragments the `.marginalImage` run spans -- so a test can check that only the first carries
+    /// the card band and any wrapped continuation lines are a normal source-line tall.
+    @MainActor
+    private func imageSourceFragmentHeights(text: String, width: CGFloat) throws -> [CGFloat] {
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let cursor = model.images.first?.fullRange.lowerBound   // caret inside → active/revealed
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: cursor)
+
+        let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
+        textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
+        textView.isRichText = true
+        textView.textContainerInset = NSSize(width: 40, height: 24)
+        textView.textContainer?.widthTracksTextView = true
+        textView.textStorage?.setAttributedString(attributed)
+        guard let lm = textView.layoutManager, let container = textView.textContainer,
+              let storage = textView.textStorage else { throw NSError(domain: "test", code: 1) }
+        lm.ensureLayout(for: container)
+
+        var imageRange = NSRange(location: NSNotFound, length: 0)
+        storage.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: storage.length)) { v, r, stop in
+            if v != nil { imageRange = r; stop.pointee = true }
+        }
+        guard imageRange.location != NSNotFound else { throw NSError(domain: "test", code: 2) }
+        let glyphRange = lm.glyphRange(forCharacterRange: imageRange, actualCharacterRange: nil)
+        var heights: [CGFloat] = []
+        lm.enumerateLineFragments(forGlyphRange: glyphRange) { rect, _, _, _, _ in
+            heights.append(rect.height)
+        }
+        return heights
+    }
+
+    /// Regression: a long image source that WRAPS must keep its wrapped continuation lines a normal
+    /// source-line tall. The card band is reserved via the paragraph's (tall) line height, which
+    /// applied to every visual line; ImageWrapLineFragmentDelegate shrinks the continuations back.
+    @MainActor
+    func testWrappedImageSourceContinuationLinesAreNormalHeight() throws {
+        // A long alt+path that must wrap at a narrow width in the revealed (monospace) source.
+        let text = "![SleufScan-Icon-1024](/Users/jochem/Desktop/SleufScan-Icon-1024-with-a-really-long-name-to-force-wrapping.png)"
+        let heights = try imageSourceFragmentHeights(text: text, width: 300)
+        XCTAssertGreaterThanOrEqual(heights.count, 2, "the source must wrap into at least two lines at this width")
+
+        let band = ImageCardMetrics.bandHeight(captionFontSize: 15 * 0.8)
+        XCTAssertGreaterThan(heights[0], band, "the first line carries the reserved card band")
+        for h in heights.dropFirst() {
+            XCTAssertLessThan(h, band, "wrapped continuation lines must not carry the card band")
+            XCTAssertLessThan(h, 60, "wrapped continuation lines are ~a normal text line tall")
+        }
+    }
+
     /// Regression: an image on the FIRST line reserves its full band (and draws its card), the
     /// same as a mid-document image. TextKit drops `paragraphSpacingBefore` on the first
     /// paragraph, so reserving via that (the old approach) left a first-line image with a 0-height

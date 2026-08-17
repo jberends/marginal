@@ -40,6 +40,44 @@ enum ImageCardMetrics {
     }
 }
 
+/// Keeps WRAPPED continuation lines of an image markup paragraph at a normal source-line height.
+///
+/// The image paragraph reserves the card band via a tall line height (min == max == band + one
+/// source line) applied to the whole paragraph, with the source glyphs pushed into the bottom slot
+/// by a negative baseline offset. That is correct for the FIRST visual line -- the card sits in the
+/// reserved band above it -- but a long `![alt](path)` source wraps, and every wrapped continuation
+/// line inherited the same card-tall line height and pushed-down baseline, leaving a card-sized gap
+/// above each wrapped line.
+///
+/// This delegate SHRINKS a continuation fragment (one whose glyphs fall inside a `.marginalImage`
+/// run but that does NOT start at the run's first character) back to a normal source line: it
+/// removes the band from the fragment/used height and undoes the baseline push. Shrinking only --
+/// never growing -- so `usedRect(for:)` stays correct and nothing is clipped (growing via this
+/// delegate does NOT get counted in usedRect, which is why the band itself is reserved by line
+/// height, not here).
+final class ImageWrapLineFragmentDelegate: NSObject, NSLayoutManagerDelegate {
+    func layoutManager(_ layoutManager: NSLayoutManager,
+                       shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+                       lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
+                       baselineOffset: UnsafeMutablePointer<CGFloat>,
+                       in textContainer: NSTextContainer,
+                       forGlyphRange glyphRange: NSRange) -> Bool {
+        guard let storage = layoutManager.textStorage, storage.length > 0 else { return false }
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphRange.location)
+        guard charIndex < storage.length else { return false }
+        var runRange = NSRange(location: 0, length: 0)
+        guard let info = storage.attribute(.marginalImage, at: charIndex, effectiveRange: &runRange) as? ImageDisplayInfo,
+              charIndex > runRange.location else { return false }  // only wrapped continuations
+        let band = info.displaySize.height
+        guard lineFragmentRect.pointee.size.height > band else { return false }  // never go <= 0
+        lineFragmentRect.pointee.size.height -= band
+        lineFragmentUsedRect.pointee.size.height = min(lineFragmentUsedRect.pointee.size.height,
+                                                       lineFragmentRect.pointee.size.height)
+        baselineOffset.pointee -= band
+        return true
+    }
+}
+
 /// One table row's grid geometry, computed once per table in MarkdownStyler and drawn by
 /// MarkdownLayoutManager. Column boundaries are relative x-offsets from the row's own left edge
 /// (0, then each column's cumulative slot width), shared by every row in the same table so the
@@ -78,6 +116,21 @@ struct EmojiGlyphInfo: Equatable {
 ///    with a negative x offset into that margin was silently clipped and invisible). The bar is
 ///    therefore drawn starting exactly at the container's left edge, not to the left of it.
 final class MarkdownLayoutManager: NSLayoutManager {
+
+    // Shrinks wrapped continuation lines of an image markup paragraph back to a normal source-line
+    // height (the whole paragraph carries a card-tall line height to reserve the band). Held
+    // strongly because NSLayoutManager.delegate is weak.
+    private let imageWrapDelegate = ImageWrapLineFragmentDelegate()
+
+    override init() {
+        super.init()
+        delegate = imageWrapDelegate
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        delegate = imageWrapDelegate
+    }
 
     /// The rect that actually hugs the glyphs on a line, for aligning anything drawn beside text.
     ///
