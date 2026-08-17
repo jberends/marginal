@@ -22,6 +22,11 @@ final class DocumentViewController: NSViewController {
     weak var document: MarkdownDocument?
 
     private lazy var imageStore = DocumentImageStore()
+    // Not private: tests replace this with an injectable-prompt instance to drive the
+    // granted/declined paths without a real NSOpenPanel.
+    lazy var imageFolderAccess = DocumentFolderAccess()
+    // Tests set this to suppress the real NSAlert `prepareForSave` shows on declined/failed access.
+    var suppressSaveWarningForTests = false
 
     override func loadView() {
         let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 600))
@@ -467,10 +472,16 @@ extension DocumentViewController {
     /// <doc>.assets/ and rewrites their absolute temp paths in the text to relative. Updates both
     /// the text view storage and document.text so the written file and the open editor agree.
     /// No-op when the document has no managed (temp) images -- linked/absolute paths are left as-is.
+    ///
+    /// Writing a sibling ".assets" folder needs write access to the target folder itself, which
+    /// under the sandbox a save panel does NOT grant (it grants access only to the named file) --
+    /// so this acquires folder access via `imageFolderAccess` first. If access is declined or the
+    /// relocation fails, the temp paths are left untouched (never rewritten to a dead reference)
+    /// and a visible warning is shown instead of a silent beep-and-swallow.
     func prepareForSave(to targetURL: URL, now: Date) {
         let docName = targetURL.deletingPathExtension().lastPathComponent
-        let assetsDir = targetURL.deletingLastPathComponent()
-            .appendingPathComponent("\(docName).assets", isDirectory: true)
+        let folder = targetURL.deletingLastPathComponent()
+        let assetsDir = folder.appendingPathComponent("\(docName).assets", isDirectory: true)
 
         let text = textView.string
         let spans = MarkdownParser.parseImages(in: text)
@@ -491,11 +502,19 @@ extension DocumentViewController {
         var seenManagedURLs = Set<URL>()
         let uniqueManagedURLs = managed.map { $0.1 }.filter { seenManagedURLs.insert($0).inserted }
 
-        let moveMap: [URL: URL]
-        do {
-            moveMap = try imageStore.relocateTempFiles(uniqueManagedURLs, into: assetsDir, now: now)
-        } catch {
-            NSSound.beep()
+        let reason = "Marginal needs permission to save this document's images in this folder."
+        // `relocateTempFiles` throws; the closure swallows that into an empty map (rather than
+        // propagating an optional out of `withAccess`, which returns T? itself -- doing the
+        // try/catch here keeps this a single-level optional instead of a [URL: URL]?? that would
+        // need an extra flatten) and an empty map is then treated the same as a decline below.
+        let moveMap: [URL: URL]? = imageFolderAccess.withAccess(toFolder: folder, reason: reason) { _ in
+            (try? imageStore.relocateTempFiles(uniqueManagedURLs, into: assetsDir, now: now)) ?? [:]
+        }
+
+        guard let moveMap, !moveMap.isEmpty else {
+            // Declined, or the move failed: keep the temp paths (the text still saves, and images
+            // still resolve from temp this session) and warn -- never a silent dead reference.
+            warnImagesNotSaved()
             return
         }
 
@@ -513,17 +532,27 @@ extension DocumentViewController {
         restyle(cursorLocation: currentCursorIndex())
     }
 
-    /// Chooses the on-disk destination by document state and returns the markdown path to embed.
-    /// Managed image: temp+absolute while untitled, <doc>.assets/name+relative while saved.
-    ///
-    /// "Saved" means the user has explicitly saved this document to a real location, not merely
-    /// that `fileURL` is non-nil: `autosavesInPlace = true` (see `MarkdownDocument`) means a brand
-    /// new, never-saved document already has a non-nil `fileURL` pointing into the sandbox's
-    /// hidden "Autosave Information" folder. Writing relative to THAT would silently strand the
-    /// image there (it's never relocated, since `prepareForSave` only relocates files that live
-    /// under `imageStore.tempDirectory`). `isDraft` is the NSDocument-native signal for exactly
-    /// this: true for an autosaved-but-never-explicitly-saved document, false once the user does
-    /// Save/Save As.
+    /// Shown when `prepareForSave` cannot relocate images (declined access, or the move itself
+    /// failed) -- surfaces the loss instead of leaving it as a silent beep. Suppressed in tests,
+    /// where driving a real `NSAlert` sheet headlessly isn't meaningful.
+    private func warnImagesNotSaved() {
+        guard !suppressSaveWarningForTests else { return }
+        let alert = NSAlert()
+        alert.messageText = "Images were not saved alongside the document"
+        alert.informativeText = "Folder access was declined, so pasted images remain temporary and may be lost. Save again and grant access to keep them."
+        alert.alertStyle = .warning
+        if let window = view.window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    /// Writes managed image data into the temp container and returns the absolute temp path to
+    /// embed. Always temp+absolute, regardless of whether the document is untitled or already
+    /// saved: relocating into `<doc>.assets/` requires folder write access that only an explicit
+    /// save can acquire (see `prepareForSave`), so every insert -- paste or drop -- lands here
+    /// first and is relocated later, at save time.
     func insertImageData(_ data: Data, sourceExtension: String, now: Date) -> String? {
         let ext = Self.normalizedImageExtension(sourceExtension)
         do {

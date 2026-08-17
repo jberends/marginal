@@ -70,8 +70,15 @@ final class ImageInsertionTests: XCTestCase {
         try? FileManager.default.removeItem(at: ext)
     }
 
+    /// Injects a `DocumentFolderAccess` whose prompt always grants, so `prepareForSave` tests
+    /// never hit the real `NSOpenPanel` (which would hang a headless test run).
+    static func grantingFolderAccess() -> DocumentFolderAccess {
+        DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in req }
+    }
+
     func testPrepareForSaveRelocatesAndRewrites() throws {
         let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess()
         let now = Date(timeIntervalSince1970: 1_755_000_000)
         let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
         vc.textView.string = "before ![](\(tempPath)) after"
@@ -107,6 +114,7 @@ final class ImageInsertionTests: XCTestCase {
     /// Two managed images in one document is the property back-to-front rewriting protects.
     func testPrepareForSaveRewritesMultipleManagedImagesCorrectly() throws {
         let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess()
         let now = Date(timeIntervalSince1970: 1_755_000_000)
         let tempA = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
         let tempB = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
@@ -132,6 +140,7 @@ final class ImageInsertionTests: XCTestCase {
     /// rewritten to the same relative path.
     func testPrepareForSaveDedupesDuplicateReferencesToSameTempFile() throws {
         let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess()
         let now = Date(timeIntervalSince1970: 1_755_000_000)
         let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
         vc.textView.string = "one ![](\(tempPath)) two ![](\(tempPath)) three"
@@ -146,6 +155,44 @@ final class ImageInsertionTests: XCTestCase {
         let assetsDir = dir.appendingPathComponent("MyNote.assets")
         XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(name).path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: tempPath))
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func testPrepareForSaveWithGrantedAccessRelocates() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+        let temp = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        vc.textView.string = "x ![](\(temp)) y"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.imageFolderAccess = DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in req }
+
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        let name = URL(fileURLWithPath: temp).lastPathComponent
+        XCTAssertEqual(vc.textView.string, "x ![](MyNote.assets/\(name)) y")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("MyNote.assets").appendingPathComponent(name).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temp))
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func testPrepareForSaveWithDeclinedAccessKeepsTempPathAndDoesNotThrow() throws {
+        let (vc, _) = try makeVC(saved: false)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+        let temp = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        vc.textView.string = "![](\(temp))"
+        vc.document?.text = vc.textView.string
+        vc.imageFolderAccess = DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { _, _ in nil }
+        vc.suppressSaveWarningForTests = true   // don't show an NSAlert in tests
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        XCTAssertEqual(vc.textView.string, "![](\(temp))", "declined access must leave the temp path untouched")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: temp))
         try? FileManager.default.removeItem(at: dir)
     }
 
