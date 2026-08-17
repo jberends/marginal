@@ -13,7 +13,12 @@ All notable changes to Marginal are documented here. The format follows
   small dimmed line beneath the still-anchored image (clicking away collapses it, without the page
   jumping). Dragging an image **file** from Finder links it by absolute path.
 - **Image export**: images render as real `<img>` in **PDF and HTML export** and are embedded as
-  self-contained data URIs, so exports and **Copy as HTML** carry the picture with them.
+  self-contained data URIs, so exports and **Copy as HTML** carry the picture with them. Exported
+  PDF images are capped to about half a page tall (keeping their aspect ratio) so a single image
+  no longer takes over a page.
+- On saving, an option in the folder-access prompt can also **copy externally-linked images**
+  (ones dragged from elsewhere on disk) into the document's `.assets/` folder, making the document
+  self-contained.
 
 ### Fixed
 
