@@ -180,12 +180,22 @@ final class DocumentViewController: NSViewController {
             gutterView.lineNumber = nil
             return
         }
+        let ns = textView.string as NSString
         let location = textView.selectedRange().location
-        var lineRect: NSRect
-        if location < (textView.textStorage?.length ?? 0) {
-            let glyphIndex = layoutManager.glyphIndexForCharacter(at: location)
-            lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-        } else {
+        var lineRect = CGRect.null
+        if ns.length > 0, location < ns.length {
+            // Union every visual fragment of the caret's whole LOGICAL line (a paragraph up to its
+            // \n), not just the fragment the caret sits in -- so a line that wraps, or an image
+            // line whose first fragment carries the tall card band, shows the gutter bar spanning
+            // its full height. boundingRect(forGlyphRange:) only returns one fragment for a
+            // multi-fragment range, so the fragments must be unioned explicitly.
+            let charRange = ns.lineRange(for: NSRange(location: location, length: 0))
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { rect, _, _, _, _ in
+                lineRect = lineRect.isNull ? rect : lineRect.union(rect)
+            }
+        }
+        if lineRect.isNull || lineRect.isEmpty {
             // Caret at the very end: the extra line fragment when the text ends in a newline,
             // else the last real line.
             lineRect = layoutManager.extraLineFragmentRect
