@@ -71,6 +71,20 @@ final class DocumentImageStore {
         return map
     }
 
+    /// Copies an externally-linked source file (not a managed temp file) into `assetsDir`
+    /// (created if needed), uniquifying the destination name the same way managed relocations
+    /// do. The source is left untouched -- unlike `relocateTempFiles`, this is a copy, not a
+    /// move, since the original linked file may still be referenced elsewhere.
+    func copyExternalFile(at source: URL, into assetsDir: URL, now: Date) throws -> URL {
+        if !fm.fileExists(atPath: assetsDir.path) {
+            try fm.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        }
+        let name = uniqueFilename(ext: source.pathExtension, now: now, in: assetsDir)
+        let dest = assetsDir.appendingPathComponent(name)
+        try fm.copyItem(at: source, to: dest)
+        return dest
+    }
+
     /// Removes tempDirectory. Call when the document closes.
     func cleanupTemp() {
         try? fm.removeItem(at: tempDirectory)

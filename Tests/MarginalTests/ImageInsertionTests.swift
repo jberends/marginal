@@ -73,7 +73,7 @@ final class ImageInsertionTests: XCTestCase {
     /// Injects a `DocumentFolderAccess` whose prompt always grants, so `prepareForSave` tests
     /// never hit the real `NSOpenPanel` (which would hang a headless test run).
     static func grantingFolderAccess() -> DocumentFolderAccess {
-        DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in req }
+        DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in (req, false) }
     }
 
     func testPrepareForSaveRelocatesAndRewrites() throws {
@@ -167,7 +167,7 @@ final class ImageInsertionTests: XCTestCase {
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        vc.imageFolderAccess = DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in req }
+        vc.imageFolderAccess = DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in (req, false) }
 
         vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
 
@@ -193,6 +193,113 @@ final class ImageInsertionTests: XCTestCase {
 
         XCTAssertEqual(vc.textView.string, "![](\(temp))", "declined access must leave the temp path untouched")
         XCTAssertTrue(FileManager.default.fileExists(atPath: temp))
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// Injects a `DocumentFolderAccess` that grants access and reports the given
+    /// "also copy externally-linked images" checkbox state, so `prepareForSave` tests can drive
+    /// the opt-in flag without a real `NSOpenPanel`.
+    static func grantingFolderAccess(copyLinkedImages: Bool) -> DocumentFolderAccess {
+        DocumentFolderAccess(defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!) { req, _ in
+            (req, copyLinkedImages)
+        }
+    }
+
+    func testPrepareForSaveCopiesLinkedImageWhenOptedIn() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess(copyLinkedImages: true)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+
+        // a managed (pasted) temp image
+        let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+
+        // a linked (externally referenced) image: a real, readable source file outside the doc folder
+        let linkedSource = FileManager.default.temporaryDirectory.appendingPathComponent("linked-\(UUID().uuidString).png")
+        try ImageInsertionTests.onePixelPNG().write(to: linkedSource)
+
+        vc.textView.string = "managed ![](\(tempPath)) linked ![](\(linkedSource.path)) end"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        let assetsDir = dir.appendingPathComponent("MyNote.assets")
+        let managedName = URL(fileURLWithPath: tempPath).lastPathComponent
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(managedName).path))
+
+        XCTAssertFalse(vc.textView.string.contains(linkedSource.path), "linked image path should have been rewritten to relative")
+        XCTAssertTrue(vc.textView.string.contains("MyNote.assets/"), "linked image should now point into MyNote.assets")
+        // The linked source file must still exist -- this is a copy, not a move.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: linkedSource.path))
+
+        // Find the rewritten linked reference and confirm the copy landed on disk.
+        guard let range = vc.textView.string.range(of: "linked ![](") else {
+            return XCTFail("could not find rewritten linked markup")
+        }
+        let afterOpen = vc.textView.string[range.upperBound...]
+        guard let closeRange = afterOpen.range(of: ")") else {
+            return XCTFail("could not find closing paren")
+        }
+        let rewrittenPath = String(afterOpen[..<closeRange.lowerBound])
+        XCTAssertTrue(rewrittenPath.hasPrefix("MyNote.assets/"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(rewrittenPath).path))
+
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.removeItem(at: linkedSource)
+    }
+
+    func testPrepareForSaveLeavesLinkedImageAbsoluteWhenNotOptedIn() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess(copyLinkedImages: false)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+
+        let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        let linkedSource = FileManager.default.temporaryDirectory.appendingPathComponent("linked-\(UUID().uuidString).png")
+        try ImageInsertionTests.onePixelPNG().write(to: linkedSource)
+
+        vc.textView.string = "managed ![](\(tempPath)) linked ![](\(linkedSource.path)) end"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        // Managed image still relocates.
+        let assetsDir = dir.appendingPathComponent("MyNote.assets")
+        let managedName = URL(fileURLWithPath: tempPath).lastPathComponent
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(managedName).path))
+
+        // Linked image stays untouched (absolute, unchanged).
+        XCTAssertTrue(vc.textView.string.contains("![](\(linkedSource.path))"), "linked image path must remain absolute when not opted in")
+
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.removeItem(at: linkedSource)
+    }
+
+    func testPrepareForSaveSkipsUnreadableLinkedImageWithoutThrowing() throws {
+        let (vc, _) = try makeVC(saved: false)
+        vc.imageFolderAccess = Self.grantingFolderAccess(copyLinkedImages: true)
+        let now = Date(timeIntervalSince1970: 1_755_000_000)
+
+        let tempPath = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(), sourceExtension: "png", now: now))
+        // A linked path to a file that doesn't exist.
+        let missingSource = FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID().uuidString).png")
+
+        vc.textView.string = "managed ![](\(tempPath)) linked ![](\(missingSource.path)) end"
+        vc.document?.text = vc.textView.string
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        vc.prepareForSave(to: dir.appendingPathComponent("MyNote.md"), now: now)
+
+        // Managed image still relocates; the missing linked source stays absolute, no crash/throw.
+        let assetsDir = dir.appendingPathComponent("MyNote.assets")
+        let managedName = URL(fileURLWithPath: tempPath).lastPathComponent
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assetsDir.appendingPathComponent(managedName).path))
+        XCTAssertTrue(vc.textView.string.contains("![](\(missingSource.path))"), "unreadable linked source must be left as an absolute path")
+
         try? FileManager.default.removeItem(at: dir)
     }
 

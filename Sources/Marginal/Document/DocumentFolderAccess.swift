@@ -14,8 +14,9 @@ import AppKit
 @MainActor
 final class DocumentFolderAccess {
     private let defaults: UserDefaults
-    private let promptForFolder: (_ folder: URL, _ reason: String) -> URL?
+    private let promptForFolder: (_ folder: URL, _ reason: String) -> (url: URL, copyLinkedImages: Bool)?
     private static let bookmarksKey = "imageFolderBookmarks"
+    private static let copyLinkedKey = "imageFolderCopyLinked"
 
     /// In-memory record of folders granted this session. `bookmarkData(options: .withSecurityScope)`
     /// can return nil for URLs that never went through a real security-scoped NSOpenPanel grant
@@ -30,13 +31,14 @@ final class DocumentFolderAccess {
     private var retainedScopedURLs: [String: URL] = [:]
 
     init(defaults: UserDefaults = .standard,
-         promptForFolder: @escaping (_ folder: URL, _ reason: String) -> URL?) {
+         promptForFolder: @escaping (_ folder: URL, _ reason: String) -> (url: URL, copyLinkedImages: Bool)?) {
         self.defaults = defaults
         self.promptForFolder = promptForFolder
     }
 
     convenience init(defaults: UserDefaults = .standard) {
-        // Live path: a directory NSOpenPanel pre-pointed at the folder.
+        // Live path: a directory NSOpenPanel pre-pointed at the folder, with an accessory
+        // checkbox letting the user opt in to also copying externally-linked images.
         self.init(defaults: defaults) { folder, reason in
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true
@@ -45,7 +47,23 @@ final class DocumentFolderAccess {
             panel.directoryURL = folder
             panel.prompt = "Grant Access"
             panel.message = reason
-            return panel.runModal() == .OK ? panel.url : nil
+
+            let checkbox = NSButton(checkboxWithTitle: "Also copy externally-linked images into this folder",
+                                     target: nil, action: nil)
+            checkbox.state = .off
+            checkbox.translatesAutoresizingMaskIntoConstraints = false
+            let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 30))
+            accessory.addSubview(checkbox)
+            NSLayoutConstraint.activate([
+                checkbox.leadingAnchor.constraint(equalTo: accessory.leadingAnchor, constant: 16),
+                checkbox.trailingAnchor.constraint(lessThanOrEqualTo: accessory.trailingAnchor, constant: -16),
+                checkbox.topAnchor.constraint(equalTo: accessory.topAnchor, constant: 4),
+                checkbox.bottomAnchor.constraint(equalTo: accessory.bottomAnchor, constant: -4)
+            ])
+            panel.accessoryView = accessory
+
+            guard panel.runModal() == .OK, let url = panel.url else { return nil }
+            return (url, checkbox.state == .on)
         }
     }
 
@@ -59,6 +77,19 @@ final class DocumentFolderAccess {
         var b = bookmarks(); b.removeValue(forKey: key); defaults.set(b, forKey: Self.bookmarksKey)
     }
     private func key(for folder: URL) -> String { folder.standardizedFileURL.path }
+
+    private func copyLinkedFlags() -> [String: Bool] {
+        defaults.dictionary(forKey: Self.copyLinkedKey) as? [String: Bool] ?? [:]
+    }
+    private func setCopyLinkedFlag(_ value: Bool, for key: String) {
+        var f = copyLinkedFlags(); f[key] = value; defaults.set(f, forKey: Self.copyLinkedKey)
+    }
+
+    /// Whether the user opted in (at the most recent grant for this folder) to also copying
+    /// externally-linked images into it on save. Defaults to false (opt-in feature).
+    func shouldCopyLinkedImages(forFolder folder: URL) -> Bool {
+        copyLinkedFlags()[key(for: folder)] ?? false
+    }
 
     /// Resolves a stored bookmark for `folder` into a usable URL, or nil if none/stale.
     /// The returned URL has NOT had security scope started; use `withAccess`.
@@ -84,9 +115,11 @@ final class DocumentFolderAccess {
     /// or nil if the user declined. Security scope is NOT started here.
     func acquireAccess(toFolder folder: URL, reason: String) -> URL? {
         if let existing = writableURL(forFolder: folder) { return existing }
-        guard let granted = promptForFolder(folder, reason) else { return nil }
+        guard let result = promptForFolder(folder, reason) else { return nil }
+        let granted = result.url
         let grantedKey = key(for: granted)
         sessionGranted.insert(grantedKey)
+        setCopyLinkedFlag(result.copyLinkedImages, for: grantedKey)
         if let data = try? granted.bookmarkData(options: [.withSecurityScope],
                                                  includingResourceValuesForKeys: nil,
                                                  relativeTo: nil) {

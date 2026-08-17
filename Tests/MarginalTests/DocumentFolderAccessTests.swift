@@ -18,7 +18,7 @@ final class DocumentFolderAccessTests: XCTestCase {
         var promptCount = 0
         let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
             promptCount += 1
-            return requested   // user grants the requested folder
+            return (requested, false)   // user grants the requested folder
         }
         let first = access.acquireAccess(toFolder: folder, reason: "test")
         XCTAssertEqual(first?.standardizedFileURL, folder.standardizedFileURL)
@@ -38,7 +38,7 @@ final class DocumentFolderAccessTests: XCTestCase {
 
     func testWithAccessRunsBodyWhenGrantedAndSkipsWhenDeclined() throws {
         let folder = try tempFolder()
-        let granting = DocumentFolderAccess(defaults: isolatedDefaults()) { req, _ in req }
+        let granting = DocumentFolderAccess(defaults: isolatedDefaults()) { req, _ in (req, false) }
         var ran = false
         let result = granting.withAccess(toFolder: folder, reason: "r") { url -> String in
             ran = true
@@ -61,7 +61,7 @@ final class DocumentFolderAccessTests: XCTestCase {
         var promptCount = 0
         let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
             promptCount += 1
-            return requested
+            return (requested, false)
         }
         XCTAssertFalse(access.beginRetainedAccess(toFolder: folder))
         XCTAssertEqual(promptCount, 0, "beginRetainedAccess must never prompt")
@@ -72,7 +72,7 @@ final class DocumentFolderAccessTests: XCTestCase {
         var promptCount = 0
         let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
             promptCount += 1
-            return requested
+            return (requested, false)
         }
         _ = access.acquireAccess(toFolder: folder, reason: "grant")
         XCTAssertEqual(promptCount, 1)
@@ -85,7 +85,7 @@ final class DocumentFolderAccessTests: XCTestCase {
 
     func testEndRetainedAccessClearsRetainedScopesAndIsSafeWhenNothingRetained() throws {
         let folder = try tempFolder()
-        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in requested }
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in (requested, false) }
         // Safe no-op with nothing retained yet.
         access.endRetainedAccess()
 
@@ -96,5 +96,41 @@ final class DocumentFolderAccessTests: XCTestCase {
         // A bookmark still exists after ending retained access, so re-beginning (from the
         // bookmark, without a fresh prompt) still succeeds.
         XCTAssertTrue(access.beginRetainedAccess(toFolder: folder))
+    }
+
+    // MARK: - shouldCopyLinkedImages (opt-in flag persisted per folder)
+
+    func testShouldCopyLinkedImagesTrueAfterGrantingWithCheckboxOn() throws {
+        let folder = try tempFolder()
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
+            (requested, true)   // user checked "also copy externally-linked images"
+        }
+        XCTAssertFalse(access.shouldCopyLinkedImages(forFolder: folder), "default before any grant is false")
+        _ = access.acquireAccess(toFolder: folder, reason: "test")
+        XCTAssertTrue(access.shouldCopyLinkedImages(forFolder: folder))
+    }
+
+    func testShouldCopyLinkedImagesFalseWhenCheckboxLeftUnchecked() throws {
+        let folder = try tempFolder()
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
+            (requested, false)  // default: checkbox unchecked
+        }
+        _ = access.acquireAccess(toFolder: folder, reason: "test")
+        XCTAssertFalse(access.shouldCopyLinkedImages(forFolder: folder))
+    }
+
+    func testShouldCopyLinkedImagesPersistsAcrossInstancesViaSharedDefaults() throws {
+        let folder = try tempFolder()
+        let defaults = isolatedDefaults()
+        let access = DocumentFolderAccess(defaults: defaults) { requested, _ in (requested, true) }
+        _ = access.acquireAccess(toFolder: folder, reason: "test")
+
+        // A fresh instance sharing the same UserDefaults (as happens across app launches) must
+        // see the persisted flag without prompting again.
+        let reopened = DocumentFolderAccess(defaults: defaults) { _, _ in
+            XCTFail("must not prompt again once a bookmark is stored")
+            return nil
+        }
+        XCTAssertTrue(reopened.shouldCopyLinkedImages(forFolder: folder))
     }
 }

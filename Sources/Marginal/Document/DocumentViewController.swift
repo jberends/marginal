@@ -534,33 +534,72 @@ extension DocumentViewController {
         var seenManagedURLs = Set<URL>()
         let uniqueManagedURLs = managed.map { $0.1 }.filter { seenManagedURLs.insert($0).inserted }
 
+        // Externally-linked images: absolute paths that are neither managed temp files nor
+        // already inside `<doc>.assets/`. Copying these in is opt-in (see
+        // `DocumentFolderAccess.shouldCopyLinkedImages`) -- collected up front so the
+        // `withAccess` closure below can act on them without re-parsing.
+        let assetsPrefix = assetsDir.standardizedFileURL.path + "/"
+        let linked = spans.compactMap { span -> (ImageSpan, URL)? in
+            guard span.path.hasPrefix("/") else { return nil }
+            let url = URL(fileURLWithPath: span.path)
+            guard !imageStore.isManagedTemp(url) else { return nil }
+            guard !url.standardizedFileURL.path.hasPrefix(assetsPrefix) else { return nil }
+            return (span, url)
+        }
+
         let reason = "Marginal needs permission to save this document's images in this folder."
         // `relocateTempFiles` throws; the closure swallows that into an empty map (rather than
         // propagating an optional out of `withAccess`, which returns T? itself -- doing the
         // try/catch here keeps this a single-level optional instead of a [URL: URL]?? that would
         // need an extra flatten) and an empty map is then treated the same as a decline below.
-        let moveMap: [URL: URL]? = imageFolderAccess.withAccess(toFolder: folder, reason: reason) { _ in
-            (try? imageStore.relocateTempFiles(uniqueManagedURLs, into: assetsDir, now: now)) ?? [:]
+        //
+        // Linked-image copying happens in this same `withAccess` scope so the copy write is
+        // covered by the just-acquired folder access. Unreadable sources are skipped (left as
+        // absolute paths) rather than thrown -- a valid outcome, not data loss.
+        let result: (moveMap: [URL: URL], linkedMap: [URL: URL])? = imageFolderAccess.withAccess(toFolder: folder, reason: reason) { _ in
+            let moveMap = (try? imageStore.relocateTempFiles(uniqueManagedURLs, into: assetsDir, now: now)) ?? [:]
+            var linkedMap: [URL: URL] = [:]
+            if imageFolderAccess.shouldCopyLinkedImages(forFolder: folder) {
+                var seenLinkedURLs = Set<URL>()
+                let uniqueLinkedURLs = linked.map { $0.1 }.filter { seenLinkedURLs.insert($0).inserted }
+                for source in uniqueLinkedURLs {
+                    guard FileManager.default.isReadableFile(atPath: source.path) else { continue }
+                    if let dest = try? imageStore.copyExternalFile(at: source, into: assetsDir, now: now) {
+                        linkedMap[source] = dest
+                    }
+                }
+            }
+            return (moveMap, linkedMap)
         }
 
-        guard let moveMap, !moveMap.isEmpty else {
+        guard let result, !result.moveMap.isEmpty else {
             // Declined, or the move failed: keep the temp paths (the text still saves, and images
             // still resolve from temp this session) and warn -- never a silent dead reference.
+            // This warning stays scoped to MANAGED images; skipped linked images are a valid
+            // outcome (an absolute link left in place), not data loss.
             warnImagesNotSaved()
             return
         }
+        let moveMap = result.moveMap
+        let linkedMap = result.linkedMap
 
         // The resolved image paths below switch from temp (always readable) to the relocated
         // `<doc>.assets/` path -- hold the folder's scope open for the rest of this session so
         // `ImageCache` can read them back immediately, not just on a future reopen.
         imageFolderAccess.beginRetainedAccess(toFolder: folder)
 
-        // Rewrite paths back-to-front so earlier ranges stay valid.
+        // Rewrite paths back-to-front so earlier ranges stay valid. Managed and linked rewrites
+        // are merged into one descending-range pass so ranges from one kind don't get shifted by
+        // the other.
         var mutable = text
-        for (span, oldURL) in managed.sorted(by: { $0.0.pathRange.lowerBound > $1.0.pathRange.lowerBound }) {
-            guard let newURL = moveMap[oldURL] else { continue }
+        var rewrites: [(range: Range<String.Index>, url: URL, newURL: URL)] =
+            managed.map { (span: $0.0, url: $0.1) }.map { ($0.span.pathRange, $0.url, moveMap[$0.url]) }
+                .compactMap { range, url, newURL in newURL.map { (range, url, $0) } }
+        rewrites += linked.map { (span: $0.0, url: $0.1) }.map { ($0.span.pathRange, $0.url, linkedMap[$0.url]) }
+                .compactMap { range, url, newURL in newURL.map { (range, url, $0) } }
+        for (range, _, newURL) in rewrites.sorted(by: { $0.range.lowerBound > $1.range.lowerBound }) {
             let relative = "\(docName).assets/\(newURL.lastPathComponent)"
-            mutable.replaceSubrange(span.pathRange, with: relative)
+            mutable.replaceSubrange(range, with: relative)
         }
 
         // Keep the open editor and the document text in agreement with what we write.
