@@ -716,20 +716,54 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         insertPastedImage(from: NSPasteboard.general, into: textView)
     }
 
-    /// The "image unavailable" placeholder was clicked: offers to grant access to the FOLDER
-    /// containing `resolvedURL` (broader than a per-file grant -- one consent then covers every
-    /// image in that folder) via the sanctioned NSOpenPanel -> security-scoped-bookmark flow, the
-    /// same mechanism `DocumentFolderAccess` uses elsewhere. Real-app-only: driving a real
-    /// NSOpenPanel sheet headlessly isn't meaningful in a unit test.
+    /// The "image unavailable" placeholder was clicked: offers a choice of scope -- just the
+    /// image's folder, or the whole Home folder (covers every image under it, so the user isn't
+    /// asked again) -- then confirms via the sanctioned NSOpenPanel -> security-scoped-bookmark
+    /// flow. The panel confirm is REQUIRED by the sandbox: a valid security-scoped bookmark can
+    /// only be made for a folder the user selects through powerbox, so the alert's buttons merely
+    /// pre-navigate the panel to the right starting folder; they can't grant access by themselves.
+    /// Real-app-only: driving a real NSAlert/NSOpenPanel sheet headlessly isn't meaningful in a
+    /// unit test.
     func markdownTextViewRequestImageAccess(_ textView: MarkdownTextView, resolvedURL: URL) {
-        let folder = resolvedURL.deletingLastPathComponent()
+        let alert = NSAlert()
+        alert.messageText = "Show this image?"
+        alert.informativeText = "Marginal needs permission to read this image. You can grant " +
+            "access to just the image's folder, or to your whole Home folder -- Home covers " +
+            "everything under it, so you won't be asked again for other images."
+        alert.addButton(withTitle: "Grant This Folder")
+        alert.addButton(withTitle: "Grant Home Folder")
+        alert.addButton(withTitle: "Cancel")
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self else { return }
+            switch response {
+            case .alertFirstButtonReturn:
+                self.acquireScopedFolder(startingAt: resolvedURL.deletingLastPathComponent(),
+                                          prompt: "Grant Access")
+            case .alertSecondButtonReturn:
+                self.acquireScopedFolder(startingAt: FileManager.default.homeDirectoryForCurrentUser,
+                                          prompt: "Grant Home Access")
+            default:
+                break  // Cancel: do nothing.
+            }
+        }
+        if let window = view.window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
+    }
+
+    /// Shows an NSOpenPanel pre-navigated to `directoryURL` and, if the user confirms a folder,
+    /// records a security-scoped bookmark for it and forces a re-render so any now-accessible
+    /// image loads. Shared by both buttons in `markdownTextViewRequestImageAccess`.
+    private func acquireScopedFolder(startingAt directoryURL: URL, prompt: String) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
-        panel.canChooseFiles = true
+        panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = folder
-        panel.message = "Grant Marginal access to this folder so it can show the image"
-        panel.prompt = "Grant Access"
+        panel.directoryURL = directoryURL
+        panel.prompt = prompt
 
         let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard response == .OK, let chosenURL = panel.url, let self else { return }

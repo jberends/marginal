@@ -151,6 +151,43 @@ final class DocumentFolderAccessTests: XCTestCase {
         XCTAssertEqual(promptCount, 0, "beginRetainedAccess(to:) must never prompt")
     }
 
+    // MARK: - Ancestor-folder reactivation (a Home/parent grant covers nested images)
+
+    func testBeginRetainedAccessReactivatesViaAncestorFolderGrant() throws {
+        let parent = try tempFolder()
+        let nestedDir = parent.appendingPathComponent("sub/dir", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedDir, withIntermediateDirectories: true)
+        let nestedFile = nestedDir.appendingPathComponent("image.png")
+        try Data().write(to: nestedFile)
+
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in (requested, false) }
+        // Grant only the parent folder -- no exact bookmark exists for the nested file.
+        _ = access.acquireAccess(toFolder: parent, reason: "grant")
+
+        XCTAssertTrue(access.beginRetainedAccess(to: nestedFile),
+                       "a parent-folder grant must reactivate access to a nested file via ancestor walk")
+
+        access.endRetainedAccess()
+        // Re-beginning still succeeds after ending: the ancestor bookmark persists.
+        XCTAssertTrue(access.beginRetainedAccess(to: nestedFile))
+    }
+
+    func testBeginRetainedAccessFalseWhenNoAncestorGrantExistsAnywhere() throws {
+        let parent = try tempFolder()
+        let nestedFile = parent.appendingPathComponent("sub/image.png")
+        try FileManager.default.createDirectory(at: nestedFile.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try Data().write(to: nestedFile)
+
+        var promptCount = 0
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
+            promptCount += 1
+            return (requested, false)
+        }
+        XCTAssertFalse(access.beginRetainedAccess(to: nestedFile))
+        XCTAssertEqual(promptCount, 0, "beginRetainedAccess must never prompt, even walking ancestors")
+    }
+
     func testShouldCopyLinkedImagesPersistsAcrossInstancesViaSharedDefaults() throws {
         let folder = try tempFolder()
         let defaults = isolatedDefaults()

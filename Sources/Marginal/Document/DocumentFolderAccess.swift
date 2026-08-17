@@ -199,13 +199,38 @@ final class DocumentFolderAccess {
     private func beginRetainedAccess(to url: URL, isDirectory: Bool) -> Bool {
         let k = key(for: url)
         if retainedScopedURLs[k] != nil { return true }
-        guard let resolved = resolvedURL(forKey: k, isDirectory: isDirectory) else { return false }
-        // As with `withAccess`, a `false` return here isn't a failure -- it just means this URL
-        // didn't need a security scope opened (see the class-level doc). Either way it's now
-        // usable, so it's retained.
-        _ = resolved.startAccessingSecurityScopedResource()
-        retainedScopedURLs[k] = resolved
-        return true
+        if let resolved = resolvedURL(forKey: k, isDirectory: isDirectory) {
+            // As with `withAccess`, a `false` return here isn't a failure -- it just means this
+            // URL didn't need a security scope opened (see the class-level doc). Either way it's
+            // now usable, so it's retained.
+            _ = resolved.startAccessingSecurityScopedResource()
+            retainedScopedURLs[k] = resolved
+            return true
+        }
+        // No bookmark for the exact path. A grant for an ANCESTOR folder (e.g. the user's Home,
+        // or some parent directory) covers everything nested under it, but only an exact-path
+        // bookmark was ever stored for that ancestor -- so walk up looking for one. Retain the
+        // scope on the ancestor itself (not a synthetic bookmark for `url`, which was never
+        // granted), keyed by `url`'s own key so a later `beginRetainedAccess`/`endRetainedAccess`
+        // for this exact `url` still finds/clears it.
+        //
+        // Walk the absolute path STRING, not URL.deletingLastPathComponent(): that method never
+        // reaches a fixpoint for a non-absolute URL (it prepends "../" forever), which pinned the
+        // app at 100% CPU on open. `(NSString).deletingLastPathComponent` on an absolute path is a
+        // strictly-shrinking sequence that always terminates at "/".
+        var candidatePath = (url.standardizedFileURL.path as NSString).deletingLastPathComponent
+        while candidatePath != "/" && !candidatePath.isEmpty {
+            let candidate = URL(fileURLWithPath: candidatePath, isDirectory: true)
+            if let resolvedAncestor = resolvedURL(forKey: key(for: candidate), isDirectory: true) {
+                _ = resolvedAncestor.startAccessingSecurityScopedResource()
+                retainedScopedURLs[k] = resolvedAncestor
+                return true
+            }
+            let parentPath = (candidatePath as NSString).deletingLastPathComponent
+            if parentPath == candidatePath { break }  // defensive fixpoint guard
+            candidatePath = parentPath
+        }
+        return false  // reached root, no ancestor grant
     }
 
     /// Stops accessing every folder scope opened via `beginRetainedAccess` and clears them. Call

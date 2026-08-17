@@ -32,6 +32,10 @@ All notable changes to Marginal are documented here. The format follows
   folder (remembered afterwards) and writes the images into a sibling `<name>.assets/` folder next
   to the `.md`. If access is declined, Marginal warns rather than silently losing the images.
 - New documents are proposed with a **`.md`** extension instead of `.markdown`.
+- **Opening any saved document no longer hangs the app** (beachball, needing Force Quit). Reopening
+  a file-backed document walked its folder's ancestors looking for a remembered image-folder grant,
+  but the walk never terminated at the filesystem root and spun a CPU core at 100%. The walk now
+  stops correctly at the root.
 
 ## [0.9.0] — 2026-08-13
 
