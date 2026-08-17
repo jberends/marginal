@@ -315,27 +315,31 @@ final class MarkdownLayoutManager: NSLayoutManager {
             (info.emoji as NSString).draw(at: drawPoint, withAttributes: emojiAttributes)
         }
 
-        // Inline images: Task 8 hid the "![alt](path)" source and reserved a fixed-height line
-        // fragment via the paragraph's min/max line height. This paints the decoded pixels into
-        // that reserved box, aspect-fit and left-aligned to the text inset. Same coordinate
-        // approach as the decorations above -- the reserved box IS the glyph's line fragment,
-        // offset by `origin` into container coordinates.
+        // Inline images: Task 5 hid (or dimmed, when active) the "![alt](path)" source line and
+        // reserved the image's height as `paragraphSpacingBefore` ABOVE that line -- so the markup
+        // line keeps its natural height (the caret never balloons to the image's height). That
+        // leading space is the band between the line fragment's top and its USED rect's top; the
+        // source text sits at the bottom in the used rect. This paints the decoded pixels into
+        // that reserved top band, aspect-fit and left-aligned to the text inset, so the image is
+        // anchored above its source and never overlaps it. Same `origin`-offset coordinate
+        // approach as the decorations above.
         textStorage.enumerateAttribute(.marginalImage, in: fullRange) { value, range, _ in
             guard let info = value as? ImageDisplayInfo,
                   let image = ImageCache.shared.image(at: info.resolvedURL) else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             guard glyphRange.location < self.numberOfGlyphs else { return }
             let lineRect = self.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
-            // The reserved box: the line fragment, inset a few points from its own left/top edge
-            // and capped at the reserved displaySize so a wide image never bleeds past it.
-            // Height comes from the REAL reserved line fragment (like the quote bar uses
-            // lineRect.height), not the assumed displaySize -- so the image can never overflow the
-            // fragment if the two ever diverge.
+            let usedRect = self.lineFragmentUsedRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+            // The reserved leading space (== paragraphSpacingBefore == displaySize.height): the
+            // gap between the fragment's top and the source text's used rect. Measured from the
+            // real layout, not the assumed displaySize, so the image can never overflow into the
+            // text line if the two ever diverge.
+            let reservedHeight = max(0, usedRect.minY - lineRect.minY)
             let box = NSRect(
                 x: origin.x + lineRect.minX + 4,
                 y: origin.y + lineRect.minY + 2,
                 width: min(info.displaySize.width, lineRect.width - 8),
-                height: lineRect.height - 4
+                height: reservedHeight - 4
             )
             guard box.width > 0, box.height > 0 else { return }
             let fitted = Self.aspectFit(imageSize: image.size, into: box)

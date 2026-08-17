@@ -131,8 +131,8 @@ final class VisualRenderHarnessTests: XCTestCase {
     /// that fragment's rect in the bitmap's own pixel coordinates (top-left origin, matching a
     /// flipped text view), so a test can sample inside the image band and outside it.
     @MainActor
-    private func renderImagePlacement(text: String, width: CGFloat = 700)
-        throws -> (rep: NSBitmapImageRep, imageBandPixels: NSRect) {
+    private func renderImagePlacement(text: String, width: CGFloat = 700, cursorInsideImage: Bool = false)
+        throws -> (rep: NSBitmapImageRep, fullBandPixels: NSRect, textBandPixels: NSRect) {
         let model = MarkdownDocumentModel(
             inlineStyles: MarkdownParser.parseInlineStyles(in: text),
             headers: MarkdownParser.parseHeaders(in: text),
@@ -146,7 +146,10 @@ final class VisualRenderHarnessTests: XCTestCase {
             images: MarkdownParser.parseImages(in: text)
         )
         let baseFont = NSFont.systemFont(ofSize: 15)
-        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: nil)
+        // Placing the caret inside the image markup reveals the source (active state); the image
+        // must keep painting either way.
+        let cursorLocation = cursorInsideImage ? model.images.first?.fullRange.lowerBound : nil
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: cursorLocation)
 
         let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
         textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
@@ -179,20 +182,27 @@ final class VisualRenderHarnessTests: XCTestCase {
         guard imageRange.location != NSNotFound else { throw NSError(domain: "test", code: 2) }
         let glyphRange = layoutManager.glyphRange(forCharacterRange: imageRange, actualCharacterRange: nil)
         var fragment = layoutManager.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
+        // The USED rect excludes the paragraphSpacingBefore leading space, so its top edge marks
+        // where the reserved image band ends and the markup's text line begins.
+        var used = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
         // Container -> view coordinates (the text view is flipped, so y grows downward from top,
         // matching the cached bitmap's top-left pixel origin).
         fragment.origin.x += textView.textContainerInset.width
         fragment.origin.y += textView.textContainerInset.height
+        used.origin.x += textView.textContainerInset.width
+        used.origin.y += textView.textContainerInset.height
 
         guard let rep = textView.bitmapImageRepForCachingDisplay(in: textView.bounds) else {
             throw NSError(domain: "test", code: 3)
         }
         textView.cacheDisplay(in: textView.bounds, to: rep)
         let scale = CGFloat(rep.pixelsHigh) / textView.bounds.height
-        let bandPixels = NSRect(x: fragment.minX * scale, y: fragment.minY * scale,
-                                width: fragment.width * scale, height: fragment.height * scale)
+        let fullBand = NSRect(x: fragment.minX * scale, y: fragment.minY * scale,
+                              width: fragment.width * scale, height: fragment.height * scale)
+        let textBand = NSRect(x: used.minX * scale, y: used.minY * scale,
+                              width: used.width * scale, height: used.height * scale)
         window.contentView = nil
-        return (rep, bandPixels)
+        return (rep, fullBand, textBand)
     }
 
     @MainActor
@@ -213,7 +223,7 @@ final class VisualRenderHarnessTests: XCTestCase {
         try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: imageURL))
         defer { try? FileManager.default.removeItem(atPath: imageURL) }
 
-        let (rep, band) = try renderImagePlacement(text: "before\n\n![](\(imageURL))\n\nafter")
+        let (rep, fullBand, textBand) = try renderImagePlacement(text: "before\n\n![](\(imageURL))\n\nafter")
 
         func hasBlue(inRows rows: Range<Int>) -> Bool {
             let clamped = max(0, rows.lowerBound)..<min(rep.pixelsHigh, rows.upperBound)
@@ -228,16 +238,59 @@ final class VisualRenderHarnessTests: XCTestCase {
             return false
         }
 
-        let bandTop = Int(band.minY.rounded())
-        let bandBottom = Int(band.maxY.rounded())
-        // (a) The image paints inside its own reserved band.
-        XCTAssertTrue(hasBlue(inRows: bandTop..<bandBottom),
-                      "the inline image should paint blue pixels inside its reserved line fragment")
+        let bandTop = Int(fullBand.minY.rounded())
+        let bandBottom = Int(fullBand.maxY.rounded())
+        // The reserved image space is the leading band ABOVE the markup's text used-rect.
+        let reservedBottom = Int(textBand.minY.rounded())
+        // (a) The image paints inside its own reserved band (the top region of the fragment).
+        XCTAssertTrue(hasBlue(inRows: bandTop..<reservedBottom),
+                      "the inline image should paint blue pixels inside its reserved space above the source line")
         // (b) It does NOT bleed into the "before" text band above the block...
         XCTAssertFalse(hasBlue(inRows: 0..<(bandTop - 2)),
                        "no image pixels should appear above the reserved band (over the 'before' line)")
         // ...nor into the "after" text band below it.
         XCTAssertFalse(hasBlue(inRows: (bandBottom + 2)..<rep.pixelsHigh),
                        "no image pixels should appear below the reserved band (over the 'after' line)")
+    }
+
+    @MainActor
+    func testActiveImageKeepsImageDrawnWithSourceBelow() throws {
+        // Cursor inside the image markup -> active/revealed state. The source "![](path)" is shown
+        // small and dimmed at the bottom of the fragment; the image must STILL paint in the
+        // reserved band above it and must NOT overlap the revealed source line.
+        let imageURL = NSHomeDirectory() + "/marginal-blue-active-\(UUID().uuidString).png"
+        let blue = NSImage(size: NSSize(width: 40, height: 40))
+        blue.lockFocus()
+        NSColor.blue.setFill()
+        NSRect(x: 0, y: 0, width: 40, height: 40).fill()
+        blue.unlockFocus()
+        let bitmap = NSBitmapImageRep(data: blue.tiffRepresentation!)!
+        try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: imageURL))
+        defer { try? FileManager.default.removeItem(atPath: imageURL) }
+
+        let (rep, fullBand, textBand) = try renderImagePlacement(
+            text: "before\n\n![](\(imageURL))\n\nafter", cursorInsideImage: true)
+
+        func hasBlue(inRows rows: Range<Int>) -> Bool {
+            let clamped = max(0, rows.lowerBound)..<min(rep.pixelsHigh, rows.upperBound)
+            for y in clamped {
+                for x in stride(from: 0, to: rep.pixelsWide, by: 4) {
+                    if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                       c.blueComponent > 0.6, c.redComponent < 0.3, c.greenComponent < 0.3 {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        let bandTop = Int(fullBand.minY.rounded())
+        let reservedBottom = Int(textBand.minY.rounded())
+        // (a) The image still paints in the active state, inside its reserved band above the source.
+        XCTAssertTrue(hasBlue(inRows: bandTop..<reservedBottom),
+                      "image stays drawn in its reserved band when its source is revealed")
+        // (b) The image does not overlap the revealed source line below the reserved band.
+        XCTAssertFalse(hasBlue(inRows: (reservedBottom + 2)..<Int(textBand.maxY.rounded())),
+                       "the image must not paint over the revealed source text line")
     }
 }
