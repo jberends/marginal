@@ -199,6 +199,8 @@ final class DocumentViewController: NSViewController {
         gutterView.fontSize = min(12, max(10, editorFontSize * 0.7))
         gutterView.lineNumber = status.line
         gutterView.lineCenterY = rectInGutter.midY
+        gutterView.lineTop = rectInGutter.minY
+        gutterView.lineHeight = rectInGutter.height
     }
 
     func loadInitialText(_ text: String) {

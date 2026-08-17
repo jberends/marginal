@@ -375,11 +375,24 @@ final class MarkdownLayoutManager: NSLayoutManager {
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
 
+        // A near-transparent figure that floats on the paper rather than a grey slab: no visible
+        // fill (the container reads as the page itself), a hairline edge, and a soft shadow that
+        // does the grouping (Law of Common Region) so the border can stay whisper-thin without the
+        // card losing its shape. The fill is the page surface only so the shadow has an opaque
+        // shape to cast from -- over the paper it's invisible, so the fill still reads as "none".
         let path = NSBezierPath(roundedRect: card, xRadius: m.cornerRadius, yRadius: m.cornerRadius)
-        NSColor.quaternaryLabelColor.withAlphaComponent(0.07).setFill()
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.12)
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.shadowBlurRadius = 6
+        shadow.set()
+        DesignPalette.surfacePage.setFill()
         path.fill()
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+        path.lineWidth = 0.5   // device-hairline on retina
         path.stroke()
 
         let inner = card.insetBy(dx: m.padding, dy: m.padding)

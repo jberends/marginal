@@ -9,8 +9,9 @@ All notable changes to Marginal are documented here. The format follows
 ### Added
 
 - **Images**: insert an image by paste, screenshot, or drag-and-drop. An image renders inline as a
-  tidy **figure card** — the picture centered in a softly-shaded, rounded, hairline-bordered
-  container with a **caption** beneath it (the alt text, or the filename when there's no alt).
+  tidy **figure card** — the picture centered in a rounded container that floats on the page (no
+  fill, a whisper-thin hairline edge, and a soft shadow) with a **caption** beneath it (the alt
+  text, or the filename when there's no alt).
   Click it to reveal its `![](path)` markdown source as a small dimmed line beneath the still-
   anchored card (clicking away collapses it, without the page jumping). Dragging an image **file**
   from Finder links it by absolute path.
@@ -27,6 +28,8 @@ All notable changes to Marginal are documented here. The format follows
   instead of a blank gap.
 - Images **dragged in from elsewhere on disk are remembered across reopen** (per-file access is
   preserved on the same Mac), so linked images still display the next time you open the document.
+- The **line-number gutter** now draws a faint vertical bar spanning the caret line's full height,
+  so a tall line (like an image figure card) reads as tall at a glance.
 
 ### Fixed
 

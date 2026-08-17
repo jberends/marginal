@@ -15,6 +15,16 @@ final class LineNumberGutterView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// Top and height of the caret's whole line fragment, in this view's own (flipped)
+    /// coordinates. Drives the vertical extent bar -- a normal line reads as a short tick, an
+    /// image "figure card" line as a tall bar, so the gutter shows how much room the line takes.
+    var lineTop: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+    var lineHeight: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+
     var fontSize: CGFloat = 11 {
         didSet { needsDisplay = true }
     }
@@ -40,6 +50,17 @@ final class LineNumberGutterView: NSView {
             y: lineCenterY - size.height / 2
         )
         string.draw(at: point, withAttributes: attributes)
+
+        // A faint rounded hairline just right of the number, spanning the line's real height --
+        // so a tall image line is visibly tall in the gutter. Kept subtle (textFaint, 1.5pt) so
+        // it aids orientation without competing with the number or the page.
+        if lineHeight > 1 {
+            let barWidth: CGFloat = 1.5
+            let barX = bounds.maxX - 5 - barWidth
+            let bar = NSRect(x: barX, y: lineTop + 1, width: barWidth, height: max(0, lineHeight - 2))
+            DesignPalette.textFaint.setFill()
+            NSBezierPath(roundedRect: bar, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()
+        }
     }
 }
 
