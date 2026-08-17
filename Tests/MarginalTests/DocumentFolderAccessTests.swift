@@ -12,6 +12,12 @@ final class DocumentFolderAccessTests: XCTestCase {
         let d = UserDefaults(suiteName: "fa-test-\(UUID().uuidString)")!
         return d
     }
+    private func tempFile() throws -> URL {
+        let dir = try tempFolder()
+        let file = dir.appendingPathComponent("image.png")
+        try Data().write(to: file)
+        return file
+    }
 
     func testAcquirePromptsWhenNoBookmarkThenReusesWithoutPrompting() throws {
         let folder = try tempFolder()
@@ -117,6 +123,32 @@ final class DocumentFolderAccessTests: XCTestCase {
         }
         _ = access.acquireAccess(toFolder: folder, reason: "test")
         XCTAssertFalse(access.shouldCopyLinkedImages(forFolder: folder))
+    }
+
+    // MARK: - Per-file bookmarks (Finder-dragged linked images)
+
+    func testStoreSecurityScopedBookmarkThenBeginRetainedAccessSucceedsAndEndClears() throws {
+        let file = try tempFile()
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in (requested, false) }
+
+        access.storeSecurityScopedBookmark(for: file)
+        XCTAssertTrue(access.beginRetainedAccess(to: file))
+
+        access.endRetainedAccess()
+        // The bookmark/session-grant persists past endRetainedAccess, so re-beginning still
+        // succeeds without a fresh grant.
+        XCTAssertTrue(access.beginRetainedAccess(to: file))
+    }
+
+    func testBeginRetainedAccessToFileFalseWithoutPromptingWhenNoBookmarkExists() throws {
+        let file = try tempFile()
+        var promptCount = 0
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
+            promptCount += 1
+            return (requested, false)
+        }
+        XCTAssertFalse(access.beginRetainedAccess(to: file))
+        XCTAssertEqual(promptCount, 0, "beginRetainedAccess(to:) must never prompt")
     }
 
     func testShouldCopyLinkedImagesPersistsAcrossInstancesViaSharedDefaults() throws {

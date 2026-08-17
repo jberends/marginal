@@ -218,8 +218,30 @@ final class DocumentViewController: NSViewController {
     /// images silently fail to decode, which is acceptable graceful degradation rather than
     /// interrupting opening a document with a folder picker.
     private func beginRetainedFolderAccessIfFileBacked() {
-        guard let folder = document?.fileURL?.deletingLastPathComponent() else { return }
+        guard let fileURL = document?.fileURL else { return }
+        let folder = fileURL.deletingLastPathComponent()
         imageFolderAccess.beginRetainedAccess(toFolder: folder)
+        beginRetainedAccessForLinkedImages(fileURL: fileURL, folder: folder)
+    }
+
+    /// Reopens the per-file security scope (see `DocumentFolderAccess.storeSecurityScopedBookmark`)
+    /// for every Finder-dragged, linked (absolute-path) image the document references, so
+    /// `ImageCache` can read them back after reopen -- opening a document only grants sandbox
+    /// access to that one file, never to sibling files elsewhere on disk, so each linked image
+    /// needs its own reopened scope. Images inside the document's own `<doc>.assets/` folder are
+    /// already covered by `beginRetainedAccess(toFolder:)` above and are skipped here. Never
+    /// prompts: an image with no stored bookmark (e.g. dropped before this shipped) is simply
+    /// left unreadable rather than interrupting reopen with a picker.
+    private func beginRetainedAccessForLinkedImages(fileURL: URL, folder: URL) {
+        let docName = fileURL.deletingPathExtension().lastPathComponent
+        let assetsPrefix = folder.appendingPathComponent("\(docName).assets", isDirectory: true)
+            .standardizedFileURL.path + "/"
+        for image in MarkdownParser.parseImages(in: textView.string) {
+            guard image.path.hasPrefix("/") else { continue }
+            let url = URL(fileURLWithPath: image.path)
+            guard !url.standardizedFileURL.path.hasPrefix(assetsPrefix) else { continue }
+            imageFolderAccess.beginRetainedAccess(to: url)
+        }
     }
 
     func currentCursorIndex() -> String.Index? {
@@ -715,7 +737,10 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     // window) rather than leaving a stray blank window behind. Any other content-bearing
     // window is left untouched and the file opens in a new window, so existing work is
     // never silently overwritten.
-    /// Linked image drop: absolute path, never copied into the document's assets folder.
+    /// Linked image drop: absolute path, never copied into the document's assets folder. The
+    /// drag session grants sandbox read access only for its own duration, so a per-file
+    /// security-scoped bookmark is captured here (drop time is the only moment access is
+    /// guaranteed) to let a later reopen reactivate it via `beginRetainedAccessForLinkedImages`.
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedImageFileAt url: URL, atCharacterIndex characterIndex: Int) {
         let markup = "![\(Self.sanitizedAltText(url.deletingPathExtension().lastPathComponent))](\(url.path))"
         let range = NSRange(location: characterIndex, length: 0)
@@ -723,6 +748,7 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
             textView.insertText(markup, replacementRange: range)
             textView.didChangeText()
         }
+        imageFolderAccess.storeSecurityScopedBookmark(for: url)
     }
 
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL) {

@@ -91,10 +91,11 @@ final class DocumentFolderAccess {
         copyLinkedFlags()[key(for: folder)] ?? false
     }
 
-    /// Resolves a stored bookmark for `folder` into a usable URL, or nil if none/stale.
-    /// The returned URL has NOT had security scope started; use `withAccess`.
-    func writableURL(forFolder folder: URL) -> URL? {
-        let k = key(for: folder)
+    /// Resolves a stored bookmark for the given key into a usable URL, or nil if none/stale.
+    /// `isDirectory` only affects the synthetic session-grant fallback URL (no filesystem probe
+    /// happens either way) -- pass `true` for folders, `false` for individual files. The returned
+    /// URL has NOT had security scope started; use `withAccess`/`beginRetainedAccess`.
+    private func resolvedURL(forKey k: String, isDirectory: Bool) -> URL? {
         if let data = bookmarks()[k] {
             var stale = false
             if let url = try? URL(resolvingBookmarkData: data,
@@ -106,9 +107,34 @@ final class DocumentFolderAccess {
             removeBookmark(for: k)
         }
         if sessionGranted.contains(k) {
-            return URL(fileURLWithPath: k, isDirectory: true)
+            return URL(fileURLWithPath: k, isDirectory: isDirectory)
         }
         return nil
+    }
+
+    /// Resolves a stored bookmark for `folder` into a usable URL, or nil if none/stale.
+    /// The returned URL has NOT had security scope started; use `withAccess`.
+    func writableURL(forFolder folder: URL) -> URL? {
+        resolvedURL(forKey: key(for: folder), isDirectory: true)
+    }
+
+    /// Creates a security-scoped bookmark for `url` -- a file the app currently has read access
+    /// to, e.g. one just accepted via a Finder drag -- and persists it in the same store folder
+    /// bookmarks use, keyed by its standardized path. Lets `beginRetainedAccess(to:)` reopen
+    /// access to this exact file on a later launch/reopen, never prompting.
+    func storeSecurityScopedBookmark(for url: URL) {
+        let k = key(for: url)
+        if let data = try? url.bookmarkData(options: [.withSecurityScope],
+                                             includingResourceValuesForKeys: nil,
+                                             relativeTo: nil) {
+            setBookmark(data, for: k)
+        } else {
+            // Mirrors acquireAccess's sessionGranted fallback: a real security-scoped bookmark
+            // can't be made for every URL (e.g. a synthetic path in tests, or one outside any
+            // active security-scoped grant), so remember the grant in-memory to keep
+            // same-session reads working.
+            sessionGranted.insert(k)
+        }
     }
 
     /// Resolve-or-prompt. On a fresh grant, stores a bookmark. Returns the folder URL to use,
@@ -158,14 +184,27 @@ final class DocumentFolderAccess {
     /// still returns `true`.
     @discardableResult
     func beginRetainedAccess(toFolder folder: URL) -> Bool {
-        let k = key(for: folder)
+        beginRetainedAccess(to: folder, isDirectory: true)
+    }
+
+    /// Generalized form of `beginRetainedAccess(toFolder:)`: opens (and holds open) a security
+    /// scope for `url`'s stored bookmark -- a folder or an individual file (e.g. a Finder-dragged
+    /// linked image bookmarked via `storeSecurityScopedBookmark`) -- for the life of the document.
+    /// Never prompts: no stored bookmark for `url` simply returns `false`.
+    @discardableResult
+    func beginRetainedAccess(to url: URL) -> Bool {
+        beginRetainedAccess(to: url, isDirectory: false)
+    }
+
+    private func beginRetainedAccess(to url: URL, isDirectory: Bool) -> Bool {
+        let k = key(for: url)
         if retainedScopedURLs[k] != nil { return true }
-        guard let url = writableURL(forFolder: folder) else { return false }
+        guard let resolved = resolvedURL(forKey: k, isDirectory: isDirectory) else { return false }
         // As with `withAccess`, a `false` return here isn't a failure -- it just means this URL
-        // didn't need a security scope opened (see the class-level doc). Either way the folder is
-        // now usable, so it's retained.
-        _ = url.startAccessingSecurityScopedResource()
-        retainedScopedURLs[k] = url
+        // didn't need a security scope opened (see the class-level doc). Either way it's now
+        // usable, so it's retained.
+        _ = resolved.startAccessingSecurityScopedResource()
+        retainedScopedURLs[k] = resolved
         return true
     }
 
