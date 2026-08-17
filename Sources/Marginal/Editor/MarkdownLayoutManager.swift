@@ -324,8 +324,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
         // anchored above its source and never overlaps it. Same `origin`-offset coordinate
         // approach as the decorations above.
         textStorage.enumerateAttribute(.marginalImage, in: fullRange) { value, range, _ in
-            guard let info = value as? ImageDisplayInfo,
-                  let image = ImageCache.shared.image(at: info.resolvedURL) else { return }
+            guard let info = value as? ImageDisplayInfo else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             guard glyphRange.location < self.numberOfGlyphs else { return }
             let lineRect = self.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
@@ -342,10 +341,53 @@ final class MarkdownLayoutManager: NSLayoutManager {
                 height: reservedHeight - 4
             )
             guard box.width > 0, box.height > 0 else { return }
-            let fitted = Self.aspectFit(imageSize: image.size, into: box)
-            image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1.0,
-                       respectFlipped: true, hints: nil)
+            if let image = ImageCache.shared.image(at: info.resolvedURL) {
+                let fitted = Self.aspectFit(imageSize: image.size, into: box)
+                image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1.0,
+                           respectFlipped: true, hints: nil)
+            } else {
+                Self.drawUnavailablePlaceholder(in: box, fileName: info.resolvedURL.lastPathComponent)
+            }
         }
+    }
+
+    /// Drawn in place of the decoded image when it can't be loaded (missing file, unreadable
+    /// path after a sandbox re-open, corrupt data, etc.) -- so the reserved band never sits
+    /// visually empty and the user has a clue why. Never throws/crashes: `NSString.draw` and
+    /// `NSBezierPath` are always safe to call with a degenerate/tiny rect.
+    static func drawUnavailablePlaceholder(in box: NSRect, fileName: String) {
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+
+        let path = NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6)
+        NSColor.quaternaryLabelColor.withAlphaComponent(0.15).setFill()
+        path.fill()
+        NSColor.separatorColor.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: min(13, box.height * 0.3)),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        let subtitleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: min(11, box.height * 0.24)),
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ]
+        let title = "\u{26A0}\u{FE0E} Image unavailable" as NSString
+        let subtitle = fileName as NSString
+        let titleSize = title.size(withAttributes: titleAttributes)
+        let subtitleSize = subtitle.size(withAttributes: subtitleAttributes)
+        let spacing: CGFloat = 2
+        let blockHeight = titleSize.height + subtitleSize.height + spacing
+        let blockTop = box.minY + max(0, (box.height - blockHeight) / 2)
+
+        let titleOrigin = NSPoint(x: box.minX + max(0, (box.width - titleSize.width) / 2), y: blockTop)
+        title.draw(at: titleOrigin, withAttributes: titleAttributes)
+
+        let subtitleOrigin = NSPoint(x: box.minX + max(0, (box.width - subtitleSize.width) / 2),
+                                      y: blockTop + titleSize.height + spacing)
+        subtitle.draw(at: subtitleOrigin, withAttributes: subtitleAttributes)
     }
 
     /// The largest rect with `imageSize`'s aspect ratio that fits inside `box`, anchored at the

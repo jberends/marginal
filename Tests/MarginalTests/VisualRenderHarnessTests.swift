@@ -293,4 +293,38 @@ final class VisualRenderHarnessTests: XCTestCase {
         XCTAssertFalse(hasBlue(inRows: (reservedBottom + 2)..<Int(textBand.maxY.rounded())),
                        "the image must not paint over the revealed source text line")
     }
+
+    /// A missing/unreadable image (e.g. an absolute path the sandbox can no longer read on
+    /// reopen) must not leave the reserved band visually empty -- MarkdownLayoutManager draws a
+    /// placeholder box (border + "Image unavailable" text) in its place. This asserts the
+    /// reserved band is NOT a blank wash of the text view's own background: some pixels differ
+    /// noticeably from near-white, which only the placeholder's border/text could have painted.
+    @MainActor
+    func testMissingImageDrawsPlaceholderInsteadOfBlankBand() throws {
+        let missingURL = NSHomeDirectory() + "/marginal-missing-\(UUID().uuidString).png"
+        // Deliberately never write anything to missingURL -- it must not exist on disk.
+
+        let (rep, fullBand, textBand) = try renderImagePlacement(text: "before\n\n![](\(missingURL))\n\nafter")
+
+        func hasNonBackgroundPixel(inRows rows: Range<Int>) -> Bool {
+            let clamped = max(0, rows.lowerBound)..<min(rep.pixelsHigh, rows.upperBound)
+            for y in clamped {
+                for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+                    if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
+                        // Near-white background pixels have all components close to 1; anything
+                        // meaningfully darker is the placeholder's border, fill tint, or text.
+                        if c.redComponent < 0.9 || c.greenComponent < 0.9 || c.blueComponent < 0.9 {
+                            return true
+                        }
+                    }
+                }
+            }
+            return false
+        }
+
+        let bandTop = Int(fullBand.minY.rounded())
+        let reservedBottom = Int(textBand.minY.rounded())
+        XCTAssertTrue(hasNonBackgroundPixel(inRows: bandTop..<reservedBottom),
+                      "a missing image should draw a visible placeholder in its reserved band, not leave it blank")
+    }
 }
