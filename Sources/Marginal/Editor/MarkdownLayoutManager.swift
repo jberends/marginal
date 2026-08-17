@@ -356,12 +356,14 @@ final class MarkdownLayoutManager: NSLayoutManager {
                               width: lineRect.width, height: min(info.displaySize.height, lineRect.height))
             // drawBackground always runs on the main thread; older SDKs (the CI's Xcode 16.4)
             // don't annotate NSLayoutManager main-actor, so reach the @MainActor ImageCache via
-            // assumeIsolated rather than leaving the call in a nonisolated context.
-            let image = MainActor.assumeIsolated { ImageCache.shared.image(at: info.resolvedURL) }
-            Self.drawImageCard(in: band,
-                               image: image,
-                               caption: info.caption,
-                               fileName: info.resolvedURL.lastPathComponent)
+            // assumeIsolated. The whole draw happens INSIDE the block (returning Void) so the
+            // non-Sendable NSImage never crosses the isolation boundary.
+            MainActor.assumeIsolated {
+                Self.drawImageCard(in: band,
+                                   image: ImageCache.shared.image(at: info.resolvedURL),
+                                   caption: info.caption,
+                                   fileName: info.resolvedURL.lastPathComponent)
+            }
         }
     }
 
