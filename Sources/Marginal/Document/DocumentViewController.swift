@@ -527,16 +527,12 @@ extension DocumentViewController {
     func insertImageData(_ data: Data, sourceExtension: String, now: Date) -> String? {
         let ext = Self.normalizedImageExtension(sourceExtension)
         do {
-            if let fileURL = document?.fileURL, document?.isDraft == false {
-                let docName = fileURL.deletingPathExtension().lastPathComponent
-                let assetsDir = fileURL.deletingLastPathComponent()
-                    .appendingPathComponent("\(docName).assets", isDirectory: true)
-                let written = try imageStore.write(data: data, ext: ext, now: now, into: assetsDir)
-                return "\(docName).assets/\(written.lastPathComponent)"
-            } else {
-                let written = try imageStore.writeToTemp(data: data, ext: ext, now: now)
-                return written.path
-            }
+            // Always buffer managed images in the temp container. Writing directly beside a saved
+            // document is impossible under the sandbox (a save panel grants access to the named
+            // file only, not to create sibling files), so relocation into <doc>.assets/ is deferred
+            // to an explicit user save (see prepareForSave), which acquires folder access first.
+            let written = try imageStore.writeToTemp(data: data, ext: ext, now: now)
+            return written.path
         } catch {
             NSSound.beep()
             return nil

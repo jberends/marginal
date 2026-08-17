@@ -46,14 +46,16 @@ final class ImageInsertionTests: XCTestCase {
         XCTAssertFalse(path.hasPrefix(url!.deletingLastPathComponent().path), "must not land next to the autosave fileURL")
     }
 
-    func testInsertImageDataSavedUsesRelativeAssetsPath() throws {
-        let (vc, url) = try makeVC(saved: true)
-        let png = Self.onePixelPNG()
-        let now = Date(timeIntervalSince1970: 1_755_000_000)
-        let path = try XCTUnwrap(vc.insertImageData(png, sourceExtension: "png", now: now))
-        XCTAssertTrue(path.hasPrefix("MyNote.assets/"), "saved → relative assets path, got \(path)")
-        let onDisk = url!.deletingLastPathComponent().appendingPathComponent(path)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: onDisk.path))
+    func testInsertImageDataAlwaysUsesAbsoluteTempPath() throws {
+        for saved in [false, true] {
+            let (vc, _) = try makeVC(saved: saved)
+            let path = try XCTUnwrap(vc.insertImageData(ImageInsertionTests.onePixelPNG(),
+                                                        sourceExtension: "png",
+                                                        now: Date(timeIntervalSince1970: 1_755_000_000)))
+            XCTAssertTrue(path.hasPrefix("/"), "expected absolute temp path, got \(path)")
+            XCTAssertTrue(path.contains("marginal-images-"), "expected temp container path, got \(path)")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        }
     }
 
     func testDroppedImageFileInsertsAbsoluteMarkupAtIndex() throws {
