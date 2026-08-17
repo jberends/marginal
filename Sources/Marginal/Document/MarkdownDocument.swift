@@ -69,6 +69,13 @@ final class MarkdownDocument: NSDocument {
         return data
     }
 
+    // New documents propose "Untitled.md" rather than AppKit's UTI-derived "Untitled.markdown" --
+    // .md is the extension users expect and the one every other markdown tool defaults to.
+    override func fileNameExtension(forType typeName: String,
+                                     saveOperation: NSDocument.SaveOperationType) -> String? {
+        "md"
+    }
+
     override func read(from data: Data, ofType typeName: String) throws {
         // UTF-8 only, deliberately. Marginal now opens .txt as well as .md, so falling back to
         // encoding sniffing for older Latin-1 files is tempting -- but Latin-1 decodes *any* byte

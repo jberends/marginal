@@ -50,4 +50,13 @@ final class MarkdownDocumentTests: XCTestCase {
         XCTAssertFalse(MarkdownDocument.shouldRelocateImages(for: .autosaveElsewhereOperation))
         XCTAssertFalse(MarkdownDocument.shouldRelocateImages(for: .autosaveAsOperation))
     }
+
+    // New documents should propose "Untitled.md", not "Untitled.markdown" -- .md is the
+    // extension users expect and the one every other markdown tool defaults to.
+    func testDefaultSaveExtensionIsMd() {
+        let doc = MarkdownDocument()
+        let ext = doc.fileNameExtension(forType: doc.fileType ?? "net.daringfireball.markdown",
+                                        saveOperation: .saveOperation)
+        XCTAssertEqual(ext, "md")
+    }
 }
