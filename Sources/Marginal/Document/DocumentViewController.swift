@@ -692,7 +692,8 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         // Prefer file promises / file URLs handled by the drag path; here handle raw image data.
         guard let (data, ext) = Self.imageDataFromPasteboard(pb) else { return false }
         guard let path = insertImageData(data, sourceExtension: ext, now: Date()) else { return true }
-        let markup = "![](\(path))"
+        let alt = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        let markup = "![\(alt)](\(path))"
         let sel = textView.selectedRange()
         if textView.shouldChangeText(in: sel, replacementString: markup) {
             textView.insertText(markup, replacementRange: sel)
@@ -708,7 +709,7 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
     // never silently overwritten.
     /// Linked image drop: absolute path, never copied into the document's assets folder.
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedImageFileAt url: URL, atCharacterIndex characterIndex: Int) {
-        let markup = "![](\(url.path))"
+        let markup = "![\(url.deletingPathExtension().lastPathComponent)](\(url.path))"
         let range = NSRange(location: characterIndex, length: 0)
         if textView.shouldChangeText(in: range, replacementString: markup) {
             textView.insertText(markup, replacementRange: range)

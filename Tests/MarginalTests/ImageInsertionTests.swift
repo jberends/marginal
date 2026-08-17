@@ -66,7 +66,7 @@ final class ImageInsertionTests: XCTestCase {
         let ext = FileManager.default.temporaryDirectory.appendingPathComponent("photo.png")
         try ImageInsertionTests.onePixelPNG().write(to: ext)
         vc.markdownTextView(tv, didReceiveDroppedImageFileAt: ext, atCharacterIndex: 5)
-        XCTAssertEqual(tv.string, "hello![](\(ext.path)) world")
+        XCTAssertEqual(tv.string, "hello![photo](\(ext.path)) world")
         try? FileManager.default.removeItem(at: ext)
     }
 
@@ -366,14 +366,18 @@ final class ImageInsertionTests: XCTestCase {
         XCTAssertTrue(handled)
 
         let text = vc.textView.string
-        XCTAssertTrue(text.hasPrefix("![]("), "expected markup at the caret, got \(text)")
+        XCTAssertTrue(text.hasPrefix("![pasted-"), "expected alt text filled from the filename, got \(text)")
         XCTAssertTrue(text.contains("pasted-"), "expected the managed filename, got \(text)")
 
-        guard let start = text.range(of: "![]("), let end = text.range(of: ")", range: start.upperBound..<text.endIndex) else {
+        guard let altStart = text.range(of: "!["), let altEnd = text.range(of: "]("),
+              let end = text.range(of: ")", range: altEnd.upperBound..<text.endIndex) else {
             return XCTFail("could not locate inserted markdown path in \(text)")
         }
-        let path = String(text[start.upperBound..<end.lowerBound])
+        let alt = String(text[altStart.upperBound..<altEnd.lowerBound])
+        let path = String(text[altEnd.upperBound..<end.lowerBound])
         XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        XCTAssertEqual(alt, URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent,
+                        "alt text should be the inserted file's name without extension")
     }
 
     func testInsertPastedImageIsUndoable() throws {
