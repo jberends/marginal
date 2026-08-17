@@ -28,6 +28,22 @@ final class DocumentViewController: NSViewController {
     // Tests set this to suppress the real NSAlert `prepareForSave` shows on declined/failed access.
     var suppressSaveWarningForTests = false
 
+    // Ends the retained read-path folder scope (see `beginRetainedFolderAccessIfFileBacked`)
+    // exactly once, when this controller -- and with it, the document window -- is truly gone.
+    //
+    // `deinit`, not `viewWillDisappear`/`viewDidDisappear`: documents can tab together in one
+    // NSWindow (see `MarkdownDocument.makeWindowControllers`'s `tabbingMode = .preferred`), and
+    // switching away from a tab orders its window out, which fires the disappearance hooks on a
+    // view controller that is still very much open -- ending the scope there would silently break
+    // image reads on switching back to that tab. `deinit` only runs once the view controller (and
+    // its window/document) is actually deallocated, which is the one event that really means
+    // "this document is closed."
+    deinit {
+        MainActor.assumeIsolated {
+            imageFolderAccess.endRetainedAccess()
+        }
+    }
+
     override func loadView() {
         let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 600))
 
@@ -188,6 +204,22 @@ final class DocumentViewController: NSViewController {
     func loadInitialText(_ text: String) {
         textView.string = text
         restyle(cursorLocation: nil)
+        beginRetainedFolderAccessIfFileBacked()
+    }
+
+    /// Reopens the document folder's security scope (if a bookmark was stored for it, e.g. from
+    /// a prior save) for the life of this controller, so `ImageCache` reads of a relocated
+    /// `<doc>.assets/` sidecar image succeed on reopen. Called once, right after `loadInitialText`
+    /// sets up the editor -- by then `document?.fileURL` is already populated for a document
+    /// opened from disk (NSDocument sets it before `makeWindowControllers`/this call), and still
+    /// nil for a fresh untitled document, for which this is a no-op.
+    ///
+    /// Never prompts (see `DocumentFolderAccess.beginRetainedAccess`): no bookmark simply means
+    /// images silently fail to decode, which is acceptable graceful degradation rather than
+    /// interrupting opening a document with a folder picker.
+    private func beginRetainedFolderAccessIfFileBacked() {
+        guard let folder = document?.fileURL?.deletingLastPathComponent() else { return }
+        imageFolderAccess.beginRetainedAccess(toFolder: folder)
     }
 
     func currentCursorIndex() -> String.Index? {
@@ -517,6 +549,11 @@ extension DocumentViewController {
             warnImagesNotSaved()
             return
         }
+
+        // The resolved image paths below switch from temp (always readable) to the relocated
+        // `<doc>.assets/` path -- hold the folder's scope open for the rest of this session so
+        // `ImageCache` can read them back immediately, not just on a future reopen.
+        imageFolderAccess.beginRetainedAccess(toFolder: folder)
 
         // Rewrite paths back-to-front so earlier ranges stay valid.
         var mutable = text

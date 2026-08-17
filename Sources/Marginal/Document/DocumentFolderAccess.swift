@@ -24,6 +24,11 @@ final class DocumentFolderAccess {
     /// making "grant once, reuse without prompting" deterministic in tests.
     private var sessionGranted: Set<String> = []
 
+    /// Folders whose security scope is being held open for the document's lifetime (read path),
+    /// keyed the same way as the bookmark store. Populated by `beginRetainedAccess`, drained by
+    /// `endRetainedAccess`.
+    private var retainedScopedURLs: [String: URL] = [:]
+
     init(defaults: UserDefaults = .standard,
          promptForFolder: @escaping (_ folder: URL, _ reason: String) -> URL?) {
         self.defaults = defaults
@@ -105,5 +110,38 @@ final class DocumentFolderAccess {
         let started = url.startAccessingSecurityScopedResource()
         defer { if started { url.stopAccessingSecurityScopedResource() } }
         return try body(url)
+    }
+
+    /// Opens (and holds open) a security scope for `folder`'s stored bookmark, for the life of
+    /// the document -- covers reads that happen outside any single `withAccess` bracket, e.g.
+    /// `ImageCache.image(at:)` decoding a relocated sidecar image after save or on reopen. Under
+    /// the sandbox, opening a document only grants access to that one file, never to sibling
+    /// files in its folder, so a read of `<doc>.assets/foo.png` needs its own scope.
+    ///
+    /// Never prompts: if no bookmark exists yet for `folder` (e.g. this machine never granted
+    /// access, or the document has never been saved), returns `false` and reads simply degrade
+    /// (the image fails to decode) rather than interrupting the user with a folder picker just to
+    /// open a document. Idempotent -- calling again for a folder already retained is a no-op that
+    /// still returns `true`.
+    @discardableResult
+    func beginRetainedAccess(toFolder folder: URL) -> Bool {
+        let k = key(for: folder)
+        if retainedScopedURLs[k] != nil { return true }
+        guard let url = writableURL(forFolder: folder) else { return false }
+        // As with `withAccess`, a `false` return here isn't a failure -- it just means this URL
+        // didn't need a security scope opened (see the class-level doc). Either way the folder is
+        // now usable, so it's retained.
+        _ = url.startAccessingSecurityScopedResource()
+        retainedScopedURLs[k] = url
+        return true
+    }
+
+    /// Stops accessing every folder scope opened via `beginRetainedAccess` and clears them. Call
+    /// once when the document truly closes (see `DocumentViewController.deinit`).
+    func endRetainedAccess() {
+        for url in retainedScopedURLs.values {
+            url.stopAccessingSecurityScopedResource()
+        }
+        retainedScopedURLs.removeAll()
     }
 }

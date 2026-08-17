@@ -53,4 +53,48 @@ final class DocumentFolderAccessTests: XCTestCase {
         XCTAssertFalse(ranB)
         XCTAssertNil(r2)
     }
+
+    // MARK: - beginRetainedAccess / endRetainedAccess (read-path folder scope)
+
+    func testBeginRetainedAccessFalseWithoutPromptingWhenNoBookmarkExists() throws {
+        let folder = try tempFolder()
+        var promptCount = 0
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
+            promptCount += 1
+            return requested
+        }
+        XCTAssertFalse(access.beginRetainedAccess(toFolder: folder))
+        XCTAssertEqual(promptCount, 0, "beginRetainedAccess must never prompt")
+    }
+
+    func testBeginRetainedAccessTrueAfterBookmarkGrantedAndIsIdempotent() throws {
+        let folder = try tempFolder()
+        var promptCount = 0
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in
+            promptCount += 1
+            return requested
+        }
+        _ = access.acquireAccess(toFolder: folder, reason: "grant")
+        XCTAssertEqual(promptCount, 1)
+
+        XCTAssertTrue(access.beginRetainedAccess(toFolder: folder))
+        // Calling again for the same folder must not prompt or otherwise misbehave.
+        XCTAssertTrue(access.beginRetainedAccess(toFolder: folder))
+        XCTAssertEqual(promptCount, 1, "beginRetainedAccess must never prompt")
+    }
+
+    func testEndRetainedAccessClearsRetainedScopesAndIsSafeWhenNothingRetained() throws {
+        let folder = try tempFolder()
+        let access = DocumentFolderAccess(defaults: isolatedDefaults()) { requested, _ in requested }
+        // Safe no-op with nothing retained yet.
+        access.endRetainedAccess()
+
+        _ = access.acquireAccess(toFolder: folder, reason: "grant")
+        XCTAssertTrue(access.beginRetainedAccess(toFolder: folder))
+        access.endRetainedAccess()
+
+        // A bookmark still exists after ending retained access, so re-beginning (from the
+        // bookmark, without a fresh prompt) still succeeds.
+        XCTAssertTrue(access.beginRetainedAccess(toFolder: folder))
+    }
 }
