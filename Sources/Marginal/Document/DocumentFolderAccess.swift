@@ -3,6 +3,14 @@ import AppKit
 /// Stores security-scoped folder bookmarks so Marginal can write image sidecar files next to a
 /// document without re-prompting the user every launch. Bookmarks are persisted in `UserDefaults`,
 /// keyed by the folder's standardized path.
+///
+/// Note on "access": `acquireAccess`/`withAccess` gate on whether a usable folder URL could be
+/// obtained (via a stored bookmark or a fresh prompt) — not on whether that URL required opening a
+/// security scope. Plenty of writable folders (the app's own container, plain temp directories in
+/// tests, folders the sandbox already permits) need no scope at all, so
+/// `startAccessingSecurityScopedResource()` legitimately returns `false` for them; that is not a
+/// permission failure. A genuine permission failure on a folder that *does* need a scope surfaces
+/// later as a failed/thrown file write, which callers (e.g. `prepareForSave`) handle themselves.
 @MainActor
 final class DocumentFolderAccess {
     private let defaults: UserDefaults
@@ -82,10 +90,18 @@ final class DocumentFolderAccess {
         return granted
     }
 
-    /// Brackets start/stopAccessingSecurityScopedResource around `body`, passing the scoped URL.
-    /// Returns nil (without calling `body`) if access can't be acquired.
+    /// Brackets start/stopAccessingSecurityScopedResource around `body`, passing the resolved URL.
+    /// Returns nil (without calling `body`) only when a usable folder URL could not be *acquired*
+    /// (the user declined the prompt, or no bookmark/session grant exists yet). Once a URL is
+    /// acquired, `body` always runs — `started` is not a gate, it only records whether a security
+    /// scope was actually opened, e.g. it is expected to be `false` for folders that don't need
+    /// scoping. See the class-level doc for why that isn't a permission failure.
     func withAccess<T>(toFolder folder: URL, reason: String, _ body: (URL) throws -> T) rethrows -> T? {
         guard let url = acquireAccess(toFolder: folder, reason: reason) else { return nil }
+        // `started` is false for URLs that never needed a security scope (e.g. non-bookmarked
+        // folders the app can already write to, or plain temp URLs in tests) — that is not a
+        // failure, so `body` must still run. Only its value being true governs whether we must
+        // later balance it with `stopAccessingSecurityScopedResource()`.
         let started = url.startAccessingSecurityScopedResource()
         defer { if started { url.stopAccessingSecurityScopedResource() } }
         return try body(url)
