@@ -716,6 +716,37 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         insertPastedImage(from: NSPasteboard.general, into: textView)
     }
 
+    /// The "image unavailable" placeholder was clicked: offers to grant access to the FOLDER
+    /// containing `resolvedURL` (broader than a per-file grant -- one consent then covers every
+    /// image in that folder) via the sanctioned NSOpenPanel -> security-scoped-bookmark flow, the
+    /// same mechanism `DocumentFolderAccess` uses elsewhere. Real-app-only: driving a real
+    /// NSOpenPanel sheet headlessly isn't meaningful in a unit test.
+    func markdownTextViewRequestImageAccess(_ textView: MarkdownTextView, resolvedURL: URL) {
+        let folder = resolvedURL.deletingLastPathComponent()
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = folder
+        panel.message = "Grant Marginal access to this folder so it can show the image"
+        panel.prompt = "Grant Access"
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let chosenURL = panel.url, let self else { return }
+            self.imageFolderAccess.storeSecurityScopedBookmark(for: chosenURL)
+            self.imageFolderAccess.beginRetainedAccess(to: chosenURL)
+            // ImageCache never caches a failed decode (see its type doc), so the next
+            // drawBackground pass simply retries the read now that access is granted --
+            // forcing a redraw is enough, no cache entry needs to be dropped first.
+            self.textView.needsDisplay = true
+        }
+        if let window = view.window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
     /// Testable core of the paste-image flow: takes an injectable pasteboard so tests never
     /// have to touch the global `NSPasteboard.general`.
     func insertPastedImage(from pb: NSPasteboard, into textView: MarkdownTextView) -> Bool {

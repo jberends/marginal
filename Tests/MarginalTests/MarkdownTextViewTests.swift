@@ -13,6 +13,7 @@ final class MarkdownTextViewTests: XCTestCase {
         func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedMarkdownFileAt url: URL) {}
         func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedImageFileAt url: URL, atCharacterIndex characterIndex: Int) {}
         func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool { false }
+        func markdownTextViewRequestImageAccess(_ textView: MarkdownTextView, resolvedURL: URL) {}
     }
 
     private func makeKeyEvent(charactersIgnoringModifiers: String, modifierFlags: NSEvent.ModifierFlags) -> NSEvent {

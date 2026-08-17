@@ -374,7 +374,7 @@ final class MarkdownLayoutManager: NSLayoutManager {
             .font: NSFont.systemFont(ofSize: min(11, box.height * 0.24)),
             .foregroundColor: NSColor.tertiaryLabelColor
         ]
-        let title = "\u{26A0}\u{FE0E} Image unavailable" as NSString
+        let title = "\u{26A0}\u{FE0E} Image unavailable — click to grant access" as NSString
         let subtitle = fileName as NSString
         let titleSize = title.size(withAttributes: titleAttributes)
         let subtitleSize = subtitle.size(withAttributes: subtitleAttributes)

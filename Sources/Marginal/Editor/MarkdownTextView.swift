@@ -10,6 +10,10 @@ protocol MarkdownTextViewShortcutDelegate: AnyObject {
     func markdownTextView(_ textView: MarkdownTextView, didReceiveDroppedImageFileAt url: URL, atCharacterIndex characterIndex: Int)
     /// Return true if an image was found on the pasteboard and handled (markup inserted).
     func markdownTextViewInsertPastedImage(_ textView: MarkdownTextView) -> Bool
+    /// The "image unavailable" placeholder was clicked: `resolvedURL` is the image the document
+    /// references but currently can't load. Implementers should offer a way to grant access to
+    /// the folder containing it (see `DocumentViewController`'s NSOpenPanel-backed grant flow).
+    func markdownTextViewRequestImageAccess(_ textView: MarkdownTextView, resolvedURL: URL)
 }
 
 /// Every extension Marginal opens as a document. A .txt is markdown without markup, so it opens
@@ -67,15 +71,38 @@ final class MarkdownTextView: NSTextView {
     }
 
     // Clicking a drawn task checkbox toggles it ([ ] <-> [x]) instead of moving the caret.
+    // Clicking an unavailable-image placeholder requests folder access instead of moving the
+    // caret -- checked before the checkbox/caret paths so it takes precedence for that run.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if event.modifierFlags.contains(.command), openLink(at: point) {
+            return
+        }
+        if let resolvedURL = unavailableImageURL(at: point) {
+            shortcutDelegate?.markdownTextViewRequestImageAccess(self, resolvedURL: resolvedURL)
             return
         }
         if let characterIndex = taskCheckboxCharacterIndex(at: point), toggleTaskCheckbox(atCharacterIndex: characterIndex) {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    /// The resolved URL of an inline image under `point` (view coordinates), but only when that
+    /// image currently FAILS to load -- i.e. `point` is on the drawn "image unavailable"
+    /// placeholder. A successfully-loading image returns nil here so its click falls through to
+    /// the normal caret/reveal-source behavior. Same glyph/character hit-test pattern as
+    /// `taskCheckboxCharacterIndex`.
+    private func unavailableImageURL(at point: NSPoint) -> URL? {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else { return nil }
+        let containerPoint = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard characterIndex < textStorage.length,
+              let info = textStorage.attribute(.marginalImage, at: characterIndex, effectiveRange: nil) as? ImageDisplayInfo,
+              ImageCache.shared.image(at: info.resolvedURL) == nil
+        else { return nil }
+        return info.resolvedURL
     }
 
     /// ⌘-click opens the link under `point` in the default browser. A plain click deliberately
