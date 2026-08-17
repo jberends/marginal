@@ -48,17 +48,6 @@ final class DocumentImageStore {
         return url
     }
 
-    /// Writes managed bytes directly into `assetsDir` (created if needed), returns the file URL.
-    func write(data: Data, ext: String, now: Date, into assetsDir: URL) throws -> URL {
-        if !fm.fileExists(atPath: assetsDir.path) {
-            try fm.createDirectory(at: assetsDir, withIntermediateDirectories: true)
-        }
-        let name = uniqueFilename(ext: ext, now: now, in: assetsDir)
-        let url = assetsDir.appendingPathComponent(name)
-        try data.write(to: url)
-        return url
-    }
-
     /// True when `url` lives inside this store's tempDirectory (i.e. a managed temp file).
     func isManagedTemp(_ url: URL) -> Bool {
         url.standardizedFileURL.path.hasPrefix(tempDirectory.standardizedFileURL.path + "/")
