@@ -59,4 +59,27 @@ final class MarkdownDocumentTests: XCTestCase {
                                         saveOperation: .saveOperation)
         XCTAssertEqual(ext, "md")
     }
+
+    // The visible Save-As proposal is governed by prepareSavePanel -> proposedMarkdownFileName,
+    // not fileNameExtension(forType:) (the system markdown UTI seeds ".markdown" otherwise).
+    func testProposedMarkdownFileNameForcesMdExtension() {
+        XCTAssertEqual(MarkdownDocument.proposedMarkdownFileName(from: "Untitled.markdown"), "Untitled.md")
+        XCTAssertEqual(MarkdownDocument.proposedMarkdownFileName(from: "Untitled.md"), "Untitled.md")
+        XCTAssertEqual(MarkdownDocument.proposedMarkdownFileName(from: "Untitled"), "Untitled.md")
+        XCTAssertEqual(MarkdownDocument.proposedMarkdownFileName(from: ""), "Untitled.md")
+        XCTAssertEqual(MarkdownDocument.proposedMarkdownFileName(from: "My Notes.MARKDOWN"), "My Notes.md")
+        // A dotted base without a markdown extension keeps its base intact.
+        XCTAssertEqual(MarkdownDocument.proposedMarkdownFileName(from: "v1.2 draft.markdown"), "v1.2 draft.md")
+    }
+
+    // Proves the override is wired: prepareSavePanel rewrites the panel's name field to .md,
+    // which is what the user actually sees (the system markdown UTI seeds ".markdown" otherwise).
+    @MainActor
+    func testPrepareSavePanelRewritesNameFieldToMd() {
+        let doc = MarkdownDocument()
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Untitled.markdown"
+        _ = doc.prepareSavePanel(panel)
+        XCTAssertEqual(panel.nameFieldStringValue, "Untitled.md")
+    }
 }

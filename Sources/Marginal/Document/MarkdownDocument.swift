@@ -76,6 +76,30 @@ final class MarkdownDocument: NSDocument {
         "md"
     }
 
+    // fileNameExtension(forType:) alone is NOT enough for the *visible* Save-As proposal: the
+    // Markdown UTI (net.daringfireball.markdown) is declared by the system, and its system
+    // preferred filename extension is ".markdown" (md is last in its tag list), so NSSavePanel
+    // seeds "Untitled.markdown". Rewrite the name field here to end in ".md" -- the one control
+    // that governs what the user actually sees -- while still accepting ".markdown" if typed.
+    override func prepareSavePanel(_ savePanel: NSSavePanel) -> Bool {
+        savePanel.nameFieldStringValue = Self.proposedMarkdownFileName(from: savePanel.nameFieldStringValue)
+        return super.prepareSavePanel(savePanel)
+    }
+
+    /// Normalizes a Save-panel filename to end in `.md`: replaces a trailing `.md`/`.markdown`
+    /// (any case) with `.md`, supplies "Untitled" when empty, and otherwise appends `.md` only
+    /// when the name carries no extension at all. Suffix-based (not `NSString.pathExtension`) so a
+    /// dotted/spaced base like "v1.2 draft.markdown" normalizes correctly.
+    static func proposedMarkdownFileName(from current: String) -> String {
+        let name = current.isEmpty ? "Untitled" : current
+        let lower = name.lowercased()
+        for suffix in [".markdown", ".md"] where lower.hasSuffix(suffix) {
+            return String(name.dropLast(suffix.count)) + ".md"
+        }
+        // No markdown extension: append .md unless the name already has some other extension.
+        return (name as NSString).pathExtension.isEmpty ? name + ".md" : name
+    }
+
     override func read(from data: Data, ofType typeName: String) throws {
         // UTF-8 only, deliberately. Marginal now opens .txt as well as .md, so falling back to
         // encoding sniffing for older Latin-1 files is tempting -- but Latin-1 decodes *any* byte
