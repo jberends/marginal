@@ -98,10 +98,18 @@ final class MarkdownTextView: NSTextView {
         let containerPoint = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
         let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
         let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-        guard characterIndex < textStorage.length,
-              let info = textStorage.attribute(.marginalImage, at: characterIndex, effectiveRange: nil) as? ImageDisplayInfo,
+        guard characterIndex < textStorage.length else { return nil }
+        var imageRange = NSRange()
+        guard let info = textStorage.attribute(.marginalImage, at: characterIndex, effectiveRange: &imageRange) as? ImageDisplayInfo,
               ImageCache.shared.image(at: info.resolvedURL) == nil
         else { return nil }
+        // `glyphIndex(for:in:)` maps to the NEAREST glyph, so a click in blank container space
+        // beside a narrow line (or past its last glyph) can still resolve to this image's glyph
+        // index -- reject it unless the point actually falls within the image run's own drawn
+        // rect, same containment guard `openLink`/`taskCheckboxCharacterIndex` apply.
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: imageRange, actualCharacterRange: nil)
+        let imageRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        guard imageRect.contains(containerPoint) else { return nil }
         return info.resolvedURL
     }
 
