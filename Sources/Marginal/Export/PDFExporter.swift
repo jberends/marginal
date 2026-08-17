@@ -84,7 +84,18 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
           hr { border: 0; border-top: 1px solid #E6E5E3; }
           li { margin-bottom: 6px; }
           h1, h2, h3 { page-break-after: avoid; }
-          img { max-width: 100%; height: auto; }
+          /* Cap image height so a single image can't dominate a page: printable page height is
+             paperSize.height (842pt) minus top+bottom margins (57+57=114pt) = 728pt; the cap
+             below is roughly half of that, so a full-width portrait image still leaves most of
+             a page for surrounding text. */
+          img {
+            max-width: 100%;
+            max-height: 364pt;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            break-inside: avoid;
+          }
         </style>
         </head>
         <body>\(body)</body>

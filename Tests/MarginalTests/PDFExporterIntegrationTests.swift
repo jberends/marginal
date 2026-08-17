@@ -94,6 +94,45 @@ final class PDFExporterIntegrationTests: XCTestCase {
                       "Expected green pixels from the absolutely-linked image to be rendered in the PDF")
     }
 
+    /// Regression for images dominating exported pages: an unconstrained `img { height: auto }`
+    /// scales a tall image to fill the full page width, which for a very tall source image
+    /// (a portrait screenshot, say) yields an enormous rendered height that spills across many
+    /// PDF pages just to display one picture. PDFExporter's CSS must cap image height so a single
+    /// image fits within (a fraction of) one page instead of splitting across several.
+    @MainActor
+    func testExportCapsExtremelyTallImageToASinglePage() throws {
+        let workDir = FileManager.default.temporaryDirectory.appendingPathComponent("pdf-tall-image-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workDir) }
+
+        // Aspect ratio 1:30 -- scaling this to the printable column width without a height cap
+        // would render several thousand points tall, i.e. many pages just for this one image.
+        let blue = NSColor(srgbRed: 0, green: 0, blue: 1, alpha: 1)
+        let tallPNG = Self.solidColorPNG(color: blue, width: 100, height: 3000)
+        let imageURL = workDir.appendingPathComponent("tall.png")
+        try tallPNG.write(to: imageURL)
+
+        let markdown = """
+        # Tall image test
+
+        ![tall](\(imageURL.path))
+        """
+
+        let pdfURL = workDir.appendingPathComponent("Tall.pdf")
+        let done = expectation(description: "export completes")
+        PDFExporter.shared.export(markdown: markdown, title: "Tall image test", baseURL: workDir, to: pdfURL) { error in
+            XCTAssertNil(error, "Export reported an error: \(String(describing: error))")
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 30)
+
+        guard let document = PDFDocument(url: pdfURL) else {
+            return XCTFail("No readable PDF was written at \(pdfURL.path)")
+        }
+        XCTAssertLessThanOrEqual(document.pageCount, 2,
+                                  "A single tall image should be capped to fit within (a fraction of) one page, not split across many pages")
+    }
+
     private static func solidColorPNG(color: NSColor, width: Int, height: Int) -> Data {
         let img = NSImage(size: NSSize(width: width, height: height))
         img.lockFocus()
