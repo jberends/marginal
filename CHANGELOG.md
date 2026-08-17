@@ -19,6 +19,11 @@ All notable changes to Marginal are documented here. The format follows
 - On saving, an option in the folder-access prompt can also **copy externally-linked images**
   (ones dragged from elsewhere on disk) into the document's `.assets/` folder, making the document
   self-contained.
+- Inserted images get **alt text auto-filled from the filename** (accessibility and a caption).
+- An image that can't be loaded now shows an **"image unavailable" placeholder** with its path,
+  instead of a blank gap.
+- Images **dragged in from elsewhere on disk are remembered across reopen** (per-file access is
+  preserved on the same Mac), so linked images still display the next time you open the document.
 
 ### Fixed
 
