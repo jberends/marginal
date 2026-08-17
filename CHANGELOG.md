@@ -33,6 +33,9 @@ All notable changes to Marginal are documented here. The format follows
 - **Tab / Shift-Tab indent and outdent** list items by one level — two spaces, matching the list
   parser's nesting unit — instead of inserting a literal tab (which rendered ~8 columns wide and
   wasn't recognized as list nesting). Works across a multi-line selection and is undoable.
+- **Tab-indented list items now nest** (one tab = one level), so a list indented with tabs — from
+  the Tab key or a pasted document — renders as a proper nested list with sub-bullets and even
+  spacing, instead of literal `-` lines with uneven gaps.
 
 ### Fixed
 

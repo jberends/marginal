@@ -181,17 +181,27 @@ struct MarkdownParser {
         var items: [ListItemSpan] = []
         var lineStart = text.startIndex
 
-        // Nesting depth is derived from leading-space indentation, 2 spaces per level -- a
-        // pragmatic fixed unit (not CommonMark's column-based nesting rule), matching common
-        // editor conventions. Tabs aren't recognized as indentation (out of scope).
+        // Nesting depth is derived from leading indentation, 2 columns per level -- a pragmatic
+        // fixed unit (not CommonMark's column-based nesting rule), matching common editor
+        // conventions. A leading TAB counts as one level (2 columns), so a tab-indented "- item"
+        // (what the editor's own Tab key and many pasted documents produce) nests just like two
+        // spaces rather than falling through to a literal, un-nested paragraph.
+        func isIndentWhitespace(_ ch: Character) -> Bool { ch == " " || ch == "\t" }
+
         func level(of line: Substring) -> Int {
             let content = Self.skippingBlockquoteMarkers(line)
-            return content.prefix { $0 == " " }.count / 2
+            var columns = 0
+            for ch in content {
+                if ch == " " { columns += 1 }
+                else if ch == "\t" { columns += 2 }
+                else { break }
+            }
+            return columns / 2
         }
 
         func markerContentStart(of line: Substring) -> Substring {
             let line = Self.skippingBlockquoteMarkers(line)
-            return line[line.prefix { $0 == " " }.endIndex...]
+            return line[line.prefix(while: isIndentWhitespace).endIndex...]
         }
 
         func unorderedMarkerRange(in line: Substring) -> Range<String.Index>? {

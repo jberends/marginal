@@ -712,10 +712,16 @@ struct MarkdownStyler {
                 let itemSpacing = baseFont.pointSize * 0.4375
                 let hasContinuation = markerLineEnd < item.lineRange.upperBound
 
+                // A leading TAB used for indentation is hidden (shrunk font) like leading spaces,
+                // but a tab still snaps to a tab stop regardless of font size -- which would push
+                // the marker past the paragraph indent. Collapse tab advance to ~0 so the visual
+                // indent comes purely from firstLineHeadIndent/headIndent below.
                 let markerLineStyle = NSMutableParagraphStyle()
                 markerLineStyle.lineHeightMultiple = bodyLineHeightMultiple
                 markerLineStyle.firstLineHeadIndent = levelOffset
                 markerLineStyle.headIndent = levelOffset + indentWidth
+                markerLineStyle.tabStops = []
+                markerLineStyle.defaultTabInterval = 0.01
                 if !hasContinuation { markerLineStyle.paragraphSpacing = itemSpacing }
                 result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
 
@@ -724,6 +730,8 @@ struct MarkdownStyler {
                     continuationStyle.lineHeightMultiple = bodyLineHeightMultiple
                     continuationStyle.firstLineHeadIndent = levelOffset + indentWidth
                     continuationStyle.headIndent = levelOffset + indentWidth
+                    continuationStyle.tabStops = []
+                    continuationStyle.defaultTabInterval = 0.01
                     continuationStyle.paragraphSpacing = itemSpacing
                     let continuationStart = text.index(after: markerLineEnd)
                     result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
