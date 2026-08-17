@@ -4,6 +4,25 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.10.0] — Unreleased
+
+### Added
+
+- **Images**: insert an image by paste, screenshot, or drag-and-drop. A pasted or screenshotted
+  image renders **inline** in the editor; click it to reveal its `![](path)` markdown source in a
+  small dimmed line beneath the still-anchored image (clicking away collapses it, without the page
+  jumping). Dragging an image **file** from Finder links it by absolute path.
+- **Image export**: images render as real `<img>` in **PDF and HTML export** and are embedded as
+  self-contained data URIs, so exports and **Copy as HTML** carry the picture with them.
+
+### Fixed
+
+- **Saving a document with pasted images now works under the sandbox.** Pasted images buffer in a
+  temporary location and, on the first save, Marginal asks once for permission to the document's
+  folder (remembered afterwards) and writes the images into a sibling `<name>.assets/` folder next
+  to the `.md`. If access is declined, Marginal warns rather than silently losing the images.
+- New documents are proposed with a **`.md`** extension instead of `.markdown`.
+
 ## [0.9.0] — 2026-08-13
 
 ### Added
