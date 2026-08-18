@@ -15,7 +15,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Marginal — markdown that reads the way it renders</title>
-<meta name="description" content="Marginal is a native macOS editor for plain .md files. The document renders live with beautiful, carefully crafted typography; the syntax hides itself except around your cursor.">
+<meta name="description" content="Marginal is a native macOS editor for plain .md files. The document renders live with beautiful, carefully crafted typography; the syntax hides itself except around your cursor. Now with inline images.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Marginal — markdown that reads the way it renders">
 <meta property="og:description" content="A native macOS WYSIWYG markdown editor. Plain .md files, beautiful, carefully crafted rendering, markers that hide themselves except around your cursor.">
@@ -384,6 +384,11 @@ Inline `code` stays quiet.</code></div>
           <p>Marks like <code class="chip">**</code> and <code class="chip">#</code> hide while you type and reveal at the cursor. One view — the document.</p>
         </div>
         <div class="card">
+          <span class="glyph" aria-hidden="true">![]</span>
+          <h3>Images inline</h3>
+          <p>Paste, drag, or drop a picture and it renders as a clean figure card. Pasted images travel with the file in a sibling <code class="chip">.assets</code> folder, and they export in PDF and HTML.</p>
+        </div>
+        <div class="card">
           <span class="glyph" aria-hidden="true">.md</span>
           <h3>Plain files, forever</h3>
           <p>Documents are ordinary <code class="chip">.md</code> files on disk. No lock-in, no database. Works with git.</p>
@@ -401,7 +406,7 @@ Inline `code` stays quiet.</code></div>
         <div class="card">
           <span class="glyph" aria-hidden="true">&gt;</span>
           <h3>Copy both ways</h3>
-          <p>Copy any selection as Markdown or as HTML — source into a commit, rich text into an email.</p>
+          <p>Copy any selection as Markdown or as HTML — source into a commit, rich text into an email, with any images embedded.</p>
         </div>
         <div class="card">
           <span class="glyph" aria-hidden="true">##</span>
