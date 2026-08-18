@@ -4,7 +4,7 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
-## [0.10.0] — Unreleased
+## [0.10.0] — 2026-08-18
 
 ### Added
 
@@ -177,6 +177,7 @@ All notable changes to Marginal are documented here. The format follows
   lists, blockquotes, emoji shortcodes), plain `.md` files, native AppKit app with
   macOS tabs (⌘1–⌘9), copy as Markdown or HTML, light and dark mode.
 
+[0.10.0]: https://github.com/jberends/marginal/releases/tag/v0.10.0
 [0.3.0]: https://github.com/jberends/marginal/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jberends/marginal/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jberends/marginal/releases/tag/v0.1.0
