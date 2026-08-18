@@ -181,17 +181,27 @@ struct MarkdownParser {
         var items: [ListItemSpan] = []
         var lineStart = text.startIndex
 
-        // Nesting depth is derived from leading-space indentation, 2 spaces per level -- a
-        // pragmatic fixed unit (not CommonMark's column-based nesting rule), matching common
-        // editor conventions. Tabs aren't recognized as indentation (out of scope).
+        // Nesting depth is derived from leading indentation, 2 columns per level -- a pragmatic
+        // fixed unit (not CommonMark's column-based nesting rule), matching common editor
+        // conventions. A leading TAB counts as one level (2 columns), so a tab-indented "- item"
+        // (what the editor's own Tab key and many pasted documents produce) nests just like two
+        // spaces rather than falling through to a literal, un-nested paragraph.
+        func isIndentWhitespace(_ ch: Character) -> Bool { ch == " " || ch == "\t" }
+
         func level(of line: Substring) -> Int {
             let content = Self.skippingBlockquoteMarkers(line)
-            return content.prefix { $0 == " " }.count / 2
+            var columns = 0
+            for ch in content {
+                if ch == " " { columns += 1 }
+                else if ch == "\t" { columns += 2 }
+                else { break }
+            }
+            return columns / 2
         }
 
         func markerContentStart(of line: Substring) -> Substring {
             let line = Self.skippingBlockquoteMarkers(line)
-            return line[line.prefix { $0 == " " }.endIndex...]
+            return line[line.prefix(while: isIndentWhitespace).endIndex...]
         }
 
         func unorderedMarkerRange(in line: Substring) -> Range<String.Index>? {
@@ -498,9 +508,30 @@ struct MarkdownParser {
                   let fullRange = Range(match.range, in: text),
                   let textRange = Range(match.range(at: 1), in: text),
                   let urlRange = Range(match.range(at: 2), in: text) else { return }
+            let openBracket = fullRange.lowerBound
+            if openBracket > text.startIndex {
+                let prev = text.index(before: openBracket)
+                if text[prev] == "!" { return }   // belongs to an image, not a link
+            }
             links.append(LinkSpan(textRange: textRange, urlRange: urlRange, fullRange: fullRange, url: String(text[urlRange])))
         }
         return links
+    }
+
+    /// Matches CommonMark image syntax `![alt](path)`. Alt may be empty; path is the raw
+    /// text between the parentheses (not URL-decoded — the editor stores human-readable paths).
+    static func parseImages(in text: String) -> [ImageSpan] {
+        guard let regex = try? NSRegularExpression(pattern: #"!\[([^\]]*)\]\(([^)]+)\)"#) else {
+            return []
+        }
+        let ns = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            guard let full = Range(m.range, in: text),
+                  let alt = Range(m.range(at: 1), in: text),
+                  let path = Range(m.range(at: 2), in: text) else { return nil }
+            return ImageSpan(fullRange: full, altRange: alt, pathRange: path,
+                             altText: String(text[alt]), path: String(text[path]))
+        }
     }
 
     /// Only recognizes ":word:" sequences that match a known GFM/gemoji alias (see

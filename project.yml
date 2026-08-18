@@ -11,8 +11,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: 2ZP4KRYYZ5  # KE-works BV -- applies to app and test targets alike
-    MARKETING_VERSION: "0.9.0"
-    CURRENT_PROJECT_VERSION: "9"
+    MARKETING_VERSION: "0.10.0"
+    CURRENT_PROJECT_VERSION: "10"
     GENERATE_INFOPLIST_FILE: NO
 targets:
   Marginal:
@@ -28,6 +28,10 @@ targets:
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: Sources/Marginal/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Marginal/App/Marginal.entitlements
+        # Production release: ships the production icon (AppIcon), not the beta mark.
+        # For local development/beta builds, flip this back to AppIconBeta (see the
+        # release checklist in AGENTS.md). The side-by-side build script forces
+        # AppIconBeta for its own local build regardless of this value.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   MarginalTests:
     type: bundle.unit-test

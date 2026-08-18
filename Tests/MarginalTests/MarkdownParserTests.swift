@@ -186,6 +186,20 @@ final class MarkdownParserHeaderAndListTests: XCTestCase {
         XCTAssertTrue(MarkdownParser.parseListItems(in: "Just a normal sentence.").isEmpty)
     }
 
+    // A tab-indented item nests just like two spaces (one level per tab): it must be recognized
+    // as its own nested list item, not fall through to a literal, un-nested paragraph.
+    func testTabIndentedItemsNestAsSeparateListItems() {
+        let text = "- top\n\t- one tab\n\t\t- two tabs\n    - four spaces"
+        let items = MarkdownParser.parseListItems(in: text)
+        XCTAssertEqual(items.count, 4)
+        XCTAssertEqual(items[0].level, 0)
+        XCTAssertEqual(items[1].level, 1, "one tab == one level")
+        XCTAssertEqual(items[2].level, 2, "two tabs == two levels")
+        XCTAssertEqual(items[3].level, 2, "four spaces == two levels (unchanged)")
+        // Each tab-indented line is its own item, not a lazy continuation of "top".
+        XCTAssertEqual(String(text[items[0].lineRange]), "- top")
+    }
+
     // CommonMark "lazy continuation": a plain line immediately following a list item line (no
     // blank line between them) is part of that item's paragraph, not a separate top-level
     // paragraph -- matches how Notion (and other CommonMark renderers) render the same source.
@@ -595,5 +609,33 @@ final class MarkdownParserEmojiShortcodeTests: XCTestCase {
     func testMultipleShortcodesInOneLineAreAllFound() {
         let spans = MarkdownParser.parseEmojiShortcodes(in: ":smile: :rocket: :heart:")
         XCTAssertEqual(spans.map(\.emoji), ["😄", "🚀", "❤️"])
+    }
+}
+
+final class MarkdownParserImageTests: XCTestCase {
+
+    func testParseImagesFindsBasicImage() {
+        let text = "before ![a cat](cat.png) after"
+        let images = MarkdownParser.parseImages(in: text)
+        XCTAssertEqual(images.count, 1)
+        let img = images[0]
+        XCTAssertEqual(String(text[img.fullRange]), "![a cat](cat.png)")
+        XCTAssertEqual(img.altText, "a cat")
+        XCTAssertEqual(img.path, "cat.png")
+    }
+
+    func testParseImagesEmptyAlt() {
+        let text = "![](img/x.png)"
+        let images = MarkdownParser.parseImages(in: text)
+        XCTAssertEqual(images.count, 1)
+        XCTAssertEqual(images[0].altText, "")
+        XCTAssertEqual(images[0].path, "img/x.png")
+    }
+
+    func testParseLinksSkipsImageInnerLink() {
+        let text = "![a](b.png) and [real](x.md)"
+        let links = MarkdownParser.parseLinks(in: text)
+        XCTAssertEqual(links.count, 1)
+        XCTAssertEqual(String(text[links[0].urlRange]), "x.md")
     }
 }

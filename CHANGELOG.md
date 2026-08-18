@@ -4,6 +4,59 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.10.0] — Unreleased
+
+### Added
+
+- **Images**: insert an image by paste, screenshot, or drag-and-drop. An image renders inline as a
+  tidy **figure card** — the picture centered in a rounded container that floats on the page (no
+  fill, a whisper-thin hairline edge, and a soft shadow) with a **caption** beneath it (the alt
+  text, or the filename when there's no alt).
+  Click it to reveal its `![](path)` markdown source as a small dimmed line beneath the still-
+  anchored card (clicking away collapses it, without the page jumping). Dragging an image **file**
+  from Finder links it by absolute path.
+- **Image export**: images render as real `<img>` in **PDF and HTML export** and are embedded as
+  self-contained data URIs, so exports and **Copy as HTML** carry the picture with them. Exported
+  PDF images are capped to about half a page tall (keeping their aspect ratio) so a single image
+  no longer takes over a page.
+- When a document references **externally-linked images** (ones dragged in from elsewhere on
+  disk), the **Save panel** shows a checkbox to also **copy them into the document's `.assets/`
+  folder**, making the document self-contained. (Pasted images always go there regardless, so the
+  checkbox only appears when there's an external image to copy.)
+- Inserted images get **alt text auto-filled from the filename** (accessibility and a caption).
+- An image that can't be loaded now shows an **"image unavailable" placeholder** with its path,
+  instead of a blank gap.
+- Images **dragged in from elsewhere on disk are remembered across reopen** (per-file access is
+  preserved on the same Mac), so linked images still display the next time you open the document.
+- The **line-number gutter** now draws a faint vertical bar spanning the caret line's full height,
+  so a tall line (like an image figure card) reads as tall at a glance.
+- **Tab / Shift-Tab indent and outdent** list items by one level — two spaces, matching the list
+  parser's nesting unit — instead of inserting a literal tab (which rendered ~8 columns wide and
+  wasn't recognized as list nesting). Works across a multi-line selection and is undoable.
+- **Tab-indented list items now nest** (one tab = one level), so a list indented with tabs — from
+  the Tab key or a pasted document — renders as a proper nested list with sub-bullets and even
+  spacing, instead of literal `-` lines with uneven gaps.
+
+### Fixed
+
+- **Saving a document with pasted images now works under the sandbox.** Pasted images buffer in a
+  temporary location and, on the first save, Marginal asks once for permission to the document's
+  folder (remembered afterwards) and writes the images into a sibling `<name>.assets/` folder next
+  to the `.md`. If access is declined, Marginal warns rather than silently losing the images.
+- New documents are proposed with a **`.md`** extension instead of `.markdown`.
+- **An image on the very first line now renders** (card, image, or "unavailable" placeholder)
+  instead of showing as bare `![](…)` text. The image band was reserved as space-above-the-line,
+  which TextKit silently drops for the first paragraph; it's now reserved as line height (honored
+  everywhere) with the caret kept a normal height.
+- **The Save panel's "copy linked images" checkbox now works for a document whose only image is an
+  externally-linked path** (e.g. one dragged from the Desktop). Such a document was skipped before
+  the copy step ran, so ticking the box did nothing; it now copies the linked image into the
+  `<name>.assets/` folder and rewrites the reference to a relative path.
+- **Opening any saved document no longer hangs the app** (beachball, needing Force Quit). Reopening
+  a file-backed document walked its folder's ancestors looking for a remembered image-folder grant,
+  but the walk never terminated at the filesystem root and spun a CPU core at 100%. The walk now
+  stops correctly at the root.
+
 ## [0.9.0] — 2026-08-13
 
 ### Added

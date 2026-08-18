@@ -27,6 +27,75 @@ final class DocumentViewControllerTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "<p>Hello <strong>world</strong></p>")
     }
 
+    func testCopyAsHTMLEmbedsImagesAsDataURIs() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("copy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let imgURL = dir.appendingPathComponent("MyNote.assets", isDirectory: true).appendingPathComponent("p.png")
+        try FileManager.default.createDirectory(at: imgURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try ImageInsertionTests.onePixelPNG().write(to: imgURL)
+
+        let vc = DocumentViewController()
+        let doc = MarkdownDocument()
+        doc.fileURL = dir.appendingPathComponent("MyNote.md")
+        vc.document = doc
+        _ = vc.view
+        vc.loadInitialText("![a](MyNote.assets/p.png)")
+        vc.textView.setSelectedRange(NSRange(location: 0, length: (vc.textView.string as NSString).length))
+
+        let html = vc.htmlForCopy(of: vc.textView.string)
+        XCTAssertTrue(html.contains(#"src="data:image/png;base64,"#), html)
+        XCTAssertFalse(html.contains(#"src="MyNote.assets"#), "local path must be replaced by a data URI")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // Guards the CRITICAL detail from the task brief: htmlForCopy must build its search key with
+    // the exact same encoding MarkdownHTMLRenderer uses when emitting <img src>: percent-encode
+    // with .urlPathAllowed, THEN escape "&" to "&amp;". A path with no special characters (like
+    // "MyNote.assets/p.png" above) can't distinguish "encode only" from "encode then escape &",
+    // since both produce the same string -- so this test uses a path containing "&" and a space,
+    // which only the two-step encoding reproduces exactly.
+    func testCopyAsHTMLEmbedsImagesWithAmpersandAndSpaceInPath() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("copy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let assetsDir = dir.appendingPathComponent("MyNote.assets", isDirectory: true)
+        try FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let imgURL = assetsDir.appendingPathComponent("a & b.png")
+        try ImageInsertionTests.onePixelPNG().write(to: imgURL)
+
+        let vc = DocumentViewController()
+        let doc = MarkdownDocument()
+        doc.fileURL = dir.appendingPathComponent("MyNote.md")
+        vc.document = doc
+        _ = vc.view
+        vc.loadInitialText("![a](MyNote.assets/a & b.png)")
+        vc.textView.setSelectedRange(NSRange(location: 0, length: (vc.textView.string as NSString).length))
+
+        let html = vc.htmlForCopy(of: vc.textView.string)
+        XCTAssertTrue(html.contains(#"src="data:image/png;base64,"#), html)
+        XCTAssertFalse(html.contains("MyNote.assets"), "local path must be replaced by a data URI: \(html)")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // Locks in the skip-on-unreadable behavior: a reference to a file that doesn't exist on disk
+    // must be left untouched -- no data: URI, no crash.
+    func testCopyAsHTMLLeavesMissingImageSrcUntouched() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("copy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let vc = DocumentViewController()
+        let doc = MarkdownDocument()
+        doc.fileURL = dir.appendingPathComponent("MyNote.md")
+        vc.document = doc
+        _ = vc.view
+        vc.loadInitialText("![a](MyNote.assets/missing.png)")
+        vc.textView.setSelectedRange(NSRange(location: 0, length: (vc.textView.string as NSString).length))
+
+        let html = vc.htmlForCopy(of: vc.textView.string)
+        XCTAssertFalse(html.contains("data:"), "missing file must not be embedded: \(html)")
+        XCTAssertTrue(html.contains(#"src="MyNote.assets/missing.png""#), html)
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     func testToggleShowSourceRendersPlainMonospaceText() {
         let viewController = DocumentViewController()
         _ = viewController.view

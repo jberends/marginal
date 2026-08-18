@@ -592,6 +592,222 @@ final class MarkdownStylerTests: XCTestCase {
         let color = attributed.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
         XCTAssertNotEqual(color, NSColor.secondaryLabelColor, "Code block content must not be recolored as a list marker")
     }
+
+    func testImageRunCarriesReserveAttributeWhenCursorOutside() {
+        let text = "![a](x.png)\nnext"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 13) // in "next", outside the image
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if let info = v as? ImageDisplayInfo {
+                found = true
+                XCTAssertEqual(info.resolvedURL, URL(fileURLWithPath: "/tmp/x.png"))
+            }
+        }
+        XCTAssertTrue(found, "image run must carry .marginalImage when cursor is outside")
+    }
+
+    /// The image is now ALWAYS anchored (`.marginalImage` always attached, revealed or not) --
+    /// "revealed" means the markup shows as a small dimmed monospace font instead of the hidden
+    /// 0.1pt font, not that the image stops drawing. These helpers check the font swap instead
+    /// of `.marginalImage` presence/absence.
+    private func isActiveSourceFont(_ attributed: NSAttributedString, at location: Int) -> Bool {
+        guard let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont else { return false }
+        return font.isFixedPitch && font.pointSize > MarkdownStyler.hiddenDelimiterFontSize
+    }
+
+    func testImageSourceRevealedWhenCursorInside() {
+        let text = "![a](x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 3) // inside the image markup
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        XCTAssertNotNil(attributed.attribute(.marginalImage, at: 0, effectiveRange: nil), "image is always anchored, revealed or not")
+        XCTAssertTrue(isActiveSourceFont(attributed, at: 0), "raw source is revealed as small dimmed monospace when cursor is inside")
+    }
+
+    func testImageSourceRevealedWhenSelectionIntersectsImage() {
+        let text = "before ![a](x.png) after"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        // A non-empty selection spanning the whole document (e.g. Cmd-A), which intersects the
+        // image's fullRange without the caret being a single point inside it.
+        let selection = text.startIndex..<text.endIndex
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: nil, selectedRange: selection, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        let imageLocation = text.distance(from: text.startIndex, to: text.range(of: "![a](x.png)")!.lowerBound)
+        XCTAssertTrue(isActiveSourceFont(attributed, at: imageLocation), "a selection intersecting the image reveals its source")
+    }
+
+    func testImageStaysHiddenWhenSelectionDoesNotIntersectImage() {
+        let text = "before ![a](x.png) after"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        // A non-empty selection entirely within "after", not touching the image's fullRange.
+        let selectionStart = text.range(of: "after")!.lowerBound
+        let selection = selectionStart..<text.endIndex
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: nil, selectedRange: selection, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        let imageLocation = text.distance(from: text.startIndex, to: text.range(of: "![a](x.png)")!.lowerBound)
+        XCTAssertNotNil(attributed.attribute(.marginalImage, at: imageLocation, effectiveRange: nil))
+        XCTAssertFalse(isActiveSourceFont(attributed, at: imageLocation), "a selection that doesn't intersect the image must not over-reveal it")
+    }
+
+    func testImageSourceRevealedWhenSelectionIsCaretInsideImage() {
+        let text = "![a](x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        // A zero-length selection (plain caret) inside the image's markup -- the pre-existing
+        // click-to-edit path -- must still reveal, matching testImageSourceRevealedWhenCursorInside.
+        let caret = text.index(text.startIndex, offsetBy: 3)
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: caret, selectedRange: caret..<caret, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        XCTAssertTrue(isActiveSourceFont(attributed, at: 0), "a zero-length selection (caret) inside the image still reveals its source")
+    }
+
+    func testImageRunHidesMarkupAndReservesCardBandAbove() {
+        let text = "![a](x.png)\nnext"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 13) // in "next", outside the image
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+
+        let imageRange = text.range(of: "![a](x.png)")!
+        let location = text.distance(from: text.startIndex, to: imageRange.lowerBound)
+
+        // The literal "![a](x.png)" markup must be hidden with the same shrunk
+        // hidden-delimiter font every other marker uses -- not just left at normal size with
+        // color cleared -- since Task 9's drawing depends on the source glyphs being invisible
+        // but still present/selectable.
+        let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
+
+        // The run reserves the full figure-card band (image + caption + padding) ABOVE the source
+        // by inflating the line to `band + one source line` and pushing the source glyphs into the
+        // bottom slot via a negative baseline offset. (Line height, not paragraphSpacingBefore,
+        // because the latter is dropped by TextKit for a first-line image.) The card-tall caret is
+        // clamped by MarkdownTextView.drawInsertionPoint, not by keeping the line short here.
+        let expectedBand = ImageCardMetrics.bandHeight(captionFontSize: 16 * 0.8)
+        XCTAssertGreaterThan(expectedBand, ImageCardMetrics.imageAreaHeight, "band includes caption + padding")
+        let paragraphStyle = attributed.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertGreaterThan(paragraphStyle?.maximumLineHeight ?? 0, expectedBand, "line inflated to band + a source line")
+        XCTAssertEqual(paragraphStyle?.minimumLineHeight ?? 0, paragraphStyle?.maximumLineHeight ?? -1,
+                       "min == max so the band height is exact")
+        let baselineOffset = attributed.attribute(.baselineOffset, at: location, effectiveRange: nil) as? CGFloat
+        XCTAssertEqual(baselineOffset ?? 0, -expectedBand, accuracy: 0.5, "source glyphs pushed into the bottom slot")
+    }
+
+    func testInactiveImageReservesSpaceAboveAndHidesMarkupAtNormalLineHeight() {
+        let text = "![a](/tmp/x.png)\nnext"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 18) // in "next", image inactive
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+
+        let expectedBand = ImageCardMetrics.bandHeight(captionFontSize: 16 * 0.8)
+        let ps = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertGreaterThan(ps?.maximumLineHeight ?? 0, expectedBand, "line inflated to reserve the card band")
+        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize ?? 99, MarkdownStyler.hiddenDelimiterFontSize, accuracy: 0.001)
+        // The caption defaults to the filename stem when alt is empty; here alt is "a".
+        let info = attributed.attribute(.marginalImage, at: 0, effectiveRange: nil) as? ImageDisplayInfo
+        XCTAssertEqual(info?.caption, "a")
+    }
+
+    // The image line is inflated to hold the card, so its raw insertion-point rect is card-tall.
+    // MarkdownTextView.drawInsertionPoint clamps it to a normal source-line height at the bottom.
+    @MainActor
+    func testCaretOnImageLineIsClampedToNormalHeight() {
+        let text = "![a](/tmp/x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: text.startIndex, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+
+        let tv = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        tv.textStorage?.setAttributedString(attributed)
+        tv.setSelectedRange(NSRange(location: 3, length: 0)) // inside the image markup
+
+        let band = ImageCardMetrics.bandHeight(captionFontSize: 16 * 0.8)
+        // A card-tall raw caret must be shrunk to (rawHeight - band) and moved to the bottom.
+        let raw = NSRect(x: 10, y: 5, width: 2, height: band + 20)
+        let clamped = tv.clampedImageInsertionRect(raw)
+        XCTAssertEqual(clamped.height, 20, accuracy: 0.5, "caret is one source line tall, not card-tall")
+        XCTAssertEqual(clamped.maxY, raw.maxY, accuracy: 0.5, "caret sits at the bottom of the fragment")
+        XCTAssertLessThan(clamped.height, band, "caret must never be as tall as the card")
+
+        // On a WRAPPED source line the fragment is already normal height (< band), so the clamp
+        // must leave the caret untouched -- never shrink it to a negative/zero height.
+        let normal = NSRect(x: 10, y: 400, width: 2, height: 18)
+        XCTAssertEqual(tv.clampedImageInsertionRect(normal), normal, "a normal-height caret is left as-is")
+    }
+
+    func testImageCaptionFallsBackToFilenameStemWhenAltEmpty() {
+        let text = "![](/tmp/holiday.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: nil, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+        let info = attributed.attribute(.marginalImage, at: 0, effectiveRange: nil) as? ImageDisplayInfo
+        XCTAssertEqual(info?.caption, "holiday", "empty alt → caption is the filename without extension")
+    }
+
+    func testActiveImageShowsSmallDimmedMonospaceSourceAndStillDrawsImage() {
+        let text = "![a](/tmp/x.png)"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 3) // inside → active
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: URL(fileURLWithPath: "/tmp/"))
+
+        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertNotNil(font)
+        XCTAssertLessThan(font!.pointSize, 16, "active source is smaller than body")
+        XCTAssertGreaterThan(font!.pointSize, MarkdownStyler.hiddenDelimiterFontSize, "not the 0.1pt hidden font")
+        XCTAssertTrue(font!.isFixedPitch, "active source is monospace")
+        let color = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, .secondaryLabelColor)
+        XCTAssertNotNil(attributed.attribute(.marginalImage, at: 0, effectiveRange: nil), "image still drawn when active")
+    }
+
+    func testImageWithAbsolutePathResolvesWithoutDocumentBaseURL() {
+        let text = "![a](/tmp/abs.png)\nnext"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 20) // in "next", outside the image
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: nil)
+
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if let info = v as? ImageDisplayInfo {
+                found = true
+                XCTAssertEqual(info.resolvedURL, URL(fileURLWithPath: "/tmp/abs.png"))
+            }
+        }
+        XCTAssertTrue(found, "an absolute image path must resolve even with no documentBaseURL -- this is the path untitled/draft docs use")
+    }
+
+    func testImageWithRelativePathAndNoDocumentBaseURLIsSkipped() {
+        let text = "![a](rel.png)\nnext"
+        let model = MarkdownDocumentModel(images: MarkdownParser.parseImages(in: text))
+        let cursor = text.index(text.startIndex, offsetBy: 15) // in "next", outside the image
+        let attributed = MarkdownStyler.attributedString(
+            for: text, model: model, baseFont: .systemFont(ofSize: 16),
+            cursorLocation: cursor, documentBaseURL: nil)
+
+        var found = false
+        attributed.enumerateAttribute(.marginalImage, in: NSRange(location: 0, length: attributed.length)) { v, _, _ in
+            if v != nil { found = true }
+        }
+        XCTAssertFalse(found, "an unresolvable relative path with no documentBaseURL must be skipped -- plain text, no half-hidden state")
+    }
 }
 
 final class MarkdownStylerTableTests: XCTestCase {

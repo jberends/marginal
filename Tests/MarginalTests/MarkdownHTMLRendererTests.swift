@@ -76,4 +76,37 @@ final class MarkdownHTMLRendererTests: XCTestCase {
     func testEmptyStringProducesEmptyHTML() {
         XCTAssertEqual(MarkdownHTMLRenderer.html(fromMarkdown: ""), "")
     }
+
+    func testImageRendersAsImgTag() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![a cat](MyNote.assets/cat.png)")
+        XCTAssertTrue(html.contains(#"<img src="MyNote.assets/cat.png" alt="a cat">"#), html)
+        XCTAssertFalse(html.contains("<a "), "image must not also render as a link")
+    }
+
+    func testImageAltIsEscaped() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: #"![a "b" & c](x.png)"#)
+        XCTAssertTrue(html.contains(#"alt="a &quot;b&quot; &amp; c""#), html)
+    }
+
+    func testImagePathWithSpacesIsPercentEncoded() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![](My Note.assets/pic 1.png)")
+        XCTAssertTrue(html.contains(#"src="My%20Note.assets/pic%201.png""#), html)
+    }
+
+    func testImagePathAmpersandIsEscaped() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![](a&b.png)")
+        XCTAssertTrue(html.contains(#"src="a&amp;b.png""#), html)
+    }
+
+    func testUnderscoreInImagePathDoesNotLeakOrHijackRealEmphasis() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![a](x_y.png) plain _italic_ text")
+        XCTAssertEqual(html, "<p><img src=\"x_y.png\" alt=\"a\"> plain <em>italic</em> text</p>")
+    }
+
+    func testUnderscoreOnlyImagePathProducesNoStrayEmphasisTag() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "![a cat](Screenshot_2026_08_14.png)")
+        XCTAssertTrue(html.contains(#"<img src="Screenshot_2026_08_14.png" alt="a cat">"#), html)
+        XCTAssertFalse(html.contains("<em>"), html)
+        XCTAssertFalse(html.contains("</em>"), html)
+    }
 }

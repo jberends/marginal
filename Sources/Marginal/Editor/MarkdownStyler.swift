@@ -8,7 +8,9 @@ struct MarkdownStyler {
         for text: String,
         model: MarkdownDocumentModel,
         baseFont: NSFont,
-        cursorLocation: String.Index?
+        cursorLocation: String.Index?,
+        selectedRange: Range<String.Index>? = nil,
+        documentBaseURL: URL? = nil
     ) -> NSAttributedString {
         // 1.55 line height for body text. Anything below ~1.5 reads cramped at long-form
         // lengths; this is the range every typographic guide lands on for screen reading.
@@ -54,6 +56,7 @@ struct MarkdownStyler {
             return !overlapsAnyCodeBlock(fullRange)
         }
         let emojiShortcodes = model.emojiShortcodes.filter { !overlapsAnyCodeBlock($0.fullRange) }
+        let images = model.images.filter { !overlapsAnyCodeBlock($0.fullRange) }
 
         // The literal ":shortcode:" text is fully hidden (tiny font, not just cleared color) --
         // reserving its own (often much longer) text width read as a big dead gap around a much
@@ -709,10 +712,16 @@ struct MarkdownStyler {
                 let itemSpacing = baseFont.pointSize * 0.4375
                 let hasContinuation = markerLineEnd < item.lineRange.upperBound
 
+                // A leading TAB used for indentation is hidden (shrunk font) like leading spaces,
+                // but a tab still snaps to a tab stop regardless of font size -- which would push
+                // the marker past the paragraph indent. Collapse tab advance to ~0 so the visual
+                // indent comes purely from firstLineHeadIndent/headIndent below.
                 let markerLineStyle = NSMutableParagraphStyle()
                 markerLineStyle.lineHeightMultiple = bodyLineHeightMultiple
                 markerLineStyle.firstLineHeadIndent = levelOffset
                 markerLineStyle.headIndent = levelOffset + indentWidth
+                markerLineStyle.tabStops = []
+                markerLineStyle.defaultTabInterval = 0.01
                 if !hasContinuation { markerLineStyle.paragraphSpacing = itemSpacing }
                 result.addAttribute(.paragraphStyle, value: markerLineStyle, range: NSRange(item.lineRange.lowerBound..<markerLineEnd, in: text))
 
@@ -721,10 +730,85 @@ struct MarkdownStyler {
                     continuationStyle.lineHeightMultiple = bodyLineHeightMultiple
                     continuationStyle.firstLineHeadIndent = levelOffset + indentWidth
                     continuationStyle.headIndent = levelOffset + indentWidth
+                    continuationStyle.tabStops = []
+                    continuationStyle.defaultTabInterval = 0.01
                     continuationStyle.paragraphSpacing = itemSpacing
                     let continuationStart = text.index(after: markerLineEnd)
                     result.addAttribute(.paragraphStyle, value: continuationStyle, range: NSRange(continuationStart..<item.lineRange.upperBound, in: text))
                 }
+            }
+        }
+
+        // Inline images: the raw "![alt](path)" markup is hidden (same shrunk hidden-delimiter
+        // font used for every other marker) and a fixed-height box is reserved via paragraph
+        // line height, exactly like the horizontal-rule/table-row reservation above. Task 9
+        // draws the actual pixels into that reserved box using the attached ImageDisplayInfo;
+        // Task 8 only reserves the space and resolves the URL. When the cursor sits inside the
+        // span the raw source is left revealed for editing, matching every other marker kind.
+        // Task 10: images reveal on selection-intersection, not only a zero-length caret --
+        // e.g. dragging a selection across an image, or Cmd-A, reveals its source too. Callers
+        // that only have a caret (no explicit selection) fall back to a zero-length range at
+        // that caret, which is exactly the old caret-containment behavior.
+        let imageRevealRange = selectedRange ?? cursorLocation.map { $0..<$0 }
+        let revealedImages = imageRevealRange.map {
+            CursorRevealController.revealedImageSpans(in: model, selectedRange: $0)
+        } ?? []
+
+        // The active/revealed source font is small and dimmed, but never the fully-shrunk hidden
+        // delimiter font -- the raw "![](path)" text stays legible for editing while the image
+        // itself is anchored above it.
+        let activeSourceFont = NSFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.8, weight: .regular)
+
+        for image in images {
+            let fullNSRange = NSRange(image.fullRange, in: text)
+
+            let resolvedURL: URL
+            if image.path.hasPrefix("/") {
+                resolvedURL = URL(fileURLWithPath: image.path)
+            } else if let base = documentBaseURL {
+                resolvedURL = URL(fileURLWithPath: image.path, relativeTo: base).standardizedFileURL
+            } else {
+                continue // relative path with no document base to resolve against -- skip
+            }
+
+            // Caption shown beneath the image: the alt text, or the filename stem when alt is
+            // empty (a sensible default that doubles as accessible text).
+            let caption = image.altText.isEmpty
+                ? resolvedURL.deletingPathExtension().lastPathComponent
+                : image.altText
+            let bandHeight = ImageCardMetrics.bandHeight(captionFontSize: activeSourceFont.pointSize)
+            let info = ImageDisplayInfo(resolvedURL: resolvedURL,
+                                        displaySize: NSSize(width: 320, height: bandHeight),
+                                        caption: caption)
+            // Always attach the image attribute -- the image draws in both the active and
+            // inactive states now. Only the markup's font/color changes with reveal state.
+            result.addAttribute(.marginalImage, value: info, range: fullNSRange)
+
+            // Reserve the card's height by inflating the markup line to `band + one source line`
+            // and pushing the source glyphs down into that bottom source-line slot (via a negative
+            // baseline offset). The card is drawn into the top `band` region by the layout manager.
+            //
+            // Line height (not paragraphSpacingBefore) is used deliberately: paragraphSpacingBefore
+            // is DROPPED by TextKit for the very first paragraph, so a first-line image reserved no
+            // space at all; line height is honored on every paragraph and is counted in the text
+            // view's used height, so the band never collapses or gets clipped. The tall line would
+            // balloon the caret -- MarkdownTextView.drawInsertionPoint clamps it back to a normal
+            // source-line height at the bottom (see there).
+            let sourceLineHeight = (activeSourceFont.ascender - activeSourceFont.descender
+                                    + activeSourceFont.leading).rounded(.up)
+            let reserveStyle = NSMutableParagraphStyle()
+            reserveStyle.minimumLineHeight = info.displaySize.height + sourceLineHeight
+            reserveStyle.maximumLineHeight = info.displaySize.height + sourceLineHeight
+            result.addAttribute(.paragraphStyle, value: reserveStyle, range: fullNSRange)
+            result.addAttribute(.baselineOffset, value: -info.displaySize.height, range: fullNSRange)
+
+            if revealedImages.contains(image) {
+                // Active: show the raw markdown small and dimmed, beneath the anchored image.
+                result.addAttribute(.font, value: activeSourceFont, range: fullNSRange)
+                result.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: fullNSRange)
+            } else {
+                // Inactive: hide the markup entirely.
+                result.addAttribute(.font, value: hiddenFont, range: fullNSRange)
             }
         }
 

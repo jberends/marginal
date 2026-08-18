@@ -6,6 +6,50 @@ import Foundation
 /// MarkdownParser's own "pragmatic single-pass, not full CommonMark" scope.
 struct MarkdownHTMLRenderer {
 
+    /// Like html(fromMarkdown:), but every local <img> src is inlined as a data: URI so the
+    /// returned HTML is self-contained -- no subresource fetch (e.g. file://) is required to
+    /// render it. Used by both copy-as-HTML and PDF export, which each need images to survive
+    /// outside the context of the original document's file location (WKWebView's
+    /// loadHTMLString(_:baseURL:) does not generally grant read access to file:// subresources,
+    /// and pasting into another app has no access to the original file at all).
+    ///
+    /// The search key mirrors this renderer's own src emission exactly: percent-encode with
+    /// .urlPathAllowed, then escape "&" to "&amp;" -- otherwise the replace silently no-ops for
+    /// any path containing an ampersand or other percent-encoded character.
+    static func htmlEmbeddingLocalImages(fromMarkdown markdown: String, baseURL: URL?) -> String {
+        var html = self.html(fromMarkdown: markdown)
+        for span in MarkdownParser.parseImages(in: markdown) {
+            let percentEncodedSrc = span.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? span.path
+            let encodedSrc = percentEncodedSrc.replacingOccurrences(of: "&", with: "&amp;")
+
+            let resolved: URL
+            if span.path.hasPrefix("/") {
+                resolved = URL(fileURLWithPath: span.path)
+            } else if let baseURL {
+                resolved = URL(fileURLWithPath: span.path, relativeTo: baseURL)
+            } else {
+                continue
+            }
+
+            guard let data = try? Data(contentsOf: resolved) else { continue }
+            let mime = mimeType(forExtension: resolved.pathExtension)
+            let dataURI = "data:\(mime);base64,\(data.base64EncodedString())"
+            html = html.replacingOccurrences(of: "src=\"\(encodedSrc)\"", with: "src=\"\(dataURI)\"")
+        }
+        return html
+    }
+
+    static func mimeType(forExtension ext: String) -> String {
+        switch ext.lowercased() {
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "heic": return "image/heic"
+        case "webp": return "image/webp"
+        default: return "application/octet-stream"
+        }
+    }
+
     static func html(fromMarkdown text: String) -> String {
         guard !text.isEmpty else { return "" }
 
@@ -142,6 +186,30 @@ struct MarkdownHTMLRenderer {
         var insertions: [TagInsertion] = []
         var skipRanges: [Range<String.Index>] = []
 
+        // Image spans are captured from the original text first (so alt/path text is real), then
+        // any markdown-delimiter characters (_ * ~ ` [ ] < >) inside each image's full range are
+        // masked to a neutral placeholder in a mutable working copy. Without this, delimiter
+        // scanners like parseInlineStyles have no concept of images and will happily pair an
+        // underscore inside a filename (e.g. "Screenshot_2026_08_14.png") with real emphasis
+        // delimiters elsewhere on the line -- leaking stray tags or stealing one side of a real
+        // "_italic_" pair. Masking (rather than only filtering the resulting insertions) is
+        // required because the mis-pairing can consume a genuine delimiter's partner entirely.
+        // This is safe: masked characters live inside a skipped image range and are replaced by
+        // the <img> insertion, so they never reach the rendered output regardless of their value.
+        let imageSpans = MarkdownParser.parseImages(in: line)
+        var line = line
+        let delimiterCharacters: Set<Character> = ["_", "*", "~", "`", "[", "]", "<", ">"]
+        for image in imageSpans {
+            var index = image.fullRange.lowerBound
+            while index < image.fullRange.upperBound {
+                let next = line.index(after: index)
+                if delimiterCharacters.contains(line[index]) {
+                    line.replaceSubrange(index..<next, with: "x")
+                }
+                index = next
+            }
+        }
+
         for style in MarkdownParser.parseInlineStyles(in: line) {
             let (openTag, closeTag): (String, String)
             switch style.kind {
@@ -158,6 +226,27 @@ struct MarkdownHTMLRenderer {
             skipRanges.append(style.closingDelimiterRange)
         }
 
+        // Replace images before the link pass runs, so the '!' + link fallback never fires. The
+        // <img> tag is inserted as a literal opening "tag" at the image's start index, and the
+        // whole image range is skipped in the character-escaping loop below -- this reuses the
+        // same insertion/skip machinery as links instead of pre-escaping the fragment.
+        for image in imageSpans {
+            let percentEncodedSrc = image.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? image.path
+            let src = percentEncodedSrc.replacingOccurrences(of: "&", with: "&amp;")
+            let alt = htmlAttributeEscape(image.altText)
+            insertions.append(TagInsertion(index: image.fullRange.lowerBound, isClosing: false, tag: "<img src=\"\(src)\" alt=\"\(alt)\">"))
+            skipRanges.append(image.fullRange)
+        }
+
+        // Belt-and-suspenders alongside the masking above: an autolink (bare URL/email) can match
+        // purely alphanumeric text, which masking doesn't touch, so a URL-shaped image path could
+        // still be auto-linked from inside a skipped image range. Drop any link whose full range
+        // falls inside an image so no stray <a> tag can leak the same way stray style tags could.
+        let imageRanges = imageSpans.map(\.fullRange)
+        func overlapsImage(_ range: Range<String.Index>) -> Bool {
+            imageRanges.contains { $0.lowerBound < range.upperBound && range.lowerBound < $0.upperBound }
+        }
+
         let explicitLinks = MarkdownParser.parseLinks(in: line)
         // Bare URLs/emails become real anchors in exported HTML and PDF too, matching what the
         // editor shows. Explicit links and inline code are excluded so a URL is never linked
@@ -168,6 +257,7 @@ struct MarkdownHTMLRenderer {
         let autolinks = MarkdownParser.parseAutolinks(in: line,
                                                       excluding: explicitLinks.map(\.fullRange) + inlineCodeRanges)
         for link in explicitLinks + autolinks {
+            guard !overlapsImage(link.fullRange) else { continue }
             insertions.append(TagInsertion(index: link.textRange.lowerBound, isClosing: false, tag: "<a href=\"\(htmlAttributeEscape(link.url))\">"))
             insertions.append(TagInsertion(index: link.textRange.upperBound, isClosing: true, tag: "</a>"))
             skipRanges.append(link.fullRange.lowerBound..<link.textRange.lowerBound)

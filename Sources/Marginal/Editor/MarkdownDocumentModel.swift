@@ -54,6 +54,14 @@ struct LinkSpan: Equatable {
     let url: String
 }
 
+struct ImageSpan: Equatable {
+    let fullRange: Range<String.Index>
+    let altRange: Range<String.Index>
+    let pathRange: Range<String.Index>
+    var altText: String
+    var path: String
+}
+
 struct BlockquoteSpan: Equatable {
     let markerRange: Range<String.Index>
     let contentRange: Range<String.Index>
@@ -123,4 +131,5 @@ struct MarkdownDocumentModel: Equatable {
     var codeBlocks: [CodeBlockSpan] = []
     var tables: [TableSpan] = []
     var emojiShortcodes: [EmojiShortcodeSpan] = []
+    var images: [ImageSpan] = []
 }
