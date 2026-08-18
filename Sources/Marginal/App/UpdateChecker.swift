@@ -57,6 +57,46 @@ struct UpdateChecker {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
+    /// How this copy of Marginal was installed. The same build is shipped to both channels,
+    /// so this has to be decided at runtime.
+    enum Channel {
+        /// Installed from the Mac App Store. The App Store owns updating.
+        case appStore
+        /// Downloaded from GitHub releases. Marginal updates itself.
+        case direct
+    }
+
+    /// A Mac App Store install carries a receipt at `Contents/_MASReceipt/receipt`; a
+    /// directly downloaded build does not. That file's presence is the only signal available
+    /// at runtime, and it is the one Apple's own guidance points at.
+    ///
+    /// Deliberately conservative: anything we cannot positively identify as App Store is
+    /// treated as `.direct`, because being wrong that way shows a redundant menu item, while
+    /// being wrong the other way offers an update that cannot possibly install.
+    static var channel: Channel {
+        guard let receipt = Bundle.main.appStoreReceiptURL,
+              FileManager.default.fileExists(atPath: receipt.path)
+        else { return .direct }
+        return .appStore
+    }
+
+    /// Whether Marginal is allowed to install its own updates.
+    ///
+    /// False on the App Store, for three separate reasons — any one of which is enough:
+    ///
+    /// 1. Replacing the bundle destroys `_MASReceipt/receipt`, so the app can no longer prove
+    ///    it was purchased.
+    /// 2. The sandbox blocks every step of the swap. It refuses to launch Terminal, and the
+    ///    handoff script is quarantined on write, so Gatekeeper reports it as damaged.
+    /// 3. Apple requires App Store apps to update through the App Store.
+    ///
+    /// There is also a product reason not to merely redirect to the App Store: review lag
+    /// means the App Store build is routinely behind the newest GitHub release, so asking
+    /// GitHub "is there something newer" gets an answer that does not apply to this install.
+    static var canSelfUpdate: Bool {
+        channel == .direct
+    }
+
     /// Numeric, segment-wise semantic comparison: "0.10.0" is newer than "0.9.1",
     /// "1.0" and "1.0.0" are equal.
     static func isVersion(_ candidate: String, newerThan current: String) -> Bool {

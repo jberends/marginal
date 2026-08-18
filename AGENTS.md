@@ -21,6 +21,36 @@ released app.
 If you change the designed beta art, replace
 `assets/icon/marginal-icon-3-beta_1024.png` and re-run `scripts/make-beta-icon.sh`.
 
+## Self-updating: direct downloads only, never the App Store
+
+The same build ships to both channels, so `UpdateChecker.channel` decides at runtime by looking
+for `Contents/_MASReceipt/receipt`. `UpdateChecker.canSelfUpdate` is true only for `.direct`.
+
+On an App Store install the "Check for Updates…" menu item is **omitted**, and
+`UpdateInstaller.downloadAndInstall` refuses as a second line of defence. Three independent
+reasons, any one of which is enough:
+
+1. The update swaps the app bundle, which destroys `_MASReceipt/receipt` — the app can then no
+   longer prove it was purchased.
+2. The sandbox blocks every step. It refuses to launch Terminal, and the handoff `.command` is
+   quarantined on write, so Gatekeeper reports it as "damaged".
+3. Apple requires App Store apps to update through the App Store.
+
+It is omitted rather than redirected to the App Store on purpose: review lag means the App Store
+build is routinely behind the newest GitHub release, so asking GitHub gets an answer that does not
+apply to that install. Reporting "0.10.0 is available" to someone who can only get 0.9.0 is worse
+than saying nothing.
+
+**Two traps in `UpdateInstaller` that bite if you refactor it:**
+
+- The downloaded file must be moved **synchronously inside** the `URLSession` completion handler.
+  URLSession deletes it the moment that closure returns, so hopping to another actor first loses
+  the download — which surfaces as `CFNetworkDownload_xxxxx.tmp couldn't be moved … the former
+  doesn't exist`.
+- The `.command` needs its `com.apple.quarantine` attribute stripped after writing
+  (`clearQuarantine`). Without it Gatekeeper refuses the script and the error says "damaged",
+  which sounds like a corrupt file and is not.
+
 ## Release checklist (production)
 
 Before cutting a production release, do these in order:

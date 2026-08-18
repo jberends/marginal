@@ -35,6 +35,22 @@ final class UpdateCheckerTests: XCTestCase {
         let release = try JSONDecoder().decode(UpdateChecker.Release.self, from: json)
         XCTAssertEqual(release.appZipAsset?.name, "Marginal-0.2.0.zip")
     }
+
+    // MARK: - Distribution channel
+
+    /// The test bundle carries no `_MASReceipt/receipt`, so it must read as a direct install.
+    /// This is the case that keeps self-updating working for GitHub downloads — if it ever
+    /// flips, the "Check for Updates…" menu item silently disappears for everyone.
+    func testTestBundleIsDetectedAsDirectInstall() {
+        XCTAssertEqual(UpdateChecker.channel, .direct)
+        XCTAssertTrue(UpdateChecker.canSelfUpdate)
+    }
+
+    /// `canSelfUpdate` must be derived from the channel and nothing else, so that a single
+    /// check governs both the menu item and the destructive install path.
+    func testSelfUpdateIsAllowedOnlyForDirectInstalls() {
+        XCTAssertEqual(UpdateChecker.canSelfUpdate, UpdateChecker.channel == .direct)
+    }
 }
 
 /// The self-update script runs in Terminal, outside the sandbox, so its behavior can't be
@@ -64,6 +80,15 @@ final class UpdateInstallerScriptTests: XCTestCase {
         let swap = script.range(of: "rm -rf \"/Applications")!.lowerBound
         let relaunch = script.range(of: "open \"/Applications")!.lowerBound
         XCTAssertTrue(wait < extract && extract < swap && swap < relaunch)
+    }
+
+    /// An App Store install must be refused before anything is downloaded or deleted. The
+    /// running test bundle is a direct install, so this asserts the shape of the refusal
+    /// rather than triggering it: the error exists, and it tells the user where to go.
+    func testAppStoreInstallErrorPointsAtTheAppStore() {
+        let message = UpdateInstaller.InstallError.appStoreInstall.errorDescription ?? ""
+        XCTAssertTrue(message.contains("App Store"), "The message has to name the App Store")
+        XCTAssertFalse(message.isEmpty)
     }
 }
 

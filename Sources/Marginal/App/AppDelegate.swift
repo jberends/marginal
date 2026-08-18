@@ -212,8 +212,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Marginal", action: #selector(AppDelegate.showAboutPanel(_:)), keyEquivalent: "")
         appMenu.items.last?.target = target
-        appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")
-        appMenu.items.last?.target = target
+        // Omitted entirely on the App Store, where the App Store does the updating and this
+        // app cannot. Not merely disabled or redirected: review lag means the App Store build
+        // is routinely behind the newest GitHub release, so asking GitHub would report an
+        // update that this install can neither get nor need. See UpdateChecker.canSelfUpdate.
+        if UpdateChecker.canSelfUpdate {
+            appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")
+            appMenu.items.last?.target = target
+        }
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Preferences…", action: #selector(AppDelegate.showPreferences(_:)), keyEquivalent: ",")
         appMenu.items.last?.target = target
