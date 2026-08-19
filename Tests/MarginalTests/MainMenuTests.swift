@@ -70,4 +70,25 @@ final class MainMenuTests: XCTestCase {
         _ = controller.validateMenuItem(item)
         XCTAssertEqual(item.state, .on)
     }
+
+    func testCharacterAndWordCountItemIsWired() throws {
+        let view = try viewMenu()
+        let item = try XCTUnwrap(view.items.first { $0.title == "Show Character & Word Count" })
+        XCTAssertEqual(item.keyEquivalent, "", "no shortcut was asked for")
+        XCTAssertEqual(item.action, #selector(DocumentViewController.toggleCharacterAndWordCount(_:)))
+        XCTAssertNil(item.target)
+    }
+
+    func testCharacterAndWordCountCheckmarkFollowsTheFocusedWindow() {
+        let controller = DocumentViewController()
+        _ = controller.view
+        let item = NSMenuItem(title: "Show Character & Word Count", action: #selector(DocumentViewController.toggleCharacterAndWordCount(_:)), keyEquivalent: "")
+
+        XCTAssertTrue(controller.validateMenuItem(item))
+        XCTAssertEqual(item.state, .off)
+
+        controller.toggleCharacterAndWordCount(nil)
+        _ = controller.validateMenuItem(item)
+        XCTAssertEqual(item.state, .on)
+    }
 }

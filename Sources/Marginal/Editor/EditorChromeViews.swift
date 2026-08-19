@@ -136,6 +136,18 @@ final class StatusBarView: NSView {
         case counts
     }
     private var readout: Readout = .position
+
+    /// The View menu drives this, and so does a click on the bar. Deliberately not persisted and
+    /// deliberately per-view: two windows can show different readouts, and the menu's checkmark is
+    /// derived from whichever window is focused.
+    var showsCounts: Bool {
+        get { readout == .counts }
+        set {
+            readout = newValue ? .counts : .position
+            refresh()
+        }
+    }
+
     private var status: CursorStatus?
     private var counts: DocumentCounts?
 
@@ -191,8 +203,7 @@ final class StatusBarView: NSView {
     /// The indicator is the only thing in the status bar worth clicking, so the whole bar accepts
     /// the click rather than asking the user to hit an 11pt label exactly.
     override func mouseDown(with event: NSEvent) {
-        readout = (readout == .position) ? .counts : .position
-        refresh()
+        showsCounts.toggle()
     }
 
     override func draw(_ dirtyRect: NSRect) {

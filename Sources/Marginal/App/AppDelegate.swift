@@ -291,6 +291,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Uppercase "P" is how a Shift-ed equivalent is spelled; matches the ⌘⇧P that
         // MarkdownTextView.keyDown has always handled.
         viewMenu.addItem(withTitle: "Show Source", action: #selector(DocumentViewController.toggleShowSource(_:)), keyEquivalent: "P")
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(withTitle: "Show Character & Word Count", action: #selector(DocumentViewController.toggleCharacterAndWordCount(_:)), keyEquivalent: "")
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 

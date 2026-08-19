@@ -357,6 +357,10 @@ final class DocumentViewController: NSViewController {
         toggleShowSource()
     }
 
+    @objc func toggleCharacterAndWordCount(_ sender: Any?) {
+        statusBar.showsCounts.toggle()
+    }
+
     // Re-applies the plain monospace source rendering, preserving the selection across the
     // text storage mutation. Used both when Show Source is first toggled on and whenever a
     // delegate callback (selection change, text change, font size change) would otherwise
@@ -927,6 +931,9 @@ extension DocumentViewController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleShowSource(_:)) {
             menuItem.state = isShowingSource ? .on : .off
+        }
+        if menuItem.action == #selector(toggleCharacterAndWordCount(_:)) {
+            menuItem.state = statusBar.showsCounts ? .on : .off
         }
         return true
     }
