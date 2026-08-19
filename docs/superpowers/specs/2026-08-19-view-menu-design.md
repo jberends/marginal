@@ -74,26 +74,53 @@ existing `editorFontPointSize` key; that is unchanged.
 
 ## Keyboard shortcuts: the one real risk
 
-AppKit offers every key event to the main menu **before** the focused view's `keyDown`. So once
-these keys are menu key equivalents, the hand-rolled interception in `MarkdownTextView.keyDown`
-becomes unreachable — not wrong, but dead: code that looks live and can never run.
+### The physical keys that must keep working
 
-The hazard is that a menu item holds exactly **one** key equivalent while ⌘= and ⌘+ *both* zoom in
-today. Whichever the menu claims, the other is at risk. Therefore:
+A menu item matches on the **character** the key produces, not on the key you pressed. On a
+combined `=`/`+` key, ⌘+ *is* ⌘⇧= — one gesture, not two bindings — because
+`charactersIgnoringModifiers` strips Command and Option but **honours Shift**. So the four gestures
+below reduce to two characters, and `case "=", "+":` in `keyDown` already covers all of them:
 
-1. **Spike first.** A throwaway AppKit app determines empirically which of ⌘=, ⌘+, ⌘- and ⌘⇧P a
-   menu item actually matches, and specifically whether a second, hidden item can hold the ⌘=
-   alternate (AppKit may skip hidden items during key-equivalent matching — this must be measured,
-   not assumed).
-2. **Delete only what the spike proves is unreachable.** Any combination the menu does not catch
-   keeps its `keyDown` case, and the design note is updated to say so.
-3. **Regression tests for all four** shortcuts, which fail if any stops working.
+| Gesture | Character seen | Extra modifier flags | Zooms |
+|---|---|---|---|
+| ⌘= (unshifted `=` key) | `=` | — | in |
+| ⌘⇧= (same key, shifted) — displayed as ⌘+ | `+` | `.shift` | in |
+| ⌘ + **numpad** `+` | `+` | `.numericPad` (and possibly `.function`) | in |
+| ⌘- | `-` | — | out |
 
-If every case is covered by the menu, `MarkdownTextViewShortcutDelegate` and its conformance are
-deleted along with the `keyDown` block, since those three methods are its only members. If ⌘= needs
-`keyDown`, the protocol shrinks to one method rather than disappearing.
+### Why a menu item alone is not enough
 
-**Success criterion: after this change every shortcut that worked before still works.**
+AppKit offers every key event to the main menu **before** the focused view's `keyDown`, and a menu
+item holds exactly **one** key equivalent. Two consequences:
+
+1. A single Zoom In item can display only one of ⌘= / ⌘+, leaving the other unmatched.
+2. Menu matching compares the event's device-independent modifier flags against
+   `keyEquivalentModifierMask`. The numpad carries `.numericPad` in those flags, which a plain
+   `[.command]` mask does not include — so **⌘ + numpad `+` is the most likely thing to break**,
+   and it is the author's habitual way of zooming. Today's `keyDown` catches it for free because
+   `modifierFlags.contains(.command)` is indifferent to any other flag being set.
+
+### Therefore: menu for discovery, `keyDown` retained as the fallback
+
+`MarkdownTextView.keyDown` **stays**, unchanged in behaviour. The two paths are mutually exclusive
+by AppKit's dispatch order, so nothing can fire twice: whatever the menu matches never reaches
+`keyDown`; whatever the menu misses — plain ⌘=, numpad ⌘+ — falls through and behaves exactly as it
+does now. The menu earns its place as discoverability and as the home for the new Actual Size
+command, not by becoming the only route.
+
+This reverses an earlier draft of this design, which had the menu items making `keyDown` dead code
+and deleted it. That reasoning held only for a US keyboard's main row and ignored the numpad
+entirely. `MarkdownTextViewShortcutDelegate` therefore survives as well.
+
+The spike still runs, but now to confirm rather than to decide:
+
+1. Which of the four gestures a menu item actually matches (especially numpad `+`, and whether a
+   hidden duplicate item can hold the ⌘= alternate — AppKit may skip hidden items during
+   key-equivalent matching, which must be measured, not assumed).
+2. That no gesture triggers the action **twice** through both paths.
+
+**Success criterion: after this change, all four gestures in the table above still zoom, and none
+zooms by two steps.**
 
 ## Testing
 
@@ -106,11 +133,13 @@ becomes internal so tests can assert structure.
 | Zoom actions | `zoomIn`/`zoomOut` move the size by `FontSizing.step` and honour the 10–36 clamp |
 | Actual Size | Returns to 16 from both above and below, and persists |
 | Validation | Checkmark state for Show Source and for both readout modes |
-| Shortcut regression | ⌘=, ⌘+, ⌘- and ⌘⇧P each still perform their action |
+| Shortcut regression | Each of the four gestures still zooms: `=`, `+` with `.shift`, `+` with `.numericPad`, and `-`; plus ⌘⇧P |
+| No double-fire | A synthesised event that the menu matches does not also reach `keyDown` |
 | Status bar | Menu toggle and bar click reach the same state; the label text changes accordingly |
 
-The existing `testCommandPlusIncreasesFontSizeSameAsCommandEquals` covers the delegate call and will
-need rewriting against whichever path survives.
+The existing `testCommandPlusIncreasesFontSizeSameAsCommandEquals` stands as-is: `keyDown` keeps its
+current behaviour, so the test that guards it keeps its current meaning. It is extended with the
+numpad case rather than rewritten.
 
 ## Out of scope
 
