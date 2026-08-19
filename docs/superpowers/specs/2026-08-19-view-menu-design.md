@@ -10,7 +10,7 @@ Three commands exist only as keyboard shortcuts, with nothing in the menu bar to
 | Shortcut | What it does | Discoverable? |
 |---|---|---|
 | ⌘= / ⌘+ | Grow the editor text | No |
-| ⌘− | Shrink the editor text | No |
+| ⌘- | Shrink the editor text | No |
 | ⌘⇧P | Toggle Show Source | No |
 
 A fourth command has no keyboard shortcut *and* no menu item: switching the status bar between the
@@ -26,7 +26,7 @@ A new **View** menu, between Edit and Window:
 
 ```
 Zoom In                        ⌘+
-Zoom Out                       ⌘−
+Zoom Out                       ⌘-
 Actual Size                    ⌘0
 ──────────────────────────
 Show Source                    ⌘⇧P    ✓ when showing source
@@ -35,7 +35,13 @@ Show Character & Word Count           ✓ when showing counts
 ```
 
 Zoom In is drawn above as ⌘+, the equivalent Apple's own apps display. Which of ⌘= / ⌘+ the item
-*displays* is settled by the spike below; both must keep working either way.
+*displays* is settled by the spike below; both must keep working either way. Zoom Out is ⌘- and
+only ⌘-.
+
+**Every key equivalent in this document is ASCII.** Zoom Out is the hyphen-minus `-` (U+002D), the
+character `MarkdownTextView.keyDown` matches today — *not* the typographic minus `−` (U+2212).
+`keyEquivalent: "−"` compiles and then never matches a keypress, which is exactly the silent
+regression this design is trying to avoid.
 
 View, not Edit: Apple's convention puts zoom and display-state toggles under View (Safari, Preview,
 Xcode), and Edit is for commands that change the document. Text size and which readout the status
@@ -75,7 +81,7 @@ becomes unreachable — not wrong, but dead: code that looks live and can never 
 The hazard is that a menu item holds exactly **one** key equivalent while ⌘= and ⌘+ *both* zoom in
 today. Whichever the menu claims, the other is at risk. Therefore:
 
-1. **Spike first.** A throwaway AppKit app determines empirically which of ⌘=, ⌘+, ⌘− and ⌘⇧P a
+1. **Spike first.** A throwaway AppKit app determines empirically which of ⌘=, ⌘+, ⌘- and ⌘⇧P a
    menu item actually matches, and specifically whether a second, hidden item can hold the ⌘=
    alternate (AppKit may skip hidden items during key-equivalent matching — this must be measured,
    not assumed).
@@ -100,7 +106,7 @@ becomes internal so tests can assert structure.
 | Zoom actions | `zoomIn`/`zoomOut` move the size by `FontSizing.step` and honour the 10–36 clamp |
 | Actual Size | Returns to 16 from both above and below, and persists |
 | Validation | Checkmark state for Show Source and for both readout modes |
-| Shortcut regression | ⌘=, ⌘+, ⌘− and ⌘⇧P each still perform their action |
+| Shortcut regression | ⌘=, ⌘+, ⌘- and ⌘⇧P each still perform their action |
 | Status bar | Menu toggle and bar click reach the same state; the label text changes accordingly |
 
 The existing `testCommandPlusIncreasesFontSizeSameAsCommandEquals` covers the delegate call and will
