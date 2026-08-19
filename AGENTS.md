@@ -100,24 +100,54 @@ Removing it destroys the receipt that proves the app was purchased. Only
 
 ## Release checklist (production)
 
-Before cutting a production release, do these in order:
+Before cutting a production release, do these in order. Steps 1 and 2 are usually already
+done — the feature workflow bumps the version when the branch opens and flips the icon back
+on acceptance — so **confirm** them rather than doing them twice:
 
-1. **Bump the version** in `project.yml`: `MARKETING_VERSION` and
-   `CURRENT_PROJECT_VERSION` (integer). Run `xcodegen generate`.
-2. **Switch the app icon to production:** in `project.yml`, change
-   `ASSETCATALOG_COMPILER_APPICON_NAME` from `AppIconBeta` back to **`AppIcon`**.
-   (This is the one icon reference to flip — the beta icon is dev-only and must
-   never ship in a production/App Store build.) Run `xcodegen generate`.
+1. **Confirm the version** in `project.yml`: `MARKETING_VERSION` and
+   `CURRENT_PROJECT_VERSION` (integer). If the branch never set them, set them now and run
+   `xcodegen generate`.
+2. **Confirm the app icon is production:** `ASSETCATALOG_COMPILER_APPICON_NAME` reads
+   **`AppIcon`**, not `AppIconBeta`. (This is the one icon reference to flip — the beta icon
+   is dev-only and must never ship in a production/App Store build.) If you change it, run
+   `xcodegen generate`.
 3. **Verify the icon** in a Release build: `Contents/Resources/Assets.car` should
    render the production `AppIcon`, not the beta mark. Confirm in Finder/Dock.
 4. Run the full test suite: `xcodebuild -project Marginal.xcodeproj -scheme Marginal test`.
 5. **Date the changelog:** replace that version's `— Unreleased` heading with the release
-   date, and update the App Store notes under `marketing/appstore/`.
-6. Remove any local side-by-side beta build if it would confuse distribution:
+   date.
+6. **Write the App Store copy** to `marketing/appstore/whats-new-<version>.md`, in three
+   paste-ready blocks. Count the characters with a script and record the counts in the file —
+   do not estimate, both fields are hard limits:
+   - **Promotional text** (170 characters). Always opens
+     `Marginal - Markdown editor that renders as you type. Now …`, then what this version
+     adds. Apple lets this be changed later without a new build.
+   - **What's New in This Version** (4,000 characters), with the release's headline change
+     first. Three habits App Review sends notes back for, all avoidable: opening on a version
+     number, writing only "bug fixes and performance improvements", and mentioning other
+     platforms or pricing.
+   - **App Review notes**: what did and did not change in data handling, entitlements,
+     sandboxing, and network use, plus a one-line reproduction so the reviewer can see the
+     headline change without hunting for it.
+7. **Tag and publish the GitHub release** once the release commit is on `main`:
+   `git tag -a v<version>`, push the tag, then `gh release create v<version>` with notes
+   written for users and a link to `CHANGELOG.md` at that tag. Write the notes **first**:
+   pushing the tag fires `.github/workflows/release.yml`, which creates a release with
+   `--generate-notes` if none exists yet — a raw commit list where your notes should be.
+
+   That workflow also builds Release (ad-hoc signed; the runner has no KE-works
+   certificate), zips it, and attaches it as `Marginal-<version>.zip`. **Confirm the asset
+   landed** — the run takes about two minutes, so `gh release view` straight after tagging
+   shows an empty release and means nothing. The zip is what makes direct-download updates
+   work: `UpdateChecker` reads `releases/latest` and announces any newer tag, while
+   `UpdateInstaller` takes the first asset whose name ends in `.zip`. A release without one
+   tells every direct-download user an update exists and then fails with
+   `noDownloadableAsset`. App Store installs never see the menu item at all.
+8. Remove any local side-by-side beta build if it would confuse distribution:
    `rm -rf /Applications/Marginal-<version>.app` (ad-hoc signed, local only —
    never distribute it). Read the warning in the feature workflow first: only the
    `Marginal-<version>.app` builds are yours to delete.
-7. Archive and submit through the normal App Store / notarization flow.
+9. Archive and submit through the normal App Store / notarization flow.
 
 After the release, the next feature branch switches
 `ASSETCATALOG_COMPILER_APPICON_NAME` back to `AppIconBeta` (feature workflow step 2).
