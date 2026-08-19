@@ -145,3 +145,46 @@ numpad case rather than rewritten.
 
 Persisting the readout choice, a preferences UI for text size, per-window font sizes, and any
 shortcut for the readout toggle. The Preferences window stays the stub it is.
+
+## Spike findings (2026-08-19)
+
+Spike run on macOS 25.5.0 with `swiftc` (Xcode toolchain). Four `NSEvent`s built by hand and
+offered to `menu.performKeyEquivalent(with:)`. The menu contained: a visible Zoom In item
+(`keyEquivalent: "+"`, mask `[.command]`), a hidden alias item (`keyEquivalent: "="`, mask
+`[.command]`, `isHidden = true`), and a visible Zoom Out item (`keyEquivalent: "-"`, mask
+`[.command]`). Both Zoom In items carried an explicit `target` so matching could be measured
+independently of the responder chain.
+
+| Gesture | `menuClaimed` | Handler path |
+|---|---|---|
+| ⌘= (unshifted `=`, keyCode 24) | `true` | Menu (hidden alias item claimed it) |
+| ⌘⇧= displayed as ⌘+ (shifted `+`, keyCode 24) | `true` | Menu (visible Zoom In item) |
+| ⌘ + numpad `+` (`.numericPad` flag set, keyCode 69) | `true` | Menu (visible Zoom In item — numpad does **not** escape the menu) |
+| ⌘- (hyphen-minus U+002D, keyCode 27) | `true` | Menu (Zoom Out item) |
+
+**Answer to "does a hidden alias item claim ⌘=?"** — Yes. AppKit does **not** skip hidden items
+during key-equivalent matching. `isHidden = true` suppresses the item from being drawn but it
+still participates in `performKeyEquivalent`. A hidden duplicate with `keyEquivalent: "="` is
+therefore a viable mechanism for keeping ⌘= working when the visible item displays ⌘+.
+
+**Answer to "does ⌘ + numpad + escape the menu?"** — No. Despite carrying the `.numericPad`
+modifier flag, the event was claimed (`menuClaimed=true`, `zoomIn+=1`) by the plain `[.command]`
+mask item. AppKit appears to mask out `.numericPad` (and `.function`) when comparing modifier
+flags against `keyEquivalentModifierMask`. This contradicts the original risk estimate in the
+"Keyboard shortcuts" section above; in practice `MarkdownTextView.keyDown` will **not** see
+numpad ⌘+ once the menu item is installed — it will be consumed by the menu.
+
+**Implication for Task 2:** because all four gestures are now claimed by the menu, `keyDown`'s
+zoom cases will be dead code for those gestures. The plan's assurance that "whatever the menu
+misses falls through to `keyDown`" holds only for gestures the menu genuinely does not match.
+The spike shows the menu misses none of the four tested gestures. `keyDown` can be left in
+place as defence-in-depth, but it will not fire for these four.
+
+### Verbatim spike output (evidence)
+
+```
+cmd-=             menuClaimed=true  zoomIn+=1  zoomOut+=0
+cmd-shift-= (+)   menuClaimed=true  zoomIn+=1  zoomOut+=0
+cmd-numpad-+      menuClaimed=true  zoomIn+=1  zoomOut+=0
+cmd-hyphen        menuClaimed=true  zoomIn+=0  zoomOut+=1
+```
