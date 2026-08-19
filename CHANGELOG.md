@@ -4,6 +4,28 @@ All notable changes to Marginal are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.11.0] — 2026-08-19
+
+### Fixed
+
+- **Tables now export to PDF.** A table that rendered correctly on the page came out of **Export as
+  PDF** as a paragraph of literal `| a | b |` text, because the export renderer never handled
+  tables and fell back to treating each row as prose. Tables now export as real grids — including
+  the markup inside cells, `:---:` column alignment, and escaped `\|` pipes — with the header row
+  repeated on every page a long table runs onto and rows never split across a page break.
+  **Copy as HTML** gains the same.
+- **Wide tables now wrap inside their cells.** A table too wide for the page used to wrap as one
+  long line, so a cell's overflow restarted at the **left margin** instead of staying under its own
+  column, and the grid lines only enclosed the row's first line. Columns are now sized to fit the
+  page — a prose column giving up space before a narrow one does, and never shrinking below its
+  longest word — and each cell wraps within its own column, with the row growing to hold it.
+  Resizing the window re-flows tables to the new width.
+- **The seam between a table's header row and its first row is gone.** The hidden `|---|` row still
+  took up a line of its own, splitting the grid in two just below the header.
+- **A `> quoted` line shown as example code no longer gets a quote bar** drawn beside it. Code
+  blocks written *inside* a quote and quotes written *inside* a code block were treated as the same
+  thing; they're now told apart by whether the fence itself is quoted.
+
 ## [0.10.0] — 2026-08-18
 
 ### Added
