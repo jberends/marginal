@@ -2,8 +2,8 @@ import Foundation
 
 /// Converts markdown source into HTML, reusing the same block/inline parsers MarkdownStyler uses
 /// for on-screen rendering -- one parsing model, two consumers. Covers exactly the constructs this
-/// app supports (single-level lists/blockquotes, no tables, no nested lists), matching
-/// MarkdownParser's own "pragmatic single-pass, not full CommonMark" scope.
+/// app supports (single-level lists/blockquotes, no nested lists), matching MarkdownParser's own
+/// "pragmatic single-pass, not full CommonMark" scope.
 struct MarkdownHTMLRenderer {
 
     /// Like html(fromMarkdown:), but every local <img> src is inlined as a data: URI so the
@@ -58,6 +58,7 @@ struct MarkdownHTMLRenderer {
         let blockquotes = MarkdownParser.parseBlockquotes(in: text)
         let horizontalRules = MarkdownParser.parseHorizontalRules(in: text)
         let codeBlocks = MarkdownParser.parseFencedCodeBlocks(in: text)
+        let tables = MarkdownParser.parseTables(in: text)
 
         var blocks: [String] = []
         var index = text.startIndex
@@ -67,6 +68,13 @@ struct MarkdownHTMLRenderer {
                 let languageAttribute = codeBlock.language.map { " class=\"language-\(htmlEscape($0))\"" } ?? ""
                 blocks.append("<pre><code\(languageAttribute)>\(htmlEscape(String(text[codeBlock.contentRange])))</code></pre>")
                 index = advance(past: codeBlock.openingFenceRange.lowerBound..<codeBlock.closingFenceRange.upperBound, in: text)
+                continue
+            }
+            // Runs after the code-block branch (which skips a whole fenced block in one step), so a
+            // pipe table written inside sample code is never lifted out of its <pre>.
+            if let table = tables.first(where: { $0.headerRow.lineRange.lowerBound == index }) {
+                blocks.append(tableHTML(table, in: text))
+                index = advance(past: index..<tableEnd(of: table), in: text)
                 continue
             }
             if let header = headers.first(where: { $0.lineRange.lowerBound == index }) {
@@ -113,7 +121,7 @@ struct MarkdownHTMLRenderer {
 
             var paragraphLines = [firstLine]
             var cursor = advance(past: firstLineRange, in: text)
-            while cursor < text.endIndex, !isBlockStart(at: cursor, headers: headers, listItems: listItems, blockquotes: blockquotes, horizontalRules: horizontalRules, codeBlocks: codeBlocks) {
+            while cursor < text.endIndex, !isBlockStart(at: cursor, headers: headers, listItems: listItems, blockquotes: blockquotes, horizontalRules: horizontalRules, codeBlocks: codeBlocks, tables: tables) {
                 let range = lineRange(at: cursor, in: text)
                 let line = String(text[range])
                 if line.trimmingCharacters(in: .whitespaces).isEmpty { break }
@@ -142,13 +150,62 @@ struct MarkdownHTMLRenderer {
         listItems: [ListItemSpan],
         blockquotes: [BlockquoteSpan],
         horizontalRules: [HorizontalRuleSpan],
-        codeBlocks: [CodeBlockSpan]
+        codeBlocks: [CodeBlockSpan],
+        tables: [TableSpan]
     ) -> Bool {
         headers.contains { $0.lineRange.lowerBound == index }
             || listItems.contains { $0.lineRange.lowerBound == index }
             || blockquotes.contains { $0.lineRange.lowerBound == index }
             || horizontalRules.contains { $0.lineRange.lowerBound == index }
             || codeBlocks.contains { $0.openingFenceRange.lowerBound == index }
+            || tables.contains { $0.headerRow.lineRange.lowerBound == index }
+    }
+
+    private static func tableEnd(of table: TableSpan) -> String.Index {
+        table.bodyRows.last?.lineRange.upperBound ?? table.separatorRowRange.upperBound
+    }
+
+    /// Emits a real <table>. Every row is padded or truncated to the header's column count (GFM's
+    /// rule) so the grid stays rectangular even when a body row has a stray or missing pipe --
+    /// otherwise one malformed row shifts every cell after it into the wrong column.
+    ///
+    /// Column widths and in-cell wrapping are deliberately left to the consuming renderer's own
+    /// table layout (WebKit, for PDF export), which is why no width is emitted here: a wide table
+    /// wraps inside its cells instead of overflowing the page.
+    private static func tableHTML(_ table: TableSpan, in text: String) -> String {
+        let columnCount = table.headerRow.pipeRanges.count - 1
+        guard columnCount > 0 else { return "" }
+
+        func cells(of row: TableRowSpan) -> [String] {
+            let available = row.pipeRanges.count - 1
+            return (0..<columnCount).map { column in
+                guard column < available else { return "" }
+                let raw = text[row.pipeRanges[column].upperBound..<row.pipeRanges[column + 1].lowerBound]
+                // An escaped pipe reaches the reader as a literal "|", not as "\|" -- the backslash
+                // is syntax that exists only to stop the pipe from splitting the cell.
+                return raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\\|", with: "|")
+            }
+        }
+
+        func alignmentAttribute(forColumn column: Int) -> String {
+            let alignment = table.columnAlignments.indices.contains(column) ? table.columnAlignments[column] : .left
+            switch alignment {
+            case .left: return ""
+            case .center: return " style=\"text-align:center\""
+            case .right: return " style=\"text-align:right\""
+            }
+        }
+
+        func row(_ cellValues: [String], tag: String) -> String {
+            let rendered = cellValues.enumerated().map { column, value in
+                "<\(tag)\(alignmentAttribute(forColumn: column))>\(inlineHTML(for: value))</\(tag)>"
+            }
+            return "<tr>\(rendered.joined())</tr>"
+        }
+
+        let head = row(cells(of: table.headerRow), tag: "th")
+        let body = table.bodyRows.map { row(cells(of: $0), tag: "td") }.joined()
+        return "<table><thead>\(head)</thead><tbody>\(body)</tbody></table>"
     }
 
     private static func sameListKind(_ a: ListMarkerKind, _ b: ListMarkerKind) -> Bool {
