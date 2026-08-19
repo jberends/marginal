@@ -94,18 +94,35 @@ AppKit offers every key event to the main menu **before** the focused view's `ke
 item holds exactly **one** key equivalent. Two consequences:
 
 1. A single Zoom In item can display only one of ⌘= / ⌘+, leaving the other unmatched.
-2. Menu matching compares the event's device-independent modifier flags against
-   `keyEquivalentModifierMask`. The numpad carries `.numericPad` in those flags, which a plain
-   `[.command]` mask does not include — so **⌘ + numpad `+` is the most likely thing to break**,
-   and it is the author's habitual way of zooming. Today's `keyDown` catches it for free because
-   `modifierFlags.contains(.command)` is indifferent to any other flag being set.
+2. ~~Menu matching compares the event's device-independent modifier flags against
+   `keyEquivalentModifierMask`, so the numpad's `.numericPad` flag would stop ⌘ + numpad `+`
+   matching a `[.command]` item.~~ **Measured and false** — see the spike findings below. AppKit
+   masks out `.numericPad` (and `.function`) before comparing, so numpad ⌘+ is claimed exactly
+   like main-row ⌘+. This was the original argument for retaining `keyDown`, and it does not hold.
+
+Point 1 alone still decides it. Zoom In displays ⌘+, so plain ⌘= matches nothing on the menu —
+verified: without an alias item, `performKeyEquivalent` returns `false` for it. `keyDown` therefore
+remains genuinely live for ⌘=, not defence-in-depth.
+
+A hidden alias item *could* take ⌘= onto the menu — the spike proves `isHidden = true` does not
+stop key-equivalent matching — which would make `keyDown`'s zoom cases fully dead and invite
+deleting them. **Deliberately not done.** An invisible menu item is a thing every future reader has
+to have explained, and it buys only the deletion of code that costs nothing to keep.
 
 ### Therefore: menu for discovery, `keyDown` retained as the fallback
 
 `MarkdownTextView.keyDown` **stays**, unchanged in behaviour. The two paths are mutually exclusive
 by AppKit's dispatch order, so nothing can fire twice: whatever the menu matches never reaches
-`keyDown`; whatever the menu misses — plain ⌘=, numpad ⌘+ — falls through and behaves exactly as it
-does now. The menu earns its place as discoverability and as the home for the new Actual Size
+`keyDown`; whatever the menu misses — plain ⌘= — falls through and behaves exactly as it
+does now. Final division of labour:
+
+| Gesture | Handled by |
+|---|---|
+| ⌘= | `keyDown` (no menu item holds `=`) |
+| ⌘⇧= (displayed ⌘+) | menu |
+| ⌘ + numpad `+` | menu |
+| ⌘- | menu |
+| ⌘⇧P | menu | The menu earns its place as discoverability and as the home for the new Actual Size
 command, not by becoming the only route.
 
 This reverses an earlier draft of this design, which had the menu items making `keyDown` dead code
