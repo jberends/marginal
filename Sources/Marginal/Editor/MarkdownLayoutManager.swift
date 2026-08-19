@@ -7,6 +7,7 @@ extension NSAttributedString.Key {
     static let marginalOrderedListMarkerText = NSAttributedString.Key("marginalOrderedListMarkerText")
     static let marginalTaskCheckboxMarker = NSAttributedString.Key("marginalTaskCheckboxMarker")
     static let marginalTableGridMarker = NSAttributedString.Key("marginalTableGridMarker")
+    static let marginalTableRowLayout = NSAttributedString.Key("marginalTableRowLayout")
     static let marginalCodeBlockMarker = NSAttributedString.Key("marginalCodeBlockMarker")
     static let marginalEmojiShortcode = NSAttributedString.Key("marginalEmojiShortcode")
     static let marginalImage = NSAttributedString.Key("marginalImage")
@@ -40,22 +41,66 @@ enum ImageCardMetrics {
     }
 }
 
-/// Keeps WRAPPED continuation lines of an image markup paragraph at a normal source-line height.
+/// One table row's per-cell layout, computed in MarkdownStyler and applied by MarkdownLayoutDelegate.
 ///
-/// The image paragraph reserves the card band via a tall line height (min == max == band + one
-/// source line) applied to the whole paragraph, with the source glyphs pushed into the bottom slot
-/// by a negative baseline offset. That is correct for the FIRST visual line -- the card sits in the
-/// reserved band above it -- but a long `![alt](path)` source wraps, and every wrapped continuation
-/// line inherited the same card-tall line height and pushed-down baseline, leaving a card-sized gap
-/// above each wrapped line.
+/// A table row is a single line of markdown -- one paragraph -- so TextKit would normally lay it out
+/// as one long line and wrap it at the container edge, which sends a cell's overflow back to the
+/// left margin instead of keeping it under its own column. This plan makes the row lay out as real
+/// columns WITHOUT restructuring the text into per-cell paragraphs (which NSTextTable would require,
+/// and which would mean inserting paragraph breaks that aren't in the markdown):
 ///
-/// This delegate SHRINKS a continuation fragment (one whose glyphs fall inside a `.marginalImage`
-/// run but that does NOT start at the run's first character) back to a normal source line: it
-/// removes the band from the fragment/used height and undoes the baseline push. Shrinking only --
-/// never growing -- so `usedRect(for:)` stays correct and nothing is clipped (growing via this
-/// delegate does NOT get counted in usedRect, which is why the band itself is reserved by line
-/// height, not here).
-final class ImageWrapLineFragmentDelegate: NSObject, NSLayoutManagerDelegate {
+/// 1. The styler decides where every visual line begins and lists those indices in `breakPoints`.
+///    The delegate vetoes every OTHER break opportunity in the row, so TextKit cannot break anywhere
+///    the plan didn't choose.
+/// 2. The styler puts a huge `.kern` on the character before each break point, so the line overflows
+///    there and TextKit is forced to take the one break it is still allowed. The kern lands on
+///    trailing whitespace (or a hidden pipe), which no line counts in its own used width.
+/// 3. The delegate then moves each resulting fragment into its column band -- including moving a
+///    later fragment back UP to the row's top, which is what puts columns side by side.
+struct TableRowLayoutPlan: Equatable {
+
+    /// One visual line of one cell. `start` is the absolute character index the fragment begins at:
+    /// the cell's hidden opening pipe for a first line, the first character of the wrapped word
+    /// otherwise. Bands tile the row in document order, so a fragment belongs to the last band whose
+    /// `start` is at or before the fragment's first character.
+    struct Band: Equatable {
+        let start: Int
+        let x: CGFloat
+        let width: CGFloat
+        /// Offset from the row's own top, so a row can be placed without knowing its y in advance.
+        let yOffset: CGFloat
+        let height: CGFloat
+    }
+
+    let bands: [Band]
+    let breakPoints: Set<Int>
+    /// Absolute character index of the row's first character -- identifies the row, so the delegate
+    /// knows when a new row has started and its top must be re-established.
+    let rowStart: Int
+    let rowHeight: CGFloat
+}
+
+/// The layout manager's single delegate. NSLayoutManager allows only one, so both fragment-geometry
+/// behaviours live here: table column bands, and the image-markup continuation-line fix.
+final class MarkdownLayoutDelegate: NSObject, NSLayoutManagerDelegate {
+
+    // A row's own top is whatever y TextKit proposed for its FIRST fragment; every other fragment in
+    // the row is placed relative to that. Rows lay out in document order, so tracking just the row
+    // currently being laid out is enough.
+    private var currentRowStart: Int?
+    private var currentRowTop: CGFloat = 0
+
+    /// Inside a table row, only the plan's own break points may break -- otherwise the huge kern that
+    /// forces a break at a cell boundary would instead break at the nearest earlier word boundary,
+    /// splitting the cell in the wrong place.
+    func layoutManager(_ layoutManager: NSLayoutManager,
+                       shouldBreakLineByWordBeforeCharacterAt charIndex: Int) -> Bool {
+        guard let storage = layoutManager.textStorage, charIndex < storage.length,
+              let plan = storage.attribute(.marginalTableRowLayout, at: charIndex, effectiveRange: nil) as? TableRowLayoutPlan
+        else { return true }
+        return plan.breakPoints.contains(charIndex)
+    }
+
     func layoutManager(_ layoutManager: NSLayoutManager,
                        shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
                        lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
@@ -65,14 +110,57 @@ final class ImageWrapLineFragmentDelegate: NSObject, NSLayoutManagerDelegate {
         guard let storage = layoutManager.textStorage, storage.length > 0 else { return false }
         let charIndex = layoutManager.characterIndexForGlyph(at: glyphRange.location)
         guard charIndex < storage.length else { return false }
+
+        if let plan = storage.attribute(.marginalTableRowLayout, at: charIndex, effectiveRange: nil) as? TableRowLayoutPlan {
+            return placeTableFragment(plan, charIndex: charIndex, leftInset: textContainer.lineFragmentPadding,
+                                      rect: lineFragmentRect, usedRect: lineFragmentUsedRect)
+        }
+        return shrinkImageContinuation(storage, charIndex: charIndex, rect: lineFragmentRect,
+                                       usedRect: lineFragmentUsedRect, baselineOffset: baselineOffset)
+    }
+
+    private func placeTableFragment(_ plan: TableRowLayoutPlan,
+                                    charIndex: Int,
+                                    leftInset: CGFloat,
+                                    rect: UnsafeMutablePointer<NSRect>,
+                                    usedRect: UnsafeMutablePointer<NSRect>) -> Bool {
+        if currentRowStart != plan.rowStart {
+            currentRowStart = plan.rowStart
+            currentRowTop = rect.pointee.minY
+        }
+        guard let band = plan.bands.last(where: { $0.start <= charIndex }) else { return false }
+        // Band x-offsets are measured from the text column's left edge; the container's own inset
+        // is added here so a table lines up with the surrounding paragraphs.
+        let placed = NSRect(x: leftInset + band.x, y: currentRowTop + band.yOffset,
+                            width: band.width, height: band.height)
+        rect.pointee = placed
+        usedRect.pointee = NSRect(x: placed.minX, y: placed.minY,
+                                  width: min(usedRect.pointee.width, band.width), height: placed.height)
+        return true
+    }
+
+    /// Keeps WRAPPED continuation lines of an image markup paragraph at a normal source-line height.
+    ///
+    /// The image paragraph reserves the card band via a tall line height (min == max == band + one
+    /// source line) applied to the whole paragraph, with the source glyphs pushed into the bottom
+    /// slot by a negative baseline offset. That is correct for the FIRST visual line -- the card sits
+    /// in the reserved band above it -- but a long `![alt](path)` source wraps, and every wrapped
+    /// continuation line inherited the same card-tall line height and pushed-down baseline, leaving a
+    /// card-sized gap above each wrapped line.
+    ///
+    /// Shrinking only -- never growing -- so `usedRect(for:)` stays correct and nothing is clipped.
+    private func shrinkImageContinuation(_ storage: NSTextStorage,
+                                         charIndex: Int,
+                                         rect: UnsafeMutablePointer<NSRect>,
+                                         usedRect: UnsafeMutablePointer<NSRect>,
+                                         baselineOffset: UnsafeMutablePointer<CGFloat>) -> Bool {
         var runRange = NSRange(location: 0, length: 0)
         guard let info = storage.attribute(.marginalImage, at: charIndex, effectiveRange: &runRange) as? ImageDisplayInfo,
               charIndex > runRange.location else { return false }  // only wrapped continuations
         let band = info.displaySize.height
-        guard lineFragmentRect.pointee.size.height > band else { return false }  // never go <= 0
-        lineFragmentRect.pointee.size.height -= band
-        lineFragmentUsedRect.pointee.size.height = min(lineFragmentUsedRect.pointee.size.height,
-                                                       lineFragmentRect.pointee.size.height)
+        guard rect.pointee.size.height > band else { return false }  // never go <= 0
+        rect.pointee.size.height -= band
+        usedRect.pointee.size.height = min(usedRect.pointee.size.height, rect.pointee.size.height)
         baselineOffset.pointee -= band
         return true
     }
@@ -117,19 +205,18 @@ struct EmojiGlyphInfo: Equatable {
 ///    therefore drawn starting exactly at the container's left edge, not to the left of it.
 final class MarkdownLayoutManager: NSLayoutManager {
 
-    // Shrinks wrapped continuation lines of an image markup paragraph back to a normal source-line
-    // height (the whole paragraph carries a card-tall line height to reserve the band). Held
-    // strongly because NSLayoutManager.delegate is weak.
-    private let imageWrapDelegate = ImageWrapLineFragmentDelegate()
+    // Places table cells into column bands and keeps image-markup continuation lines at a normal
+    // height. Held strongly because NSLayoutManager.delegate is weak.
+    private let layoutDelegate = MarkdownLayoutDelegate()
 
     override init() {
         super.init()
-        delegate = imageWrapDelegate
+        delegate = layoutDelegate
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        delegate = imageWrapDelegate
+        delegate = layoutDelegate
     }
 
     /// The rect that actually hugs the glyphs on a line, for aligning anything drawn beside text.
@@ -339,14 +426,26 @@ final class MarkdownLayoutManager: NSLayoutManager {
         textStorage.enumerateAttribute(.marginalTableGridMarker, in: fullRange) { value, range, _ in
             guard let gridInfo = value as? TableGridInfo, let totalWidth = gridInfo.columnBoundaries.last else { return }
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            let rowRect = boundingRect(forGlyphRange: glyphRange, in: textContainer)
-            let left = origin.x + rowRect.minX
-            let top = origin.y + rowRect.minY
-            let bottom = origin.y + rowRect.maxY
+            // A row whose cells wrap occupies several line fragments (one per cell line), and
+            // boundingRect only ever returns ONE of them (see the type doc comment) -- so the row's
+            // vertical extent has to be unioned from every fragment, or the grid and the header tint
+            // cover only the first line of a wrapped row.
+            var rowTop = CGFloat.greatestFiniteMagnitude
+            var rowBottom = -CGFloat.greatestFiniteMagnitude
+            enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, _, _ in
+                rowTop = min(rowTop, lineRect.minY)
+                rowBottom = max(rowBottom, lineRect.maxY)
+            }
+            guard rowTop < rowBottom else { return }
+            // Column boundaries are offsets from the text column's left edge, which is the container
+            // inset -- not from whichever fragment boundingRect happened to return.
+            let left = origin.x + textContainer.lineFragmentPadding
+            let top = origin.y + rowTop
+            let bottom = origin.y + rowBottom
 
             if gridInfo.isHeaderRow {
                 DesignPalette.surfaceCode.setFill()
-                NSRect(x: left, y: top, width: totalWidth, height: rowRect.height).fill()
+                NSRect(x: left, y: top, width: totalWidth, height: rowBottom - rowTop).fill()
             }
 
             DesignPalette.hairline.setStroke()

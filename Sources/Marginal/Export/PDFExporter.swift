@@ -84,6 +84,23 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
           hr { border: 0; border-top: 1px solid #E6E5E3; }
           li { margin-bottom: 6px; }
           h1, h2, h3 { page-break-after: avoid; }
+          /* Column widths are left to WebKit's automatic table layout (no table-layout: fixed),
+             so a narrow "#" column stays narrow while a prose column takes the slack -- and a
+             table too wide for the page wraps inside its cells instead of overflowing it.
+             overflow-wrap catches the one case auto layout can't solve: a single unbreakable
+             token (a long URL) wider than the whole printable column. */
+          table {
+            border-collapse: collapse; width: 100%; margin: 0 0 1em;
+          }
+          th, td {
+            border: 1px solid #E6E5E3; padding: 6px 9px;
+            text-align: left; vertical-align: top; overflow-wrap: break-word;
+          }
+          th { background: #F7F6F3; font-weight: 600; }
+          /* Repeat the header row on every page a long table spills onto, and never split a
+             single row across the page break. */
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; }
           /* Cap image height so a single image can't dominate a page: printable page height is
              paperSize.height (842pt) minus top+bottom margins (57+57=114pt) = 728pt; the cap
              below is roughly half of that, so a full-width portrait image still leaves most of

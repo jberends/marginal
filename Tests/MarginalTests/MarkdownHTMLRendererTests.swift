@@ -110,3 +110,66 @@ final class MarkdownHTMLRendererTests: XCTestCase {
         XCTAssertFalse(html.contains("</em>"), html)
     }
 }
+
+/// Tables render on screen but used to fall through this renderer's paragraph branch, so exporting
+/// a document to PDF (or copying it as HTML) turned every table into a run of literal "| a | b |"
+/// text. These pin the <table> emission that closes that gap.
+final class MarkdownHTMLRendererTableTests: XCTestCase {
+
+    func testTableRendersAsRealTableMarkup() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| A | B |\n|---|---|\n| 1 | 2 |")
+        XCTAssertEqual(html, "<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                           + "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>")
+    }
+
+    func testNoPipeCharacterSurvivesIntoTheOutput() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| A | B |\n|---|---|\n| 1 | 2 |")
+        XCTAssertFalse(html.contains("|"), "Table syntax must not leak into the rendered output: \(html)")
+        XCTAssertFalse(html.contains("<p>"), "A table must not fall through to the paragraph branch: \(html)")
+    }
+
+    func testInlineMarkupInsideCellsIsRendered() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| Capability | Detail |\n|---|---|\n| **Deploy** | set to `present` |")
+        XCTAssertTrue(html.contains("<th>Capability</th>"), html)
+        XCTAssertTrue(html.contains("<td><strong>Deploy</strong></td>"), html)
+        XCTAssertTrue(html.contains("<td>set to <code>present</code></td>"), html)
+    }
+
+    func testColumnAlignmentBecomesTextAlignStyle() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| L | C | R |\n|:---|:---:|---:|\n| a | b | c |")
+        XCTAssertTrue(html.contains("<th>L</th>"), "A left column needs no style attribute: \(html)")
+        XCTAssertTrue(html.contains("<th style=\"text-align:center\">C</th>"), html)
+        XCTAssertTrue(html.contains("<th style=\"text-align:right\">R</th>"), html)
+        XCTAssertTrue(html.contains("<td style=\"text-align:center\">b</td>"), html)
+        XCTAssertTrue(html.contains("<td style=\"text-align:right\">c</td>"), html)
+    }
+
+    func testEscapedPipeBecomesALiteralPipeInsideItsCell() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| Expression |\n|---|\n| A \\| B |")
+        XCTAssertTrue(html.contains("<td>A | B</td>"), "The backslash is syntax; only the pipe is content: \(html)")
+    }
+
+    func testShortAndLongBodyRowsArePaddedAndTruncatedToTheHeaderWidth() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| A | B |\n|---|---|\n| 1 |\n| 1 | 2 | 3 |")
+        XCTAssertTrue(html.contains("<tr><td>1</td><td></td></tr>"), "A short row gets an empty trailing cell: \(html)")
+        XCTAssertTrue(html.contains("<tr><td>1</td><td>2</td></tr>"), "A long row is truncated to the header width: \(html)")
+        XCTAssertFalse(html.contains("<td>3</td>"), html)
+    }
+
+    func testParagraphImmediatelyBeforeATableIsNotSwallowedByIt() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "Intro line\n| A |\n|---|\n| 1 |")
+        XCTAssertEqual(html, "<p>Intro line</p>\n<table><thead><tr><th>A</th></tr></thead>"
+                           + "<tbody><tr><td>1</td></tr></tbody></table>")
+    }
+
+    func testTableInsideAFencedCodeBlockStaysLiteral() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "```markdown\n| A |\n|---|\n| 1 |\n```")
+        XCTAssertTrue(html.hasPrefix("<pre><code"), html)
+        XCTAssertFalse(html.contains("<table>"), "A table shown as sample code must not become a real table: \(html)")
+    }
+
+    func testTableFollowedByAParagraphEndsAtTheBlankLine() {
+        let html = MarkdownHTMLRenderer.html(fromMarkdown: "| A |\n|---|\n| 1 |\n\nAfter")
+        XCTAssertTrue(html.hasSuffix("<p>After</p>"), html)
+    }
+}

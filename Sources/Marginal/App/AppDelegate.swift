@@ -205,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         preferencesWindowController?.window?.makeKeyAndOrderFront(nil)
     }
 
-    private static func buildMainMenu(target: AppDelegate) -> NSMenu {
+    static func buildMainMenu(target: AppDelegate) -> NSMenu {
         let mainMenu = NSMenu()
 
         let appMenuItem = NSMenuItem()
@@ -270,6 +270,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
+
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        // No target: AppKit walks the responder chain to DocumentViewController, which also
+        // means these disable themselves when no document window is key.
+        // "+" is the character Shift+"=" produces, so this displays as ⌘+ and matches ⌘⇧=.
+        // Plain ⌘= and the numpad's "+" are caught by MarkdownTextView.keyDown instead --
+        // a menu item holds only one key equivalent, and the numpad sets .numericPad, which
+        // keyEquivalentModifierMask does not tolerate. See the View menu design spec.
+        let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(DocumentViewController.zoomIn(_:)), keyEquivalent: "+")
+        zoomInItem.keyEquivalentModifierMask = [.command]
+        viewMenu.addItem(zoomInItem)
+        // U+002D hyphen-minus. NOT the typographic minus U+2212, which compiles and never matches.
+        let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(DocumentViewController.zoomOut(_:)), keyEquivalent: "\u{002D}")
+        zoomOutItem.keyEquivalentModifierMask = [.command]
+        viewMenu.addItem(zoomOutItem)
+        viewMenu.addItem(withTitle: "Actual Size", action: #selector(DocumentViewController.actualSize(_:)), keyEquivalent: "0")
+        viewMenu.addItem(NSMenuItem.separator())
+        // Uppercase "P" is how a Shift-ed equivalent is spelled; matches the ⌘⇧P that
+        // MarkdownTextView.keyDown has always handled.
+        viewMenu.addItem(withTitle: "Show Source", action: #selector(DocumentViewController.toggleShowSource(_:)), keyEquivalent: "P")
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(withTitle: "Show Character & Word Count", action: #selector(DocumentViewController.toggleCharacterAndWordCount(_:)), keyEquivalent: "")
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
 
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")

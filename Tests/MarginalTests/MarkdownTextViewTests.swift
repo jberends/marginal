@@ -108,16 +108,54 @@ final class MarkdownTextViewTests: XCTestCase {
     }
 
     @MainActor
-    func testCommandPlusIncreasesFontSizeSameAsCommandEquals() {
+    private func makeTextViewWithSpy() -> (MarkdownTextView, RecordingShortcutDelegate) {
         let textView = MarkdownTextView()
-        let delegate = RecordingShortcutDelegate()
-        textView.shortcutDelegate = delegate
+        let spy = RecordingShortcutDelegate()
+        textView.shortcutDelegate = spy
+        return (textView, spy)
+    }
+
+    @MainActor
+    func testCommandPlusIncreasesFontSizeSameAsCommandEquals() {
+        let (textView, spy) = makeTextViewWithSpy()
 
         textView.keyDown(with: makeKeyEvent(charactersIgnoringModifiers: "=", modifierFlags: .command))
-        XCTAssertEqual(delegate.increaseCallCount, 1)
+        XCTAssertEqual(spy.increaseCallCount, 1)
 
         textView.keyDown(with: makeKeyEvent(charactersIgnoringModifiers: "+", modifierFlags: [.command, .shift]))
-        XCTAssertEqual(delegate.increaseCallCount, 2, "Cmd+Plus (Cmd+Shift+=) should also increase font size")
+        XCTAssertEqual(spy.increaseCallCount, 2, "Cmd+Plus (Cmd+Shift+=) should also increase font size")
+    }
+
+    /// Calls keyDown directly, pinning the fallback path in isolation. In the running app the
+    /// menu claims this gesture: AppKit masks out .numericPad before comparing modifier flags
+    /// against keyEquivalentModifierMask, so the plain [.command] Zoom In item matches numpad
+    /// ⌘+ just like main-row ⌘+ (measured -- see "Spike findings" in the View menu design spec).
+    /// What this guards is what keyDown would do if that menu item were ever removed.
+    @MainActor
+    func testCommandNumpadPlusIncreasesFontSize() {
+        let (textView, spy) = makeTextViewWithSpy()
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero,
+            modifierFlags: [.command, .numericPad], timestamp: 0, windowNumber: 0,
+            context: nil, characters: "+", charactersIgnoringModifiers: "+",
+            isARepeat: false, keyCode: 69   // kVK_ANSI_KeypadPlus
+        )!
+        textView.keyDown(with: event)
+        XCTAssertEqual(spy.increaseCallCount, 1)
+    }
+
+    /// U+002D hyphen-minus, the character the key actually produces -- not U+2212.
+    @MainActor
+    func testCommandHyphenDecreasesFontSize() {
+        let (textView, spy) = makeTextViewWithSpy()
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero,
+            modifierFlags: [.command], timestamp: 0, windowNumber: 0,
+            context: nil, characters: "\u{002D}", charactersIgnoringModifiers: "\u{002D}",
+            isARepeat: false, keyCode: 27
+        )!
+        textView.keyDown(with: event)
+        XCTAssertEqual(spy.decreaseCallCount, 1)
     }
 
     @MainActor

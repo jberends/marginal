@@ -17,7 +17,7 @@ final class DocumentViewController: NSViewController {
     // font"; this property is the only thing restyle()/toggleShowSource()/font-size
     // adjustment consult or mutate.
     // 16px body -- the design system's base size (headings scale 1.25/1.5/1.875 from it).
-    private var editorFontSize: CGFloat = 16
+    private var editorFontSize: CGFloat = FontSizing.defaultPointSize
 
     weak var document: MarkdownDocument?
 
@@ -94,7 +94,7 @@ final class DocumentViewController: NSViewController {
         }
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
-        editorFontSize = savedSize > 0 ? savedSize : 16
+        editorFontSize = savedSize > 0 ? savedSize : FontSizing.defaultPointSize
         textView.font = EditorFont.body(editorFontSize)
 
         scrollView.documentView = textView
@@ -304,6 +304,20 @@ final class DocumentViewController: NSViewController {
         copyCurrentSelectionAsHTML()
     }
 
+    // View menu. These carry no target in the menu, so AppKit finds them on the responder
+    // chain and greys them out by itself when no document window is focused.
+    @objc func zoomIn(_ sender: Any?) {
+        setFontSize(FontSizing.increased(from: editorFontSize))
+    }
+
+    @objc func zoomOut(_ sender: Any?) {
+        setFontSize(FontSizing.decreased(from: editorFontSize))
+    }
+
+    @objc func actualSize(_ sender: Any?) {
+        setFontSize(FontSizing.defaultPointSize)
+    }
+
     /// File -> Export as PDF: renders the whole document through the HTML renderer and
     /// prints it to a paginated PDF at a user-chosen location.
     @objc func exportAsPDF(_ sender: Any?) {
@@ -335,6 +349,16 @@ final class DocumentViewController: NSViewController {
         } else {
             restyle(cursorLocation: currentCursorIndex())
         }
+    }
+
+    /// Menu-facing overload. The no-argument `toggleShowSource()` stays as-is because the
+    /// keyDown path and the tests call it directly.
+    @objc func toggleShowSource(_ sender: Any?) {
+        toggleShowSource()
+    }
+
+    @objc func toggleCharacterAndWordCount(_ sender: Any?) {
+        statusBar.showsCounts.toggle()
     }
 
     // Re-applies the plain monospace source rendering, preserving the selection across the
@@ -418,6 +442,30 @@ final class DocumentViewController: NSViewController {
             .replacingOccurrences(of: " ", with: "-")
     }
 
+    /// Width of the text column: the container minus the padding TextKit reserves on either side.
+    /// Table columns are capped to this, so a wide table wraps inside its cells instead of running
+    /// off the right edge.
+    private var availableTextWidth: CGFloat {
+        guard let container = textView.textContainer else { return .greatestFiniteMagnitude }
+        let width = container.size.width - container.lineFragmentPadding * 2
+        return width > 0 ? width : .greatestFiniteMagnitude
+    }
+
+    private var lastStyledWidth: CGFloat = 0
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        // A table's column widths depend on the width available to it, so resizing the window has
+        // to re-run styling. viewDidLayout fires for plenty of reasons that aren't a resize, and a
+        // document without tables can't be affected either way, so both are filtered out first --
+        // restyling parses the whole document, which is far too expensive to do on every pass.
+        let width = availableTextWidth
+        guard abs(width - lastStyledWidth) > 0.5 else { return }
+        lastStyledWidth = width
+        guard let model = latestModel, !model.tables.isEmpty else { return }
+        restyle(cursorLocation: currentCursorIndex())
+    }
+
     private func restyle(cursorLocation: String.Index?) {
         let text = textView.string
         // Explicit [text](url) links first, then bare URLs/emails in the prose. An autolink also
@@ -457,7 +505,8 @@ final class DocumentViewController: NSViewController {
             baseFont: NSFont.systemFont(ofSize: editorFontSize),
             cursorLocation: cursorLocation,
             selectedRange: Range(textView.selectedRange(), in: text),
-            documentBaseURL: document?.fileURL?.deletingLastPathComponent()
+            documentBaseURL: document?.fileURL?.deletingLastPathComponent(),
+            availableWidth: availableTextWidth
         )
 
         let selectedRange = textView.selectedRange()
@@ -873,5 +922,19 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         } else {
             restyle(cursorLocation: currentCursorIndex())
         }
+    }
+}
+
+// Checkmarks are computed when the menu opens rather than stored, which is what lets the
+// status bar's readout stay per-window: each window answers for itself.
+extension DocumentViewController: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleShowSource(_:)) {
+            menuItem.state = isShowingSource ? .on : .off
+        }
+        if menuItem.action == #selector(toggleCharacterAndWordCount(_:)) {
+            menuItem.state = statusBar.showsCounts ? .on : .off
+        }
+        return true
     }
 }

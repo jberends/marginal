@@ -23,13 +23,21 @@ final class VisualRenderHarnessTests: XCTestCase {
         )
         let baseFont = NSFont.systemFont(ofSize: fontSize)
         let cursorIndex = cursorLocation.flatMap { text.index(text.startIndex, offsetBy: $0, limitedBy: text.endIndex) }
-        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont, cursorLocation: cursorIndex)
 
         let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
         textView.textContainer?.replaceLayoutManager(MarkdownLayoutManager())
         textView.isRichText = true
         textView.textContainerInset = NSSize(width: 40, height: 24)
         textView.textContainer?.widthTracksTextView = true
+
+        // Styled against the real text-column width, exactly as DocumentViewController does -- table
+        // columns are capped to it, so styling with an unbounded width would render a table the app
+        // would never produce.
+        let container = textView.textContainer
+        let availableWidth = (container.map { $0.size.width - $0.lineFragmentPadding * 2 }) ?? width
+        let attributed = MarkdownStyler.attributedString(for: text, model: model, baseFont: baseFont,
+                                                         cursorLocation: cursorIndex,
+                                                         availableWidth: availableWidth)
         textView.textStorage?.setAttributedString(attributed)
 
         guard let layoutManager = textView.layoutManager, let container = textView.textContainer else {
@@ -125,6 +133,34 @@ final class VisualRenderHarnessTests: XCTestCase {
         let outputPath = NSHomeDirectory() + "/render-preview.png"
         try renderToPNG(text: text, outputPath: outputPath)
         print("RENDER_PREVIEW_PATH: \(outputPath)")
+    }
+
+    /// A table wider than the text column: every cell must wrap inside its own column rather than
+    /// spilling back to the left margin, and the grid must enclose the full height of a wrapped row.
+    @MainActor
+    func testRenderWideTableForVisualInspection() throws {
+        let text = """
+        ## 2. Scope
+
+        The existing TUI defines the feature closure. KELOTS must cover what it does, and
+        `kelots_core` is the layer that exposes those functions to both the web UI and the CLI:
+
+        | Capability | TUI equivalent |
+        |---|---|
+        | Select a namespace | Change Namespace |
+        | Deploy | Set Namespace to `present` |
+        | Rolling restart | Reapply Namespace |
+        | Tear down | Set Namespace to `absent` |
+        | Pause the agent on a namespace | — (new; the incident brake, §5.4) |
+        | Status: pods, deployments, services, ingress, events | View Namespace |
+
+        | Left | Center | Right |
+        | :--- | :---: | ---: |
+        | a | b | 123.45 |
+        """
+        let outputPath = NSHomeDirectory() + "/render-wide-table.png"
+        try renderToPNG(text: text, outputPath: outputPath)
+        print("RENDER_WIDE_TABLE_PATH: \(outputPath)")
     }
 
     @MainActor

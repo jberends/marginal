@@ -5,6 +5,27 @@ import AppKit
 @MainActor
 final class DocumentViewControllerTests: XCTestCase {
 
+    /// `DocumentViewController` reads its base font size from `UserDefaults.standard`, so whatever
+    /// size the developer last set in the real app leaks into these tests and breaks the font-size
+    /// assertions below. Clear the key for the duration and put back exactly what was there —
+    /// including putting back *nothing*, so a machine that never set it stays that way.
+    private var savedEditorFontPointSize: Any?
+
+    override func setUp() {
+        super.setUp()
+        savedEditorFontPointSize = UserDefaults.standard.object(forKey: "editorFontPointSize")
+        UserDefaults.standard.removeObject(forKey: "editorFontPointSize")
+    }
+
+    override func tearDown() {
+        if let savedEditorFontPointSize {
+            UserDefaults.standard.set(savedEditorFontPointSize, forKey: "editorFontPointSize")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "editorFontPointSize")
+        }
+        super.tearDown()
+    }
+
     func testCopyCurrentSelectionAsMarkdownPutsRawTextOnPasteboard() {
         let viewController = DocumentViewController()
         _ = viewController.view
@@ -122,7 +143,7 @@ final class DocumentViewControllerTests: XCTestCase {
         // the real editor font size, not left at the near-invisible hidden-delimiter size a
         // prior bug could leak into the restored render.
         let contentFont = viewController.textView.textStorage?.attribute(.font, at: 2, effectiveRange: nil) as? NSFont
-        XCTAssertEqual(contentFont?.pointSize, 16)
+        XCTAssertEqual(contentFont?.pointSize, FontSizing.defaultPointSize)
     }
 
     func testShowSourceSurvivesSelectionChange() {

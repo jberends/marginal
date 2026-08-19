@@ -133,6 +133,38 @@ final class PDFExporterIntegrationTests: XCTestCase {
                                   "A single tall image should be capped to fit within (a fraction of) one page, not split across many pages")
     }
 
+    /// Regression for the reported bug: a table that renders correctly on screen exported as a
+    /// paragraph of literal pipe characters, because MarkdownHTMLRenderer never emitted <table>.
+    @MainActor
+    func testExportRendersATableAsAGridRatherThanLiteralPipeText() {
+        let markdown = """
+        # Key Decisions
+
+        | # | Decision |
+        |---|----------|
+        | 1 | Offline actions: **create new forms**. Push-only. |
+        | 2 | Must survive `cold start`. |
+        """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("pdf-table-test-\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let done = expectation(description: "export completes")
+        PDFExporter.shared.export(markdown: markdown, title: "Key Decisions", baseURL: nil, to: url) { error in
+            XCTAssertNil(error, "Export reported an error: \(String(describing: error))")
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 30)
+
+        guard let document = PDFDocument(url: url) else {
+            return XCTFail("No readable PDF was written at \(url.path)")
+        }
+        let text = (0..<document.pageCount).compactMap { document.page(at: $0)?.string }.joined()
+        XCTAssertTrue(text.contains("Decision"), "Header cell text should survive into the PDF")
+        XCTAssertTrue(text.contains("Push-only"), "Body cell text should survive into the PDF")
+        XCTAssertFalse(text.contains("|---"), "The alignment row is pure syntax and must never be drawn: \(text)")
+        XCTAssertFalse(text.contains("| 1 |"), "Cells must be laid out as a grid, not printed as pipe text: \(text)")
+    }
+
     private static func solidColorPNG(color: NSColor, width: Int, height: Int) -> Data {
         let img = NSImage(size: NSSize(width: width, height: height))
         img.lockFocus()
