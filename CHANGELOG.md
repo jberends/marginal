@@ -6,6 +6,17 @@ All notable changes to Marginal are documented here. The format follows
 
 ## [0.11.0] — Unreleased
 
+### Added
+
+- **A View menu**, giving commands that were previously keyboard-only somewhere to be found:
+  **Zoom In** (⌘+), **Zoom Out** (⌘-), **Show Source** (⌘⇧P), and the new **Actual Size** (⌘0),
+  which returns the text to its default size instead of making you step back a point at a time.
+  Every shortcut that worked before still works, the numpad's `+` included.
+- **Show Character & Word Count** in the View menu switches the status bar between the cursor's
+  position and the document's counts. Until now that was only possible by discovering that the
+  status bar is clickable at all. Clicking still works, and the menu shows a checkmark for
+  whichever the focused window is displaying — two windows can differ, and each answers for itself.
+
 ### Fixed
 
 - **Tables now export to PDF.** A table that rendered correctly on the page came out of **Export as
