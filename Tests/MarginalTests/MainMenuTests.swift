@@ -91,4 +91,37 @@ final class MainMenuTests: XCTestCase {
         _ = controller.validateMenuItem(item)
         XCTAssertEqual(item.state, .on)
     }
+
+    private func gesture(_ characters: String, _ flags: NSEvent.ModifierFlags, _ keyCode: UInt16) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+            windowNumber: 0, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode
+        )!
+    }
+
+    /// Which path claims which gesture. The menu and `MarkdownTextView.keyDown` are mutually
+    /// exclusive — AppKit offers a key event to the menu first, and `keyDown` only ever sees what
+    /// the menu declines — so this is also the no-double-fire guarantee.
+    func testTheMenuClaimsEveryGestureExceptCommandEquals() {
+        let menu = AppDelegate.buildMainMenu(target: AppDelegate())
+
+        // ⌘⇧= — the "+" the shifted "=" key produces. The visible Zoom In equivalent.
+        XCTAssertTrue(menu.performKeyEquivalent(with: gesture("+", [.command, .shift], 24)))
+        // ⌘ + numpad "+". AppKit masks out .numericPad before comparing modifier flags, so the
+        // plain [.command] item claims it too — measured in the spike, not assumed.
+        XCTAssertTrue(menu.performKeyEquivalent(with: gesture("+", [.command, .numericPad], 69)))
+        // ⌘- (U+002D hyphen-minus).
+        XCTAssertTrue(menu.performKeyEquivalent(with: gesture("\u{002D}", [.command], 27)))
+        // ⌘⇧P.
+        XCTAssertTrue(menu.performKeyEquivalent(with: gesture("P", [.command, .shift], 35)))
+
+        // ⌘= must NOT be claimed: no menu item holds "=", by choice, so it falls through to
+        // MarkdownTextView.keyDown. If this ever starts returning true, someone added an alias
+        // item and keyDown's "=" case became dead — which is a decision, not an accident.
+        XCTAssertFalse(menu.performKeyEquivalent(with: gesture("=", [.command], 24)))
+
+        // Negative control: ⌘⇧- produces "_" and must match nothing.
+        XCTAssertFalse(menu.performKeyEquivalent(with: gesture("_", [.command, .shift], 27)))
+    }
 }
