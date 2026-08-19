@@ -17,7 +17,7 @@ final class DocumentViewController: NSViewController {
     // font"; this property is the only thing restyle()/toggleShowSource()/font-size
     // adjustment consult or mutate.
     // 16px body -- the design system's base size (headings scale 1.25/1.5/1.875 from it).
-    private var editorFontSize: CGFloat = 16
+    private var editorFontSize: CGFloat = FontSizing.defaultPointSize
 
     weak var document: MarkdownDocument?
 
@@ -94,7 +94,7 @@ final class DocumentViewController: NSViewController {
         }
         textView.registerForDraggedTypes([.fileURL])
         let savedSize = UserDefaults.standard.double(forKey: "editorFontPointSize")
-        editorFontSize = savedSize > 0 ? savedSize : 16
+        editorFontSize = savedSize > 0 ? savedSize : FontSizing.defaultPointSize
         textView.font = EditorFont.body(editorFontSize)
 
         scrollView.documentView = textView
@@ -302,6 +302,20 @@ final class DocumentViewController: NSViewController {
 
     @objc func copySelectionAsHTML(_ sender: Any?) {
         copyCurrentSelectionAsHTML()
+    }
+
+    // View menu. These carry no target in the menu, so AppKit finds them on the responder
+    // chain and greys them out by itself when no document window is focused.
+    @objc func zoomIn(_ sender: Any?) {
+        setFontSize(FontSizing.increased(from: editorFontSize))
+    }
+
+    @objc func zoomOut(_ sender: Any?) {
+        setFontSize(FontSizing.decreased(from: editorFontSize))
+    }
+
+    @objc func actualSize(_ sender: Any?) {
+        setFontSize(FontSizing.defaultPointSize)
     }
 
     /// File -> Export as PDF: renders the whole document through the HTML renderer and
