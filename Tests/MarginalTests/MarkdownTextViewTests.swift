@@ -126,9 +126,11 @@ final class MarkdownTextViewTests: XCTestCase {
         XCTAssertEqual(spy.increaseCallCount, 2, "Cmd+Plus (Cmd+Shift+=) should also increase font size")
     }
 
-    /// The numpad's "+" is a different physical key that produces the same character, and it
-    /// carries .numericPad in its modifier flags. A menu item's keyEquivalentModifierMask does
-    /// not tolerate that flag, so keyDown is what catches this one -- and it must keep doing so.
+    /// Calls keyDown directly, pinning the fallback path in isolation. In the running app the
+    /// menu claims this gesture: AppKit masks out .numericPad before comparing modifier flags
+    /// against keyEquivalentModifierMask, so the plain [.command] Zoom In item matches numpad
+    /// ⌘+ just like main-row ⌘+ (measured -- see "Spike findings" in the View menu design spec).
+    /// What this guards is what keyDown would do if that menu item were ever removed.
     @MainActor
     func testCommandNumpadPlusIncreasesFontSize() {
         let (textView, spy) = makeTextViewWithSpy()
