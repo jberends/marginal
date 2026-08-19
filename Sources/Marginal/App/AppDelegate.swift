@@ -287,6 +287,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         zoomOutItem.keyEquivalentModifierMask = [.command]
         viewMenu.addItem(zoomOutItem)
         viewMenu.addItem(withTitle: "Actual Size", action: #selector(DocumentViewController.actualSize(_:)), keyEquivalent: "0")
+        viewMenu.addItem(NSMenuItem.separator())
+        // Uppercase "P" is how a Shift-ed equivalent is spelled; matches the ⌘⇧P that
+        // MarkdownTextView.keyDown has always handled.
+        viewMenu.addItem(withTitle: "Show Source", action: #selector(DocumentViewController.toggleShowSource(_:)), keyEquivalent: "P")
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 

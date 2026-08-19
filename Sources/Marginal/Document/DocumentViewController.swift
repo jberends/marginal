@@ -351,6 +351,12 @@ final class DocumentViewController: NSViewController {
         }
     }
 
+    /// Menu-facing overload. The no-argument `toggleShowSource()` stays as-is because the
+    /// keyDown path and the tests call it directly.
+    @objc func toggleShowSource(_ sender: Any?) {
+        toggleShowSource()
+    }
+
     // Re-applies the plain monospace source rendering, preserving the selection across the
     // text storage mutation. Used both when Show Source is first toggled on and whenever a
     // delegate callback (selection change, text change, font size change) would otherwise
@@ -912,5 +918,16 @@ extension DocumentViewController: MarkdownTextViewShortcutDelegate {
         } else {
             restyle(cursorLocation: currentCursorIndex())
         }
+    }
+}
+
+// Checkmarks are computed when the menu opens rather than stored, which is what lets the
+// status bar's readout stay per-window: each window answers for itself.
+extension DocumentViewController: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleShowSource(_:)) {
+            menuItem.state = isShowingSource ? .on : .off
+        }
+        return true
     }
 }
