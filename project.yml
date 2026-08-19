@@ -28,11 +28,10 @@ targets:
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: Sources/Marginal/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Marginal/App/Marginal.entitlements
-        # Production release: ships the production icon (AppIcon), not the beta mark.
-        # For local development/beta builds, flip this back to AppIconBeta (see the
-        # release checklist in AGENTS.md). The side-by-side build script forces
-        # AppIconBeta for its own local build regardless of this value.
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # In development: the beta mark. Flip to AppIcon when the feature is accepted,
+        # so main stays release-shaped (see the feature workflow in AGENTS.md). The
+        # production icon must never ship as beta, nor the beta icon as production.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIconBeta
   MarginalTests:
     type: bundle.unit-test
     platform: macOS
