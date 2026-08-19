@@ -9,7 +9,11 @@ final class DocumentViewControllerTests: XCTestCase {
     /// size the developer last set in the real app leaks into these tests and breaks the font-size
     /// assertions below. Clear the key for the duration and put back exactly what was there —
     /// including putting back *nothing*, so a machine that never set it stays that way.
-    private var savedEditorFontPointSize: Any?
+    ///
+    /// `nonisolated(unsafe)` because `setUp`/`tearDown` override nonisolated declarations and so
+    /// stay nonisolated even in a @MainActor class. XCTest runs both on the main thread, one test
+    /// at a time, so there is no concurrent access to be unsafe about.
+    nonisolated(unsafe) private var savedEditorFontPointSize: Any?
 
     override func setUp() {
         super.setUp()
