@@ -418,6 +418,30 @@ final class DocumentViewController: NSViewController {
             .replacingOccurrences(of: " ", with: "-")
     }
 
+    /// Width of the text column: the container minus the padding TextKit reserves on either side.
+    /// Table columns are capped to this, so a wide table wraps inside its cells instead of running
+    /// off the right edge.
+    private var availableTextWidth: CGFloat {
+        guard let container = textView.textContainer else { return .greatestFiniteMagnitude }
+        let width = container.size.width - container.lineFragmentPadding * 2
+        return width > 0 ? width : .greatestFiniteMagnitude
+    }
+
+    private var lastStyledWidth: CGFloat = 0
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        // A table's column widths depend on the width available to it, so resizing the window has
+        // to re-run styling. viewDidLayout fires for plenty of reasons that aren't a resize, and a
+        // document without tables can't be affected either way, so both are filtered out first --
+        // restyling parses the whole document, which is far too expensive to do on every pass.
+        let width = availableTextWidth
+        guard abs(width - lastStyledWidth) > 0.5 else { return }
+        lastStyledWidth = width
+        guard let model = latestModel, !model.tables.isEmpty else { return }
+        restyle(cursorLocation: currentCursorIndex())
+    }
+
     private func restyle(cursorLocation: String.Index?) {
         let text = textView.string
         // Explicit [text](url) links first, then bare URLs/emails in the prose. An autolink also
@@ -457,7 +481,8 @@ final class DocumentViewController: NSViewController {
             baseFont: NSFont.systemFont(ofSize: editorFontSize),
             cursorLocation: cursorLocation,
             selectedRange: Range(textView.selectedRange(), in: text),
-            documentBaseURL: document?.fileURL?.deletingLastPathComponent()
+            documentBaseURL: document?.fileURL?.deletingLastPathComponent(),
+            availableWidth: availableTextWidth
         )
 
         let selectedRange = textView.selectedRange()

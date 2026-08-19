@@ -4,13 +4,23 @@ struct MarkdownStyler {
 
     static let hiddenDelimiterFontSize: CGFloat = 0.1
 
+    /// Large enough that whatever line it lands on overflows the text container, which is what
+    /// forces TextKit to take the break a table's layout plan chose (see TableRowLayoutPlan). It is
+    /// only ever applied to trailing whitespace or a hidden pipe -- characters at the END of the
+    /// line they belong to -- so it never widens that line's own used rect.
+    static let forcedLineBreakKern: CGFloat = 100_000
+
+    /// `availableWidth` is the width of the text column (the container minus its insets). It is what
+    /// lets a table cap its columns so a wide table wraps inside its cells instead of running off
+    /// the page; the default means "unbounded", which keeps every column at its natural width.
     static func attributedString(
         for text: String,
         model: MarkdownDocumentModel,
         baseFont: NSFont,
         cursorLocation: String.Index?,
         selectedRange: Range<String.Index>? = nil,
-        documentBaseURL: URL? = nil
+        documentBaseURL: URL? = nil,
+        availableWidth: CGFloat = .greatestFiniteMagnitude
     ) -> NSAttributedString {
         // 1.55 line height for body text. Anything below ~1.5 reads cramped at long-form
         // lengths; this is the range every typographic guide lands on for screen reading.
@@ -284,22 +294,31 @@ struct MarkdownStyler {
 
                 // Vertical breathing room within each row -- without this, a row's height is
                 // exactly the text's own line height, so content butts directly against the grid
-                // lines above and below it. The grid drawing (which reads this same laid-out
-                // line's bounding rect) automatically follows the increased height. TextKit
-                // anchors a fixed-height line's baseline low (all the extra height lands above
-                // the glyphs), which read as text glued to the bottom grid line -- the baseline
-                // offset re-centers it vertically, matching Notion.
-                let rowHeight = baseFont.pointSize * 2.2
+                // lines above and below it. This is the height of ONE line inside a cell; a row
+                // whose cells wrap stacks several of them (the deferred pass below computes the
+                // resulting row height). TextKit anchors a fixed-height line's baseline low (all
+                // the extra height lands above the glyphs), which reads as text glued to the
+                // bottom grid line -- the baseline offset re-centers it vertically, matching Notion.
+                let lineHeight = tableCellLineHeight(for: baseFont)
                 let rowParagraphStyle = NSMutableParagraphStyle()
-                rowParagraphStyle.minimumLineHeight = rowHeight
-                rowParagraphStyle.maximumLineHeight = rowHeight
+                rowParagraphStyle.minimumLineHeight = lineHeight
+                rowParagraphStyle.maximumLineHeight = lineHeight
                 let rowNSRange = NSRange(row.lineRange, in: text)
                 result.addAttribute(.paragraphStyle, value: rowParagraphStyle, range: rowNSRange)
                 let naturalLineHeight = baseFont.ascender - baseFont.descender + baseFont.leading
-                result.addAttribute(.baselineOffset, value: (rowHeight - naturalLineHeight) / 2, range: rowNSRange)
+                result.addAttribute(.baselineOffset, value: (lineHeight - naturalLineHeight) / 2, range: rowNSRange)
             }
 
-            result.addAttribute(.font, value: hiddenFont, range: NSRange(table.separatorRowRange, in: text))
+            // The "|---|---|" row is pure syntax and never shown -- but hiding its glyphs still
+            // leaves a LINE, and at the body's default line height that line opens a visible gap
+            // between the header row and the first body row, breaking the grid in two. Collapsing
+            // its height closes the seam.
+            let separatorNSRange = NSRange(table.separatorRowRange, in: text)
+            result.addAttribute(.font, value: hiddenFont, range: separatorNSRange)
+            let separatorStyle = NSMutableParagraphStyle()
+            separatorStyle.minimumLineHeight = hiddenDelimiterFontSize
+            separatorStyle.maximumLineHeight = hiddenDelimiterFontSize
+            result.addAttribute(.paragraphStyle, value: separatorStyle, range: separatorNSRange)
             pendingTables.append(PendingTableLayout(
                 allRows: allRows,
                 columnCount: columnCount,
@@ -453,19 +472,7 @@ struct MarkdownStyler {
             result.addAttribute(.font, value: fenceFont, range: NSRange(codeBlock.closingFenceRange, in: text))
         }
 
-        // Table geometry (deferred from the early table pass above): every font that can affect
-        // a cell's rendered width has been applied by now, so widths are measured from the real
-        // attributed runs. Column alignment is achieved without restructuring the text into real
-        // per-cell paragraphs (which NSTextTable would require -- a real mutation of the
-        // underlying markdown): a precisely computed .kern on each hidden pipe pushes the
-        // FOLLOWING cell's visible content to land exactly at that column's shared target
-        // x-position, the same position on every row, so columns line up into a real grid.
-        for pending in pendingTables {
-            let cellPadding = tableCellPadding(for: baseFont)
-
-            func measuredWidth(_ range: Range<String.Index>) -> CGFloat {
-                guard !range.isEmpty else { return 0 }
-                // Re-hide the ">" markers on lines that turned out to be inside a fenced code block.
+        // Re-hide the ">" markers on lines that turned out to be inside a fenced code block.
         // The blockquote pass hides them, but the code-block pass then repaints those lines in
         // the mono face and code colour, which brings the marker back -- so a fence written
         // inside a quote showed "> " in front of every line of the card's contents.
@@ -473,8 +480,20 @@ struct MarkdownStyler {
         // ">" appearing in sample code is never styled as a quote. A fence written *inside* a
         // quote is the opposite case: those lines really are quoted, so they need their bar drawn
         // and their markers hidden. Walk the unfiltered spans for exactly that.
+        //
+        // The two cases look identical from the quoted line alone -- both are a ">" line inside a
+        // code block -- so they are told apart by the FENCE: only a code block whose own opening
+        // fence is quoted is a fence written inside a quote.
         for blockquote in model.blockquotes where !revealedBlockquotes.contains(blockquote) {
-            guard overlapsAnyCodeBlock(blockquote.lineRange) else { continue }
+            guard let enclosing = model.codeBlocks.first(where: {
+                let blockRange = $0.openingFenceRange.lowerBound..<$0.closingFenceRange.upperBound
+                return blockquote.lineRange.lowerBound < blockRange.upperBound
+                    && blockquote.lineRange.upperBound > blockRange.lowerBound
+            }) else { continue }
+            let fenceIsQuoted = model.blockquotes.contains {
+                $0.lineRange.contains(enclosing.openingFenceRange.lowerBound)
+            }
+            guard fenceIsQuoted else { continue }
             result.addAttribute(.marginalBlockquoteMarker,
                                 value: blockquote.depth,
                                 range: NSRange(blockquote.lineRange, in: text))
@@ -484,50 +503,194 @@ struct MarkdownStyler {
             result.addAttribute(.foregroundColor, value: NSColor.clear, range: markerRange)
         }
 
-        return result.attributedSubstring(from: NSRange(range, in: text)).size().width
+        // Table geometry (deferred from the early table pass above): every font that can affect
+        // a cell's rendered width has been applied by now, so widths are measured from the real
+        // attributed runs -- a bold/code span or emoji inside a cell renders wider or narrower
+        // than the same characters at plain baseFont.
+        //
+        // Columns are real bands rather than one long line nudged into shape: natural column widths
+        // are capped to the text column's width, each cell is word-wrapped inside its own column,
+        // and the resulting plan tells MarkdownLayoutDelegate where to place every line fragment
+        // (see TableRowLayoutPlan). Nothing here restructures the text into per-cell paragraphs --
+        // which NSTextTable would require, and which would mean inserting paragraph breaks that
+        // aren't in the markdown.
+        for pending in pendingTables {
+            let cellPadding = tableCellPadding(for: baseFont)
+            let lineHeight = tableCellLineHeight(for: baseFont)
+            let rowPadding = tableRowVerticalPadding(for: baseFont)
+
+            func measuredWidth(_ range: Range<String.Index>) -> CGFloat {
+                guard !range.isEmpty else { return 0 }
+                return result.attributedSubstring(from: NSRange(range, in: text)).size().width
             }
 
-            let rowCellWidths = pending.rowCellRanges.map { $0.map(measuredWidth) }
-            var columnWidths = [CGFloat](repeating: 0, count: pending.columnCount)
-            for widths in rowCellWidths {
-                for (c, w) in widths.enumerated() { columnWidths[c] = max(columnWidths[c], w) }
+            func offset(_ index: String.Index) -> Int {
+                NSRange(index..<index, in: text).location
             }
+
+            /// The runs of non-space characters in a cell -- the units word wrapping may not split.
+            func words(in range: Range<String.Index>) -> [Range<String.Index>] {
+                var found: [Range<String.Index>] = []
+                var i = range.lowerBound
+                while i < range.upperBound {
+                    while i < range.upperBound, text[i] == " " { i = text.index(after: i) }
+                    guard i < range.upperBound else { break }
+                    let wordStart = i
+                    while i < range.upperBound, text[i] != " " { i = text.index(after: i) }
+                    found.append(wordStart..<i)
+                }
+                return found
+            }
+
+            /// Greedy word wrap of one cell into lines no wider than its column. A single word wider
+            /// than the column overflows rather than being split mid-word -- which is why a column is
+            /// never squeezed below its widest word.
+            func wrappedLines(in range: Range<String.Index>, maxWidth: CGFloat) -> [Range<String.Index>] {
+                let cellWords = words(in: range)
+                guard let first = cellWords.first else { return [range] }
+                var lines: [Range<String.Index>] = []
+                var lineStart = first.lowerBound
+                var lineEnd = first.upperBound
+                for word in cellWords.dropFirst() {
+                    if measuredWidth(lineStart..<word.upperBound) > maxWidth {
+                        lines.append(lineStart..<lineEnd)
+                        lineStart = word.lowerBound
+                    }
+                    lineEnd = word.upperBound
+                }
+                lines.append(lineStart..<lineEnd)
+                return lines
+            }
+
+            var columnWidths = [CGFloat](repeating: 0, count: pending.columnCount)
+            var minimumWidths = [CGFloat](repeating: 0, count: pending.columnCount)
+            for ranges in pending.rowCellRanges {
+                for (c, cell) in ranges.enumerated() {
+                    columnWidths[c] = max(columnWidths[c], measuredWidth(cell))
+                    for word in words(in: cell) {
+                        minimumWidths[c] = max(minimumWidths[c], measuredWidth(word))
+                    }
+                }
+            }
+
+            // Shrink over-wide columns to fit the text column, proportionally to the slack each one
+            // has above its own minimum -- so a prose column gives up space long before a "#" column
+            // does. Same input and same intent as a browser's automatic table layout.
+            let chromeWidth = CGFloat(pending.columnCount) * cellPadding * 2
+            let contentBudget = availableWidth - chromeWidth
+            if contentBudget > 0, columnWidths.reduce(0, +) > contentBudget {
+                let target = max(contentBudget, minimumWidths.reduce(0, +))
+                // Clamping at each column's minimum redistributes the remainder onto the columns
+                // that can still give, so a few passes are needed to converge.
+                for _ in 0..<8 {
+                    let excess = columnWidths.reduce(0, +) - target
+                    guard excess > 0.5 else { break }
+                    let slack = zip(columnWidths, minimumWidths).map { max(0, $0 - $1) }.reduce(0, +)
+                    guard slack > 0.5 else { break }
+                    let factor = min(1, excess / slack)
+                    for c in columnWidths.indices {
+                        columnWidths[c] -= max(0, columnWidths[c] - minimumWidths[c]) * factor
+                    }
+                }
+            }
+
             var slotStarts: [CGFloat] = [0]
             for c in 0..<pending.columnCount { slotStarts.append(slotStarts[c] + columnWidths[c] + cellPadding * 2) }
 
             for (rowIndex, row) in pending.allRows.enumerated() {
                 let cols = min(pending.columnCount, row.pipeRanges.count - 1)
-                var flowPosition: CGFloat = 0
-                for c in 0..<cols {
-                    let cellRange = pending.rowCellRanges[rowIndex][c]
-                    let rawWidth = rowCellWidths[rowIndex][c]
-                    let slotStart = slotStarts[c]
-                    let slotWidth = columnWidths[c] + cellPadding * 2
-                    let desiredContentStart: CGFloat
-                    switch pending.alignments[c] {
-                    case .left: desiredContentStart = slotStart + cellPadding
-                    case .right: desiredContentStart = slotStart + slotWidth - cellPadding - rawWidth
-                    case .center: desiredContentStart = slotStart + (slotWidth - rawWidth) / 2
-                    }
+                var bands: [TableRowLayoutPlan.Band] = []
+                var breakPoints: Set<Int> = []
+                var lineCount = 1
 
-                    // The hidden pipe and padding glyphs still advance the line by their own
-                    // (tiny) measured widths -- folded into the kern so the content position
-                    // is exact, not just close.
-                    let pipeWidth = measuredWidth(row.pipeRanges[c])
-                    let leadingPadWidth = measuredWidth(row.pipeRanges[c].upperBound..<cellRange.lowerBound)
-                    let trailingPadWidth = measuredWidth(cellRange.upperBound..<row.pipeRanges[c + 1].lowerBound)
-                    result.addAttribute(
-                        .kern,
-                        value: desiredContentStart - flowPosition - pipeWidth - leadingPadWidth,
-                        range: NSRange(row.pipeRanges[c], in: text)
-                    )
-                    flowPosition = desiredContentStart + rawWidth + trailingPadWidth
+                /// Forces TextKit to break before `index` by making the character in front of it
+                /// overflow the container. Paired with the plan's break-point veto, this is what
+                /// lands a break exactly at a cell boundary or a wrap point and nowhere else.
+                func forceBreak(before index: String.Index) {
+                    breakPoints.insert(offset(index))
+                    guard index > text.startIndex else { return }
+                    let preceding = text.index(before: index)
+                    result.addAttribute(.kern, value: forcedLineBreakKern,
+                                        range: NSRange(preceding..<index, in: text))
                 }
 
+                for c in 0..<cols {
+                    let cellRange = pending.rowCellRanges[rowIndex][c]
+                    let columnWidth = columnWidths[c]
+                    let lines = wrappedLines(in: cellRange, maxWidth: columnWidth)
+                    lineCount = max(lineCount, lines.count)
+
+                    for (lineIndex, lineRange) in lines.enumerated() {
+                        let lineWidth = measuredWidth(lineRange)
+                        let contentX: CGFloat
+                        switch pending.alignments[c] {
+                        case .left: contentX = slotStarts[c] + cellPadding
+                        case .right: contentX = slotStarts[c + 1] - cellPadding - lineWidth
+                        case .center: contentX = slotStarts[c] + cellPadding + (columnWidth - lineWidth) / 2
+                        }
+
+                        let bandStart: Int
+                        let bandX: CGFloat
+                        if lineIndex == 0 {
+                            // A cell's first fragment begins at its hidden opening pipe, so the band
+                            // starts far enough left that the pipe and the cell's leading padding
+                            // spaces (shrunk to the hidden font, but not zero-width) still leave the
+                            // visible content exactly on the column boundary.
+                            let pipeStart = row.pipeRanges[c].lowerBound
+                            bandStart = offset(pipeStart)
+                            bandX = contentX - measuredWidth(pipeStart..<lineRange.lowerBound)
+                        } else {
+                            bandStart = offset(lineRange.lowerBound)
+                            bandX = contentX
+                            forceBreak(before: lineRange.lowerBound)
+                        }
+                        bands.append(TableRowLayoutPlan.Band(
+                            start: bandStart,
+                            x: bandX,
+                            width: max(1, slotStarts[c + 1] - bandX),
+                            yOffset: rowPadding + CGFloat(lineIndex) * lineHeight,
+                            height: lineHeight
+                        ))
+                    }
+
+                    // Start the next cell on its own fragment rather than letting it continue this
+                    // one -- this is the break that turns a row into side-by-side columns.
+                    forceBreak(before: row.pipeRanges[c + 1].lowerBound)
+                }
+
+                // The row's trailing pipe gets its own (invisible) fragment pinned to the BOTTOM of
+                // the row, because TextKit starts the next paragraph below the last fragment it laid
+                // out -- and without this that would be whichever column happened to come last,
+                // overlapping the next row whenever an earlier column was taller. Anything after it
+                // (a malformed row with more cells than the header) trails off to the table's right,
+                // which is where the source puts it.
+                let rowHeight = rowPadding * 2 + CGFloat(lineCount) * lineHeight
+                if cols < row.pipeRanges.count {
+                    let trailingStart = offset(row.pipeRanges[cols].lowerBound)
+                    let tableRight = slotStarts[pending.columnCount]
+                    bands.append(TableRowLayoutPlan.Band(
+                        start: trailingStart,
+                        x: tableRight,
+                        width: max(1, availableWidth - tableRight),
+                        yOffset: rowPadding + CGFloat(lineCount - 1) * lineHeight,
+                        height: lineHeight + rowPadding
+                    ))
+                }
+                bands.sort { $0.start < $1.start }
+
+                let rowNSRange = NSRange(row.lineRange, in: text)
                 result.addAttribute(
                     .marginalTableGridMarker,
                     value: TableGridInfo(columnBoundaries: slotStarts, isHeaderRow: rowIndex == 0),
-                    range: NSRange(row.lineRange, in: text)
+                    range: rowNSRange
+                )
+                result.addAttribute(
+                    .marginalTableRowLayout,
+                    value: TableRowLayoutPlan(bands: bands,
+                                              breakPoints: breakPoints,
+                                              rowStart: offset(row.lineRange.lowerBound),
+                                              rowHeight: rowHeight),
+                    range: rowNSRange
                 )
             }
         }
@@ -866,6 +1029,19 @@ struct MarkdownStyler {
     /// body size). Shared with tests so the reserved slot math and assertions always agree.
     static func tableCellPadding(for font: NSFont) -> CGFloat {
         font.pointSize * 0.5625
+    }
+
+    /// Height of ONE line of text inside a table cell. A cell whose content wraps stacks several of
+    /// these, so a row's height is `lineCount * this + 2 * tableRowVerticalPadding`. Together those
+    /// two come to 2.2em for the common single-line row, matching the measured Notion row height.
+    static func tableCellLineHeight(for font: NSFont) -> CGFloat {
+        font.pointSize * 1.6
+    }
+
+    /// Space above the first line and below the last line of a row's cells, so content never butts
+    /// against the grid lines. Shared with tests so the reserved height and assertions agree.
+    static func tableRowVerticalPadding(for font: NSFont) -> CGFloat {
+        font.pointSize * 0.3
     }
 
     /// Horizontal inset between a fenced code block's rounded card edge and the code inside it.

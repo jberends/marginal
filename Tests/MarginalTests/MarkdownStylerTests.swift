@@ -847,27 +847,23 @@ final class MarkdownStylerTableTests: XCTestCase {
         XCTAssertEqual(separatorFont?.pointSize, MarkdownStyler.hiddenDelimiterFontSize)
     }
 
-    // The first column is always left-aligned by default and its slot always starts at x=0, so
-    // the kern needed on every row's very first pipe (to reach the shared cellPadding constant)
-    // must be identical regardless of that row's own content -- a solid, font-metric-independent
-    // check that the kern algorithm is actually computing a shared target position, not just
-    // echoing each row's own natural width back at itself.
-    func testFirstColumnKernIsIdenticalAcrossRowsRegardlessOfContentLength() {
+    // The first column is always left-aligned by default and its slot always starts at x=0, so the
+    // band every row's first cell is placed in must be identical regardless of that row's own
+    // content -- a font-metric-independent check that the layout is computing a shared target
+    // position rather than echoing each row's natural width back at itself.
+    func testFirstColumnBandIsIdenticalAcrossRowsRegardlessOfContentLength() {
         let text = "| A | much longer header |\n|---|---|\n| much longer body cell | B |"
         let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text), baseFont: .systemFont(ofSize: 14), cursorLocation: nil)
-        let headerPipeLocation = text.distance(from: text.startIndex, to: text.range(of: "| A")!.lowerBound)
-        let bodyPipeLocation = text.distance(from: text.startIndex, to: text.range(of: "| much longer body")!.lowerBound)
-        let headerKern = attributed.attribute(.kern, at: headerPipeLocation, effectiveRange: nil) as? CGFloat
-        let bodyKern = attributed.attribute(.kern, at: bodyPipeLocation, effectiveRange: nil) as? CGFloat
-        XCTAssertNotNil(headerKern)
-        XCTAssertEqual(headerKern, bodyKern, "Column 0 always starts at the same x position, so its leading kern must be identical across rows")
+        let headerX = firstBandX(in: attributed, atRowContaining: "| A", of: text)
+        let bodyX = firstBandX(in: attributed, atRowContaining: "| much longer body", of: text)
+        XCTAssertNotNil(headerX)
+        XCTAssertEqual(headerX, bodyX, "Column 0 always starts at the same x position on every row")
     }
 
-    // Regression (columns drifting right, content crossing grid lines): the kern math never
-    // accounted for the hidden pipes' own advance width, so every column's content drifted
-    // right by one more pipe-width than the last. Left-aligned cell content must land exactly
-    // at its column's grid boundary plus the shared cell padding -- measured from the actual
-    // attributed runs (fonts, kerns, hidden delimiters), not assumed.
+    // Regression (columns drifting right, content crossing grid lines): left-aligned cell content
+    // must land exactly on its column's grid boundary plus the shared cell padding. The band is
+    // anchored at the cell's hidden opening pipe, so the pipe and the cell's padding spaces -- which
+    // are shrunk to the hidden font but are not zero-width -- have to be measured back in.
     func testCellContentStartsExactlyAtColumnBoundaryPlusPadding() {
         let text = "| Feature | Supported | Notes |\n|---|---|---|\n| Headings | Yes | Levels 1-6 |\n| Tables | Yes | Extension in many parsers |"
         let baseFont = NSFont.systemFont(ofSize: 15)
@@ -883,15 +879,27 @@ final class MarkdownStylerTableTests: XCTestCase {
         for probe in probes {
             let cellLocation = ns.range(of: probe.cellText).location
             let lineRange = ns.lineRange(for: NSRange(location: cellLocation, length: 0))
-            guard let gridInfo = attributed.attribute(.marginalTableGridMarker, at: lineRange.location, effectiveRange: nil) as? TableGridInfo else {
-                XCTFail("Missing grid info for row containing \(probe.cellText)"); continue
+            guard let gridInfo = attributed.attribute(.marginalTableGridMarker, at: lineRange.location, effectiveRange: nil) as? TableGridInfo,
+                  let plan = attributed.attribute(.marginalTableRowLayout, at: lineRange.location, effectiveRange: nil) as? TableRowLayoutPlan,
+                  let band = plan.bands.last(where: { $0.start <= cellLocation })
+            else {
+                XCTFail("Missing table layout for row containing \(probe.cellText)"); continue
             }
-            let renderedX = attributed
-                .attributedSubstring(from: NSRange(location: lineRange.location, length: cellLocation - lineRange.location))
+            // Where the visible content actually lands: the band's left edge plus everything laid
+            // out between the band's first character and the cell's own content.
+            let hiddenPrefix = attributed
+                .attributedSubstring(from: NSRange(location: band.start, length: cellLocation - band.start))
                 .size().width
-            XCTAssertEqual(renderedX, gridInfo.columnBoundaries[probe.column] + padding, accuracy: 0.5,
+            XCTAssertEqual(band.x + hiddenPrefix, gridInfo.columnBoundaries[probe.column] + padding, accuracy: 0.5,
                            "\(probe.cellText) must start exactly at its column boundary plus padding")
         }
+    }
+
+    private func firstBandX(in attributed: NSAttributedString, atRowContaining marker: String, of text: String) -> CGFloat? {
+        let location = (text as NSString).range(of: marker).location
+        guard let plan = attributed.attribute(.marginalTableRowLayout, at: location, effectiveRange: nil) as? TableRowLayoutPlan
+        else { return nil }
+        return plan.bands.first?.x
     }
 
     // The user's exact reported case: an escaped pipe inside a cell must not become a hidden
@@ -919,6 +927,98 @@ final class MarkdownStylerTableTests: XCTestCase {
         let location = text.distance(from: text.startIndex, to: text.range(of: "Bold text")!.lowerBound)
         let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont
         XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false, "Nested bold inside a cell must survive the table pass, which runs before inlineStyles")
+    }
+
+    // The reported bug: a table wider than the text column was laid out as one long line, so TextKit
+    // wrapped it at the container edge and a cell's overflow restarted at the LEFT MARGIN instead of
+    // staying under its own column. These pin the layout that replaced it.
+    private func plan(in attributed: NSAttributedString, forRowContaining marker: String, of text: String) -> TableRowLayoutPlan? {
+        let location = (text as NSString).range(of: marker).location
+        return attributed.attribute(.marginalTableRowLayout, at: location, effectiveRange: nil) as? TableRowLayoutPlan
+    }
+
+    private let wideTable = """
+        | Capability | TUI equivalent |
+        |---|---|
+        | Status: pods, deployments, services, ingress, events | View Namespace |
+        """
+
+    func testTableWiderThanTheTextColumnIsCappedToFitIt() {
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let available: CGFloat = 300
+        let attributed = MarkdownStyler.attributedString(for: wideTable, model: model(for: wideTable),
+                                                         baseFont: baseFont, cursorLocation: nil,
+                                                         availableWidth: available)
+        guard let grid = attributed.attribute(.marginalTableGridMarker, at: 0, effectiveRange: nil) as? TableGridInfo,
+              let totalWidth = grid.columnBoundaries.last else { return XCTFail("Missing grid info") }
+        XCTAssertLessThanOrEqual(totalWidth, available + 0.5,
+                                 "A table must be capped to the width available to it, not run off the page")
+    }
+
+    func testAnOverlongCellWrapsInsideItsOwnColumn() {
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let attributed = MarkdownStyler.attributedString(for: wideTable, model: model(for: wideTable),
+                                                         baseFont: baseFont, cursorLocation: nil,
+                                                         availableWidth: 300)
+        guard let plan = plan(in: attributed, forRowContaining: "| Status:", of: wideTable) else {
+            return XCTFail("Missing row layout plan")
+        }
+        let firstColumnBands = plan.bands.filter { $0.x < 20 }
+        XCTAssertGreaterThan(firstColumnBands.count, 1, "The long cell has to wrap onto more than one line")
+        // The whole point of the fix: a wrapped line stays in its column instead of returning to x=0
+        // of the text container, and the row grows tall enough to hold it. The tolerance covers the
+        // one legitimate difference -- a cell's FIRST band is anchored at its hidden opening pipe, so
+        // it starts a fraction of a point left of the continuation lines, which start at the content.
+        let leftEdges = firstColumnBands.map(\.x)
+        XCTAssertEqual(leftEdges.max()! - leftEdges.min()!, 0, accuracy: 1,
+                       "Every line of a cell shares one left edge; a wrapped line must not fall back to the margin")
+        XCTAssertGreaterThan(plan.bands.filter { $0.x > 20 }.count, 0, "The second column must still be placed to the right")
+        XCTAssertGreaterThan(plan.rowHeight, MarkdownStyler.tableCellLineHeight(for: baseFont) * 1.5,
+                             "A row with a wrapped cell must reserve height for every line")
+    }
+
+    func testEveryWrappedLineHasAForcedBreakPointSoTextKitCannotBreakAnywhereElse() {
+        let attributed = MarkdownStyler.attributedString(for: wideTable, model: model(for: wideTable),
+                                                         baseFont: .systemFont(ofSize: 15), cursorLocation: nil,
+                                                         availableWidth: 300)
+        guard let plan = plan(in: attributed, forRowContaining: "| Status:", of: wideTable) else {
+            return XCTFail("Missing row layout plan")
+        }
+        // Each band except the row's very first starts at a break point, and each break point is
+        // forced by a kern on the character in front of it.
+        for band in plan.bands.dropFirst() {
+            XCTAssertTrue(plan.breakPoints.contains(band.start), "Band at \(band.start) must be a planned break")
+            let kern = attributed.attribute(.kern, at: band.start - 1, effectiveRange: nil) as? CGFloat
+            XCTAssertEqual(kern, MarkdownStyler.forcedLineBreakKern,
+                           "The break before \(band.start) has to be forced, or TextKit will not take it")
+        }
+    }
+
+    func testANarrowTableKeepsItsNaturalWidthAndStaysOnOneLine() {
+        let text = "| A | B |\n|---|---|\n| 1 | 2 |"
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text),
+                                                         baseFont: .systemFont(ofSize: 15), cursorLocation: nil,
+                                                         availableWidth: 600)
+        guard let plan = plan(in: attributed, forRowContaining: "| 1 | 2 |", of: text) else {
+            return XCTFail("Missing row layout plan")
+        }
+        XCTAssertEqual(plan.bands.map(\.yOffset).max(), plan.bands.map(\.yOffset).min(),
+                       "Nothing should wrap, so every band sits on the row's single line")
+    }
+
+    // A column can never be squeezed below its widest single word, or that word would spill across
+    // the grid line into the next column.
+    func testAColumnIsNeverSqueezedBelowItsWidestWord() {
+        let text = "| Word | B |\n|---|---|\n| Supercalifragilistic | b |"
+        let baseFont = NSFont.systemFont(ofSize: 15)
+        let attributed = MarkdownStyler.attributedString(for: text, model: model(for: text),
+                                                         baseFont: baseFont, cursorLocation: nil,
+                                                         availableWidth: 60)
+        guard let grid = attributed.attribute(.marginalTableGridMarker, at: 0, effectiveRange: nil) as? TableGridInfo
+        else { return XCTFail("Missing grid info") }
+        let longWord = NSAttributedString(string: "Supercalifragilistic", attributes: [.font: baseFont]).size().width
+        let firstColumn = grid.columnBoundaries[1] - grid.columnBoundaries[0]
+        XCTAssertGreaterThanOrEqual(firstColumn, longWord, "The column must still fit its longest unbreakable word")
     }
 
     func testGridMarkerDistinguishesHeaderFromBodyRows() {
